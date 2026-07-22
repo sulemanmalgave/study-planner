@@ -3,7 +3,7 @@ export interface Subscription {
   type: 'monthly' | 'quarterly' | null;
   purchaseDate: string | null;
   expiryDate: string | null;
-  paymentProvider: 'razorpay' | 'paypal' | null;
+  paymentProvider: string | null;
   paymentId: string | null;
   billingCountry: string;
 }

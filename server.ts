@@ -8,16 +8,6 @@ import { FREE_PLAN_LIMITS, DatabaseSchema } from './src/types';
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
 
-// Memory cache for verification & prevention of payment replay/tampering
-const pendingOrders = new Map<string, { amount: number; currency: string; planType: 'monthly' | 'quarterly'; country: string }>();
-const verifiedPayments = new Set<string>(); // Tracks already verified payment IDs to prevent replays
-
-// Environment configuration with lazy fallbacks for non-blocking local development & testing
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_mock_key_id';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'rzp_test_secret_key_12345';
-const PAYPAL_API_BASE_URL = process.env.PAYPAL_API_BASE_URL || 'https://api-m.sandbox.paypal.com';
-const PAYPAL_CLIENT_SECRET = process.env.PAYPAL_CLIENT_SECRET || 'paypal_mock_secret_key_54321';
-
 // Seed Initial Mock Data (Exactly matching screenshots & UI specs)
 const getInitialDatabaseState = (): DatabaseSchema => {
   return {
@@ -414,7 +404,7 @@ async function startServer() {
     }
   });
 
-  // 9. Payment & Subscriptions
+  // 9. Subscriptions & Billing Status
   // Detect country based on headers, IP, or timezone
   app.get('/api/subscription/detect-country', (req, res) => {
     const cfCountry = req.headers['cf-ipcountry'] as string;
@@ -428,126 +418,25 @@ async function startServer() {
     } else {
       // timezones in India
       const ipTimezone = req.headers['x-appengine-user-timezone'] as string;
-      if (ipTimezone && ipTimezone.includes('Calcutta') || ipTimezone?.includes('Kolkata')) {
+      if (ipTimezone && (ipTimezone.includes('Calcutta') || ipTimezone.includes('Kolkata'))) {
         country = 'IN';
       }
     }
     res.json({ country });
   });
 
-  // Create Checkout Order (initiates payment)
+  // Disabled payment endpoints returning clear messaging
   app.post('/api/subscription/create-order', (req, res) => {
-    const { planType, country } = req.body;
-    if (!planType || !country) {
-      return res.status(400).json({ error: 'Plan type and country are required' });
-    }
-
-    const orderId = 'order_' + crypto.randomBytes(12).toString('hex');
-    let amount = 0;
-    let currency = 'USD';
-
-    if (country === 'IN') {
-      currency = 'INR';
-      amount = planType === 'monthly' ? 99 : 250;
-    } else {
-      currency = 'USD';
-      amount = planType === 'monthly' ? 2.99 : 7.99;
-    }
-
-    // Securely register the pending order on the backend with its true expected amount & currency
-    // This strictly prevents the client from modifying the transaction amount
-    pendingOrders.set(orderId, { amount, currency, planType, country });
-
-    res.json({
-      orderId,
-      amount,
-      currency,
-      provider: country === 'IN' ? 'razorpay' : 'paypal',
+    res.status(503).json({ 
+      error: 'PAYMENT_GATEWAY_DISABLED', 
+      message: 'Online payments are currently disabled. Payment gateways coming soon.' 
     });
   });
 
-  // Verify Premium Payment on the Server
   app.post('/api/subscription/verify-payment', (req, res) => {
-    const { orderId, paymentId, signature, provider } = req.body;
-
-    if (!orderId || !paymentId || !provider) {
-      return res.status(400).json({ error: 'Missing payment details for verification' });
-    }
-
-    // 1. Prevent Replay Attacks (duplicate payments)
-    if (verifiedPayments.has(paymentId)) {
-      return res.status(400).json({ error: 'DUPLICATE_PAYMENT', message: 'This transaction has already been processed.' });
-    }
-
-    // 2. Retrieve original order from secure backend cache
-    const originalOrder = pendingOrders.get(orderId);
-    if (!originalOrder) {
-      return res.status(404).json({ error: 'INVALID_ORDER', message: 'No record of this checkout order was found on the server.' });
-    }
-
-    // 3. Perform production-ready security verification
-    let isSignatureValid = false;
-
-    if (provider === 'razorpay') {
-      // HMAC-SHA256 verification matching Razorpay's protocol
-      const expectedSignature = crypto
-        .createHmac('sha256', RAZORPAY_KEY_SECRET)
-        .update(orderId + '|' + paymentId)
-        .digest('hex');
-
-      // Check signature. We also allow simulated signature "MOCK_OK" for local frontend flow if keys are standard test keys,
-      // but we perform actual crypto comparison.
-      if (signature === expectedSignature || signature === 'MOCK_OK_SIGNATURE') {
-        isSignatureValid = true;
-      }
-    } else if (provider === 'paypal') {
-      // PayPal: Verify mock checkout token
-      // In production, you call PayPal v2 Checkout API to execute and get details.
-      // Here, we cryptographically check the paymentToken and ensure signature is sound.
-      const expectedSignature = crypto
-        .createHash('sha256')
-        .update(orderId + '|' + paymentId + '|' + PAYPAL_CLIENT_SECRET)
-        .digest('hex');
-
-      if (signature === expectedSignature || signature === 'MOCK_OK_SIGNATURE') {
-        isSignatureValid = true;
-      }
-    }
-
-    if (!isSignatureValid) {
-      return res.status(401).json({ error: 'INVALID_SIGNATURE', message: 'Payment signature verification failed. Transaction rejected.' });
-    }
-
-    // 4. Record as verified to prevent duplicates
-    verifiedPayments.add(paymentId);
-
-    // 5. Update the Database with Subscription details
-    const db = readDB();
-    const purchaseDate = new Date();
-    const expiryDate = new Date();
-    if (originalOrder.planType === 'monthly') {
-      expiryDate.setMonth(expiryDate.getMonth() + 1);
-    } else {
-      expiryDate.setMonth(expiryDate.getMonth() + 3);
-    }
-
-    db.profile.subscription = {
-      plan: 'premium',
-      type: originalOrder.planType,
-      purchaseDate: purchaseDate.toISOString(),
-      expiryDate: expiryDate.toISOString(),
-      paymentProvider: provider,
-      paymentId: paymentId,
-      billingCountry: originalOrder.country,
-    };
-
-    writeDB(db);
-    pendingOrders.delete(orderId); // Clean up cache
-
-    res.json({
-      success: true,
-      message: 'Payment verified successfully! Welcome to Premium.',
-      subscription: db.profile.subscription,
+    res.status(503).json({ 
+      error: 'PAYMENT_GATEWAY_DISABLED', 
+      message: 'Online payments are currently disabled. Payment gateways coming soon.' 
     });
   });
 

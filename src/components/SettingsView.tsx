@@ -156,12 +156,12 @@ export default function SettingsView({
 
             <div className="flex items-center gap-2 border-b border-[#E1E3E1] pb-3 pt-3">
               <Globe className="w-4 h-4 text-[#0f5132]" />
-              <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">Billing Location Selector</h3>
+              <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">Region Preference</h3>
             </div>
 
             <div className="space-y-2">
               <p className="text-[10px] text-[#49454F] leading-relaxed max-w-lg">
-                Choose your region to test local pricing API setups: India activates signature-verified Razorpay (INR), and international countries activate signature-verified PayPal (USD).
+                Choose your local region preference for currency formatting and regional academic standards.
               </p>
               
               <div className="grid grid-cols-2 gap-2 max-w-md">
@@ -174,7 +174,7 @@ export default function SettingsView({
                       : 'bg-[#F3EDF7]/50 border-[#E1E3E1] text-[#49454F]'
                   }`}
                 >
-                  <span>🇮🇳 India (Razorpay)</span>
+                  <span>🇮🇳 India (INR)</span>
                   {billingCountry === 'IN' && <Check className="w-4 h-4 text-[#6750A4]" />}
                 </button>
                 <button
@@ -186,7 +186,7 @@ export default function SettingsView({
                       : 'bg-[#F3EDF7]/50 border-[#E1E3E1] text-[#49454F]'
                   }`}
                 >
-                  <span>🌎 International (PayPal)</span>
+                  <span>🌎 International (USD)</span>
                   {billingCountry !== 'IN' && <Check className="w-4 h-4 text-[#6750A4]" />}
                 </button>
               </div>
