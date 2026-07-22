@@ -35,6 +35,9 @@ import {
   StudySession, 
   Subscription 
 } from './types';
+import { getInitialClientState } from './defaultState';
+import { db, isFirebaseConfigured } from './lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -52,17 +55,75 @@ export default function App() {
   const [isLimitDialogOpen, setIsLimitDialogOpen] = useState<boolean>(false);
   const [limitType, setLimitType] = useState<'assignments' | 'exams' | 'notes' | 'courses' | 'timetables'>('assignments');
 
-  // Load backend state on mount
+  // Helper to persist state to LocalStorage and Firestore
+  const persistState = async (newState: DatabaseSchema) => {
+    try {
+      localStorage.setItem('studyflow_db_state', JSON.stringify(newState));
+    } catch (e) {
+      console.warn('Failed to save state to localStorage:', e);
+    }
+
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'workspaces', 'default'), newState, { merge: true });
+      } catch (fErr) {
+        console.warn('Failed to save state to Firestore:', fErr);
+      }
+    }
+  };
+
+  // Load state on mount
   const fetchState = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/state');
-      if (!response.ok) throw new Error('Failed to load database. Please restart backend server.');
-      const data = await response.json();
-      setDbState(data);
+      // 1. Try Express Backend API
+      const response = await fetch('/api/state').catch(() => null);
+      if (response && response.ok) {
+        const data = await response.json();
+        setDbState(data);
+        persistState(data);
+        return;
+      }
+
+      // 2. Try Firestore if configured
+      if (isFirebaseConfigured && db) {
+        try {
+          const docRef = doc(db, 'workspaces', 'default');
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const firestoreData = docSnap.data() as DatabaseSchema;
+            setDbState(firestoreData);
+            localStorage.setItem('studyflow_db_state', JSON.stringify(firestoreData));
+            return;
+          }
+        } catch (fErr) {
+          console.warn('[Firebase] Error reading Firestore document:', fErr);
+        }
+      }
+
+      // 3. Try LocalStorage
+      const localData = localStorage.getItem('studyflow_db_state');
+      if (localData) {
+        try {
+          const parsed = JSON.parse(localData);
+          setDbState(parsed);
+          return;
+        } catch (e) {
+          console.warn('Failed to parse local state:', e);
+        }
+      }
+
+      // 4. Default Initial Client State fallback
+      const initialState = getInitialClientState();
+      setDbState(initialState);
+      persistState(initialState);
+
     } catch (err: any) {
-      setError(err.message || 'An error occurred loading the student workspace data.');
+      console.warn('Using initial fallback state:', err);
+      const fallback = getInitialClientState();
+      setDbState(fallback);
+      persistState(fallback);
     } finally {
       setIsLoading(false);
     }
@@ -112,13 +173,30 @@ export default function App() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedProfile),
+      }).catch(() => null);
+
+      let data: UserProfile;
+      if (response && response.ok) {
+        data = await response.json();
+      } else {
+        data = { ...profile, ...updatedProfile };
+      }
+
+      setDbState(prev => {
+        if (!prev) return null;
+        const next = { ...prev, profile: data };
+        persistState(next);
+        return next;
       });
-      if (!response.ok) throw new Error('Failed to save profile on the backend.');
-      const data = await response.json();
-      setDbState(prev => prev ? { ...prev, profile: data } : null);
     } catch (e) {
       console.error(e);
-      throw e;
+      const nextProfile = { ...profile, ...updatedProfile };
+      setDbState(prev => {
+        if (!prev) return null;
+        const next = { ...prev, profile: nextProfile };
+        persistState(next);
+        return next;
+      });
     }
   };
 
@@ -420,10 +498,22 @@ export default function App() {
   };
 
   const handleResetDatabase = async () => {
-    const response = await fetch('/api/reset', { method: 'POST' });
-    if (response.ok) {
-      const data = await response.json();
-      setDbState(data.state);
+    try {
+      const response = await fetch('/api/reset', { method: 'POST' }).catch(() => null);
+      if (response && response.ok) {
+        const data = await response.json();
+        setDbState(data.state);
+        persistState(data.state);
+      } else {
+        const initialState = getInitialClientState();
+        setDbState(initialState);
+        persistState(initialState);
+      }
+      setActiveTab('dashboard');
+    } catch (e) {
+      const initialState = getInitialClientState();
+      setDbState(initialState);
+      persistState(initialState);
       setActiveTab('dashboard');
     }
   };

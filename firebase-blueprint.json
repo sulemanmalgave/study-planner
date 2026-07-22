@@ -1,0 +1,25 @@
+{
+  "entities": {
+    "UserWorkspace": {
+      "title": "User Workspace Data",
+      "description": "Complete student workspace containing courses, timetable, assignments, exams, notes, and study sessions",
+      "type": "object",
+      "properties": {
+        "profile": { "type": "object" },
+        "courses": { "type": "array" },
+        "timetable": { "type": "array" },
+        "assignments": { "type": "array" },
+        "exams": { "type": "array" },
+        "notes": { "type": "array" },
+        "studySessions": { "type": "array" }
+      },
+      "required": ["profile", "courses", "timetable", "assignments", "exams", "notes", "studySessions"]
+    }
+  },
+  "firestore": {
+    "/workspaces/{userId}": {
+      "schema": "UserWorkspace",
+      "description": "User specific workspace database document"
+    }
+  }
+}
