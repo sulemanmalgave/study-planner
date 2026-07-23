@@ -19,15 +19,15 @@ export default function LimitReachedDialog({
   const getLimitDetails = () => {
     switch (limitType) {
       case 'assignments':
-        return { name: 'Tasks & Assignments', limit: '20' };
+        return { name: 'Tasks & Assignments', limit: '10 assignments / 20 active tasks' };
       case 'exams':
         return { name: 'Exams', limit: '5' };
       case 'notes':
-        return { name: 'Notes', limit: '15' };
+        return { name: 'Notes', limit: '10' };
       case 'courses':
-        return { name: 'Courses', limit: '3' };
+        return { name: 'Courses', limit: '5' };
       case 'timetables':
-        return { name: 'Timetable Classes', limit: '2' };
+        return { name: 'Timetable Classes', limit: '10' };
       default:
         return { name: 'Items', limit: 'quota' };
     }

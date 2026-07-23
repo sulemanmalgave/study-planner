@@ -21,7 +21,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeClick }: SidebarProps) {
-  const isPremium = profile.subscription.plan === 'premium';
+  const isPremium = profile.subscription.subscriptionStatus === 'premium' || profile.subscription.plan === 'premium';
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },

@@ -8,6 +8,51 @@ import { FREE_PLAN_LIMITS, DatabaseSchema } from './src/types';
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
 
+const getRazorpayCredentials = () => {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  return { keyId, keySecret };
+};
+
+const getPaypalCredentials = () => {
+  const clientId = process.env.PAYPAL_CLIENT_ID;
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+  const apiBase = process.env.PAYPAL_API_BASE || 'https://api-m.sandbox.paypal.com';
+  return { clientId, clientSecret, apiBase };
+};
+
+async function fetchPaypalAccessToken(clientId: string, clientSecret: string, apiBase: string): Promise<string> {
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const response = await fetch(`${apiBase}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`PayPal OAuth authentication failed (${response.status}): ${text}`);
+  }
+
+  const data = (await response.json()) as { access_token: string };
+  return data.access_token;
+}
+
+// In-memory backend payment verification maps to prevent forgery & replay attacks
+const pendingOrders = new Map<string, {
+  amount: number;
+  currency: string;
+  planType: 'monthly' | 'yearly';
+  country: string;
+  provider: 'razorpay' | 'paypal';
+  createdAt: number;
+}>();
+
+const verifiedPayments = new Set<string>();
+
 // Seed Initial Mock Data (Exactly matching screenshots & UI specs)
 const getInitialDatabaseState = (): DatabaseSchema => {
   return {
@@ -16,13 +61,15 @@ const getInitialDatabaseState = (): DatabaseSchema => {
       email: 'alex.mercer@example.com',
       initials: 'AL',
       subscription: {
-        plan: 'free',
-        type: null,
+        subscriptionStatus: 'free',
+        plan: null,
+        paymentGateway: null,
+        transactionId: null,
         purchaseDate: null,
         expiryDate: null,
+        billingCountry: 'IN', // Default to India, auto-detected or manually toggled
         paymentProvider: null,
         paymentId: null,
-        billingCountry: 'IN', // Default to India, auto-detected or manually toggled
       },
     },
     courses: [
@@ -115,10 +162,10 @@ async function startServer() {
   app.post('/api/courses', (req, res) => {
     try {
       const db = readDB();
-      if (db.profile.subscription.plan === 'free' && db.courses.length >= FREE_PLAN_LIMITS.courses) {
+      if (db.profile.subscription.subscriptionStatus !== 'premium' && db.courses.length >= FREE_PLAN_LIMITS.courses) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
-          message: 'You have reached the free plan limit of 3 courses. Upgrade to Premium for unlimited access.',
+          message: 'You have reached the free plan limit of 5 courses. Upgrade to Premium for unlimited access.',
         });
       }
       const newCourse = {
@@ -184,10 +231,10 @@ async function startServer() {
       // Let's count periods. If free, let's allow at most 2 periods as the core limit for simpler demo testing, or separate schedules. Let's make it 2 periods for the free limit to trigger easily, or allow creating at most 2 separate weekly schedules.
       // Let's enforce that a user on the Free plan can create at most 2 period entries in their timetable so they hit the limit beautifully, and can upgrade.
       const totalPeriods = db.timetable.length;
-      if (db.profile.subscription.plan === 'free' && totalPeriods >= FREE_PLAN_LIMITS.timetables) {
+      if (db.profile.subscription.subscriptionStatus !== 'premium' && totalPeriods >= FREE_PLAN_LIMITS.timetables) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
-          message: 'You have reached the free plan limit of 2 Timetables / Schedule Entries. Upgrade to Premium for unlimited access.',
+          message: 'You have reached the free plan limit of 10 Timetables / Schedule Entries. Upgrade to Premium for unlimited access.',
         });
       }
       const newPeriod = {
@@ -234,10 +281,14 @@ async function startServer() {
   app.post('/api/assignments', (req, res) => {
     try {
       const db = readDB();
-      if (db.profile.subscription.plan === 'free' && db.assignments.length >= FREE_PLAN_LIMITS.assignments) {
+      const activeTasks = db.assignments.filter((a) => a.status === 'pending').length;
+      if (
+        db.profile.subscription.subscriptionStatus !== 'premium' &&
+        (db.assignments.length >= FREE_PLAN_LIMITS.assignments || activeTasks >= FREE_PLAN_LIMITS.tasks)
+      ) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
-          message: 'You have reached the free plan limit of 20 assignments. Upgrade to Premium for unlimited access.',
+          message: 'You have reached the free plan limit of 10 assignments / 20 active tasks. Upgrade to Premium for unlimited access.',
         });
       }
       const newAssignment = {
@@ -285,7 +336,7 @@ async function startServer() {
   app.post('/api/exams', (req, res) => {
     try {
       const db = readDB();
-      if (db.profile.subscription.plan === 'free' && db.exams.length >= FREE_PLAN_LIMITS.exams) {
+      if (db.profile.subscription.subscriptionStatus !== 'premium' && db.exams.length >= FREE_PLAN_LIMITS.exams) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
           message: 'You have reached the free plan limit of 5 exams. Upgrade to Premium for unlimited access.',
@@ -335,7 +386,7 @@ async function startServer() {
   app.post('/api/notes', (req, res) => {
     try {
       const db = readDB();
-      if (db.profile.subscription.plan === 'free' && db.notes.length >= FREE_PLAN_LIMITS.notes) {
+      if (db.profile.subscription.subscriptionStatus !== 'premium' && db.notes.length >= FREE_PLAN_LIMITS.notes) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
           message: 'You have reached the free plan limit of 10 notes. Upgrade to Premium for unlimited access.',
@@ -412,32 +463,295 @@ async function startServer() {
     
     let country = 'US';
     if (cfCountry) {
-      country = cfCountry;
+      country = cfCountry.toUpperCase();
     } else if (acceptLanguage && acceptLanguage.toLowerCase().includes('in')) {
       country = 'IN';
     } else {
-      // timezones in India
       const ipTimezone = req.headers['x-appengine-user-timezone'] as string;
-      if (ipTimezone && (ipTimezone.includes('Calcutta') || ipTimezone.includes('Kolkata'))) {
+      if (ipTimezone && (ipTimezone.includes('Calcutta') || ipTimezone.includes('Kolkata') || ipTimezone.includes('Asia/Kolkata'))) {
         country = 'IN';
       }
     }
     res.json({ country });
   });
 
-  // Disabled payment endpoints returning clear messaging
-  app.post('/api/subscription/create-order', (req, res) => {
-    res.status(503).json({ 
-      error: 'PAYMENT_GATEWAY_DISABLED', 
-      message: 'Online payments are currently disabled. Payment gateways coming soon.' 
-    });
+  // Create Checkout Order securely on the backend
+  app.post('/api/subscription/create-order', async (req, res) => {
+    try {
+      const { planType, country } = req.body;
+      if (!planType || (planType !== 'monthly' && planType !== 'yearly')) {
+        return res.status(400).json({ error: 'Valid planType (monthly or yearly) is required' });
+      }
+
+      const selectedCountry = country ? String(country).toUpperCase() : 'US';
+      const isIndia = selectedCountry === 'IN';
+      const provider = isIndia ? 'razorpay' : 'paypal';
+
+      let amount = 0;
+      let currency = 'USD';
+
+      if (isIndia) {
+        currency = 'INR';
+        amount = planType === 'monthly' ? 99 : 599; // India pricing: ₹99 or ₹599
+      } else {
+        currency = 'USD';
+        amount = planType === 'monthly' ? 2.99 : 19.99; // International pricing: $2.99 or $19.99
+      }
+
+      if (provider === 'razorpay') {
+        const { keyId, keySecret } = getRazorpayCredentials();
+        if (!keyId || !keySecret) {
+          return res.status(400).json({
+            error: 'MISSING_RAZORPAY_CONFIG',
+            message: 'Razorpay API keys (RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET) are missing. Please configure them in the Secrets settings menu.',
+          });
+        }
+
+        // Call official Razorpay Orders API
+        const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+        const rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Basic ${auth}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: amount * 100, // Amount in paise
+            currency: 'INR',
+            receipt: `rcpt_${Date.now()}`,
+            notes: {
+              planType,
+              country: selectedCountry,
+            },
+          }),
+        });
+
+        if (!rzpRes.ok) {
+          const errBody = await rzpRes.text();
+          return res.status(rzpRes.status).json({
+            error: 'RAZORPAY_API_ERROR',
+            message: `Razorpay Order Creation Failed: ${errBody}`,
+          });
+        }
+
+        const rzpData = (await rzpRes.json()) as { id: string };
+        const orderId = rzpData.id;
+
+        pendingOrders.set(orderId, {
+          amount,
+          currency: 'INR',
+          planType: planType as 'monthly' | 'yearly',
+          country: selectedCountry,
+          provider: 'razorpay',
+          createdAt: Date.now(),
+        });
+
+        return res.json({
+          orderId,
+          amount,
+          currency: 'INR',
+          provider: 'razorpay',
+          planType,
+          country: selectedCountry,
+          keyId,
+        });
+      } else {
+        // PayPal
+        const { clientId, clientSecret, apiBase } = getPaypalCredentials();
+        if (!clientId || !clientSecret) {
+          return res.status(400).json({
+            error: 'MISSING_PAYPAL_CONFIG',
+            message: 'PayPal API keys (PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET) are missing. Please configure them in the Secrets settings menu.',
+          });
+        }
+
+        const accessToken = await fetchPaypalAccessToken(clientId, clientSecret, apiBase);
+
+        const ppRes = await fetch(`${apiBase}/v2/checkout/orders`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            intent: 'CAPTURE',
+            purchase_units: [
+              {
+                amount: {
+                  currency_code: 'USD',
+                  value: amount.toFixed(2),
+                },
+                description: `StudyFlow Premium (${planType})`,
+              },
+            ],
+          }),
+        });
+
+        if (!ppRes.ok) {
+          const errBody = await ppRes.text();
+          return res.status(ppRes.status).json({
+            error: 'PAYPAL_API_ERROR',
+            message: `PayPal Order Creation Failed: ${errBody}`,
+          });
+        }
+
+        const ppData = (await ppRes.json()) as { id: string };
+        const orderId = ppData.id;
+
+        pendingOrders.set(orderId, {
+          amount,
+          currency: 'USD',
+          planType: planType as 'monthly' | 'yearly',
+          country: selectedCountry,
+          provider: 'paypal',
+          createdAt: Date.now(),
+        });
+
+        return res.json({
+          orderId,
+          amount,
+          currency: 'USD',
+          provider: 'paypal',
+          planType,
+          country: selectedCountry,
+          keyId: clientId,
+        });
+      }
+    } catch (error: any) {
+      console.error('Error creating subscription order:', error);
+      res.status(500).json({ error: error.message || 'Failed to create payment order' });
+    }
   });
 
-  app.post('/api/subscription/verify-payment', (req, res) => {
-    res.status(503).json({ 
-      error: 'PAYMENT_GATEWAY_DISABLED', 
-      message: 'Online payments are currently disabled. Payment gateways coming soon.' 
-    });
+  // Verify Payment on Backend
+  app.post('/api/subscription/verify-payment', async (req, res) => {
+    try {
+      const { orderId, paymentId, signature, provider } = req.body;
+
+      if (!orderId || !provider) {
+        return res.status(400).json({ error: 'Missing required payment details for verification' });
+      }
+
+      const transactionIdentifier = paymentId || orderId;
+
+      // Replay attack prevention
+      if (verifiedPayments.has(transactionIdentifier)) {
+        return res.status(400).json({
+          error: 'DUPLICATE_PAYMENT',
+          message: 'This transaction has already been processed.',
+        });
+      }
+
+      // Check registered order
+      const originalOrder = pendingOrders.get(orderId);
+      if (!originalOrder) {
+        return res.status(404).json({
+          error: 'INVALID_ORDER',
+          message: 'No record of this checkout order was found on the server.',
+        });
+      }
+
+      if (provider === 'razorpay') {
+        const { keySecret } = getRazorpayCredentials();
+        if (!keySecret) {
+          return res.status(400).json({
+            error: 'MISSING_RAZORPAY_CONFIG',
+            message: 'RAZORPAY_KEY_SECRET is missing on the backend server.',
+          });
+        }
+
+        if (!paymentId || !signature) {
+          return res.status(400).json({ error: 'Razorpay paymentId and signature are required for verification.' });
+        }
+
+        // HMAC-SHA256 signature verification matching Razorpay protocol
+        const expectedSignature = crypto
+          .createHmac('sha256', keySecret)
+          .update(`${orderId}|${paymentId}`)
+          .digest('hex');
+
+        if (expectedSignature !== signature) {
+          return res.status(401).json({
+            error: 'INVALID_SIGNATURE',
+            message: 'Razorpay payment signature verification failed. Transaction rejected.',
+          });
+        }
+      } else if (provider === 'paypal') {
+        const { clientId, clientSecret, apiBase } = getPaypalCredentials();
+        if (!clientId || !clientSecret) {
+          return res.status(400).json({
+            error: 'MISSING_PAYPAL_CONFIG',
+            message: 'PayPal API credentials are missing on the backend server.',
+          });
+        }
+
+        // Capture PayPal order on PayPal servers
+        const accessToken = await fetchPaypalAccessToken(clientId, clientSecret, apiBase);
+        const captureRes = await fetch(`${apiBase}/v2/checkout/orders/${orderId}/capture`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!captureRes.ok) {
+          const errText = await captureRes.text();
+          return res.status(captureRes.status).json({
+            error: 'PAYPAL_CAPTURE_FAILED',
+            message: `PayPal order capture failed: ${errText}`,
+          });
+        }
+
+        const captureData = (await captureRes.json()) as any;
+        if (captureData.status !== 'COMPLETED') {
+          return res.status(400).json({
+            error: 'PAYPAL_NOT_COMPLETED',
+            message: `PayPal payment status is ${captureData.status}, expected COMPLETED.`,
+          });
+        }
+      }
+
+      // Record transaction to prevent replay
+      verifiedPayments.add(transactionIdentifier);
+
+      const db = readDB();
+      const purchaseDate = new Date();
+      const expiryDate = new Date();
+
+      if (originalOrder.planType === 'monthly') {
+        expiryDate.setMonth(expiryDate.getMonth() + 1);
+      } else {
+        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+      }
+
+      // Store in DB Profile Subscription
+      db.profile.subscription = {
+        subscriptionStatus: 'premium',
+        plan: originalOrder.planType,
+        paymentGateway: originalOrder.provider,
+        transactionId: transactionIdentifier,
+        purchaseDate: purchaseDate.toISOString(),
+        expiryDate: expiryDate.toISOString(),
+        billingCountry: originalOrder.country,
+        // Legacy compatibility properties
+        type: originalOrder.planType,
+        paymentProvider: originalOrder.provider,
+        paymentId: transactionIdentifier,
+      };
+
+      writeDB(db);
+      pendingOrders.delete(orderId); // Clean up cache
+
+      res.json({
+        success: true,
+        message: 'Payment verified successfully! Welcome to StudyFlow Premium.',
+        subscription: db.profile.subscription,
+      });
+    } catch (error: any) {
+      console.error('Error verifying payment:', error);
+      res.status(500).json({ error: error.message || 'Failed to verify payment' });
+    }
   });
 
   // Manual Reset to default state

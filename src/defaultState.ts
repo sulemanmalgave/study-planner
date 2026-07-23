@@ -7,13 +7,15 @@ export const getInitialClientState = (): DatabaseSchema => {
       email: 'alex.mercer@example.com',
       initials: 'AL',
       subscription: {
-        plan: 'free',
-        type: null,
+        subscriptionStatus: 'free',
+        plan: null,
+        paymentGateway: null,
+        transactionId: null,
         purchaseDate: null,
         expiryDate: null,
+        billingCountry: 'IN',
         paymentProvider: null,
         paymentId: null,
-        billingCountry: 'IN',
       },
     },
     courses: [

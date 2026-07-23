@@ -1,11 +1,14 @@
 export interface Subscription {
-  plan: 'free' | 'premium';
-  type: 'monthly' | 'quarterly' | null;
+  subscriptionStatus: 'free' | 'premium';
+  plan: 'free' | 'premium' | 'monthly' | 'yearly' | null;
+  paymentGateway: 'razorpay' | 'paypal' | null;
+  transactionId: string | null;
   purchaseDate: string | null;
   expiryDate: string | null;
-  paymentProvider: string | null;
-  paymentId: string | null;
   billingCountry: string;
+  type?: 'monthly' | 'yearly' | 'quarterly' | null; // For legacy compatibility
+  paymentProvider?: string | null;
+  paymentId?: string | null;
 }
 
 export interface UserProfile {
@@ -78,17 +81,21 @@ export interface DatabaseSchema {
 }
 
 export interface PlanLimits {
+  tasks: number;
   courses: number;
-  timetables: number; // meaning count of timetable entries
-  assignments: number;
-  exams: number;
-  notes: number;
+  timetables: number; // Maximum 10 timetable entries
+  assignments: number; // Maximum 10 assignments
+  notes: number; // Maximum 10 notes
+  exams: number; // Maximum 5 exams
+  statsDays: number; // 7 days history limit for free plan
 }
 
 export const FREE_PLAN_LIMITS: PlanLimits = {
-  courses: 3,
-  timetables: 2, // We will treat "timetables" as unique entries or custom count of timetable entry periods
-  assignments: 20,
+  tasks: 20,
+  courses: 5,
+  timetables: 10,
+  assignments: 10,
+  notes: 10,
   exams: 5,
-  notes: 15
+  statsDays: 7,
 };

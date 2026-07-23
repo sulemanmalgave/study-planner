@@ -32,7 +32,7 @@ export default function SettingsView({
   const [isResetting, setIsResetting] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
 
-  const isPremium = profile.subscription.plan === 'premium';
+  const isPremium = profile.subscription.subscriptionStatus === 'premium' || profile.subscription.plan === 'premium';
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,17 +224,23 @@ export default function SettingsView({
                 </div>
                 <div className="text-[10px] text-[#49454F] space-y-1.5 font-mono">
                   <div className="flex justify-between">
-                    <span>Period:</span>
-                    <span className="text-[#1D1B20] font-bold">{profile.subscription.type}</span>
+                    <span>Plan:</span>
+                    <span className="text-[#1D1B20] font-bold capitalize">{profile.subscription.plan || 'Premium'} ({profile.subscription.type || 'Yearly'})</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Provider:</span>
-                    <span className="text-[#1D1B20] font-bold uppercase">{profile.subscription.paymentProvider}</span>
+                    <span>Gateway:</span>
+                    <span className="text-[#1D1B20] font-bold uppercase">{profile.subscription.paymentGateway || profile.subscription.paymentProvider || 'Razorpay/PayPal'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Payment ID:</span>
-                    <span className="text-[#1D1B20] font-bold truncate max-w-[120px]" title={profile.subscription.paymentId || ''}>
-                      {profile.subscription.paymentId}
+                    <span>Transaction ID:</span>
+                    <span className="text-[#1D1B20] font-bold truncate max-w-[120px]" title={profile.subscription.transactionId || profile.subscription.paymentId || ''}>
+                      {profile.subscription.transactionId || profile.subscription.paymentId || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Purchased:</span>
+                    <span className="text-[#1D1B20] font-bold">
+                      {profile.subscription.purchaseDate ? new Date(profile.subscription.purchaseDate).toLocaleDateString() : 'Active'}
                     </span>
                   </div>
                   <div className="flex justify-between">

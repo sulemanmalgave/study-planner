@@ -33,7 +33,8 @@ import {
   Exam, 
   Note, 
   StudySession, 
-  Subscription 
+  Subscription,
+  FREE_PLAN_LIMITS
 } from './types';
 import { getInitialClientState } from './defaultState';
 import { db, isFirebaseConfigured } from './lib/firebase';
@@ -164,7 +165,20 @@ export default function App() {
   }
 
   const { profile, courses, timetable, assignments, exams, notes, studySessions } = dbState;
-  const isPremium = profile.subscription.plan === 'premium';
+  
+  // Calculate if subscription is active and valid
+  const isSubscriptionValid = () => {
+    const sub = profile.subscription;
+    if (!sub) return false;
+    const isStatusPremium = sub.subscriptionStatus === 'premium' || sub.plan === 'premium';
+    if (!isStatusPremium) return false;
+    if (sub.expiryDate) {
+      return new Date(sub.expiryDate) > new Date();
+    }
+    return true;
+  };
+
+  const isPremium = isSubscriptionValid();
 
   // API Call Handlers (With direct UI state sync updates on success)
   const handleUpdateProfile = async (updatedProfile: Partial<UserProfile>) => {
@@ -258,7 +272,7 @@ export default function App() {
   };
 
   const handleAddTimetable = async (period: Omit<TimetablePeriod, 'id'>) => {
-    if (!isPremium && timetable.length >= 2) {
+    if (!isPremium && timetable.length >= FREE_PLAN_LIMITS.timetables) {
       setLimitType('timetables');
       setIsLimitDialogOpen(true);
       return { success: false, error: 'LIMIT_REACHED' };
@@ -314,7 +328,8 @@ export default function App() {
   };
 
   const handleAddAssignment = async (assignment: Omit<Assignment, 'id'>) => {
-    if (!isPremium && assignments.length >= 20) {
+    const activeTasksCount = assignments.filter(a => a.status === 'pending').length;
+    if (!isPremium && (assignments.length >= FREE_PLAN_LIMITS.assignments || activeTasksCount >= FREE_PLAN_LIMITS.tasks)) {
       setLimitType('assignments');
       setIsLimitDialogOpen(true);
       return { success: false, error: 'LIMIT_REACHED' };
@@ -426,7 +441,7 @@ export default function App() {
   };
 
   const handleAddNote = async (note: Omit<Note, 'id' | 'updatedAt'>) => {
-    if (!isPremium && notes.length >= 15) {
+    if (!isPremium && notes.length >= FREE_PLAN_LIMITS.notes) {
       setLimitType('notes');
       setIsLimitDialogOpen(true);
       return { success: false, error: 'LIMIT_REACHED' };
@@ -527,13 +542,15 @@ export default function App() {
   const handleUpgradeSuccess = (updatedSubscription: Subscription) => {
     setDbState(prev => {
       if (!prev) return null;
-      return {
+      const nextState = {
         ...prev,
         profile: {
           ...prev.profile,
           subscription: updatedSubscription
         }
       };
+      persistState(nextState);
+      return nextState;
     });
   };
 
