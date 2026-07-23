@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import Razorpay from 'razorpay';
 import { createServer as createViteServer } from 'vite';
 import { FREE_PLAN_LIMITS, DatabaseSchema } from './src/types';
 
@@ -503,9 +504,12 @@ app.get('/api/state', (req, res) => {
   // Create Checkout Order securely on the backend
   app.post('/api/subscription/create-order', async (req, res) => {
     try {
-      const { planType, country } = req.body;
+      const { planType, country } = req.body || {};
       if (!planType || (planType !== 'monthly' && planType !== 'yearly')) {
-        return res.status(400).json({ error: 'Valid planType (monthly or yearly) is required' });
+        return res.status(400).json({
+          success: false,
+          error: 'Valid planType (monthly or yearly) is required'
+        });
       }
 
       const selectedCountry = country ? String(country).toUpperCase() : 'US';
@@ -526,67 +530,69 @@ app.get('/api/state', (req, res) => {
       if (provider === 'razorpay') {
         const { keyId, keySecret } = getRazorpayCredentials();
         if (!keyId || !keySecret) {
+          console.error('[Razorpay Config Error] Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET environment variables.');
           return res.status(400).json({
-            error: 'MISSING_RAZORPAY_CONFIG',
-            message: 'Razorpay API keys (RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET) are missing. Please configure them in the Secrets settings menu.',
+            success: false,
+            error: 'Razorpay API keys (RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET) are missing. Please configure them in environment variables.',
           });
         }
 
-        // Call official Razorpay Orders API
-        const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
-        const rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Basic ${auth}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            amount: amount * 100, // Amount in paise
+        try {
+          // Initialize Razorpay SDK
+          const razorpay = new Razorpay({
+            key_id: keyId,
+            key_secret: keySecret,
+          });
+
+          // Order creation using amount in paise (1 INR = 100 paise) and currency INR
+          const amountInPaise = Math.round(amount * 100);
+          const rzpOrder = await razorpay.orders.create({
+            amount: amountInPaise,
             currency: 'INR',
-            receipt: `rcpt_${Date.now()}`,
+            receipt: `rcpt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
             notes: {
               planType,
               country: selectedCountry,
             },
-          }),
-        });
+          });
 
-        if (!rzpRes.ok) {
-          const errBody = await rzpRes.text();
-          return res.status(rzpRes.status).json({
-            error: 'RAZORPAY_API_ERROR',
-            message: `Razorpay Order Creation Failed: ${errBody}`,
+          const orderId = rzpOrder.id;
+
+          pendingOrders.set(orderId, {
+            amount,
+            currency: 'INR',
+            planType: planType as 'monthly' | 'yearly',
+            country: selectedCountry,
+            provider: 'razorpay',
+            createdAt: Date.now(),
+          });
+
+          return res.json({
+            success: true,
+            orderId,
+            amount,
+            currency: 'INR',
+            provider: 'razorpay',
+            planType,
+            country: selectedCountry,
+            keyId,
+          });
+        } catch (rzpErr: any) {
+          console.error('[Razorpay Order Creation Exception]:', rzpErr);
+          const errorMessage = rzpErr?.error?.description || rzpErr?.message || (typeof rzpErr === 'string' ? rzpErr : JSON.stringify(rzpErr)) || 'Razorpay order creation failed';
+          return res.status(500).json({
+            success: false,
+            error: `Razorpay Order Creation Failed: ${errorMessage}`,
           });
         }
-
-        const rzpData = (await rzpRes.json()) as { id: string };
-        const orderId = rzpData.id;
-
-        pendingOrders.set(orderId, {
-          amount,
-          currency: 'INR',
-          planType: planType as 'monthly' | 'yearly',
-          country: selectedCountry,
-          provider: 'razorpay',
-          createdAt: Date.now(),
-        });
-
-        return res.json({
-          orderId,
-          amount,
-          currency: 'INR',
-          provider: 'razorpay',
-          planType,
-          country: selectedCountry,
-          keyId,
-        });
       } else {
         // PayPal
         const { clientId, clientSecret, apiBase } = getPaypalCredentials();
         if (!clientId || !clientSecret) {
+          console.error('[PayPal Config Error] Missing PAYPAL_CLIENT_ID or PAYPAL_CLIENT_SECRET environment variables.');
           return res.status(400).json({
-            error: 'MISSING_PAYPAL_CONFIG',
-            message: 'PayPal API keys (PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET) are missing. Please configure them in the Secrets settings menu.',
+            success: false,
+            error: 'PayPal API keys (PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET) are missing. Please configure them in environment variables.',
           });
         }
 
@@ -614,9 +620,10 @@ app.get('/api/state', (req, res) => {
 
         if (!ppRes.ok) {
           const errBody = await ppRes.text();
+          console.error('[PayPal Order Creation Error]:', errBody);
           return res.status(ppRes.status).json({
-            error: 'PAYPAL_API_ERROR',
-            message: `PayPal Order Creation Failed: ${errBody}`,
+            success: false,
+            error: `PayPal Order Creation Failed: ${errBody}`,
           });
         }
 
@@ -633,6 +640,7 @@ app.get('/api/state', (req, res) => {
         });
 
         return res.json({
+          success: true,
           orderId,
           amount,
           currency: 'USD',
@@ -643,8 +651,11 @@ app.get('/api/state', (req, res) => {
         });
       }
     } catch (error: any) {
-      console.error('Error creating subscription order:', error);
-      res.status(500).json({ error: error.message || 'Failed to create payment order' });
+      console.error('[Error creating subscription order]:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to create payment order'
+      });
     }
   });
 
