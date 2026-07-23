@@ -40,9 +40,12 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
       <div>
         {/* Brand Header */}
         <div className="flex items-center gap-2.5 px-3 mb-4 mt-1" id="sidebar-header">
-          <div className="w-8 h-8 bg-[#6750A4] rounded-lg flex items-center justify-center text-white font-bold text-base shadow-sm">
-            S
-          </div>
+          <img 
+            src="/logo.png" 
+            alt="StudyFlow Logo" 
+            className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/60" 
+            referrerPolicy="no-referrer"
+          />
           <div>
             <h1 className="text-sm font-bold tracking-tight text-[#1D1B20] leading-none">StudyFlow</h1>
             <span className="text-[8px] font-mono font-bold tracking-wider text-[#6750A4] uppercase mt-0.5 block">Digital Planner</span>

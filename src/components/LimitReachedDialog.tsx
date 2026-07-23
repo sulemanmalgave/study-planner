@@ -43,12 +43,18 @@ export default function LimitReachedDialog({
       >
         {/* Header Icon */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#FFD8E4] text-[#31111D] rounded-full flex items-center justify-center border border-[#F9DEDC]" id="limit-dialog-icon">
-            <AlertCircle className="w-5 h-5 text-[#B3261E]" />
+          <img 
+            src="/logo.png" 
+            alt="StudyFlow Logo" 
+            className="w-10 h-10 rounded-2xl object-cover shadow-sm border border-slate-200/80" 
+            referrerPolicy="no-referrer"
+          />
+          <div>
+            <h3 className="text-base font-bold text-[#1D1B20] tracking-tight flex items-center gap-1.5" id="limit-dialog-title">
+              <span>Free Plan Limit Reached</span>
+            </h3>
+            <span className="text-[10px] text-[#6750A4] font-semibold">StudyFlow Quota</span>
           </div>
-          <h3 className="text-base font-bold text-[#1D1B20] tracking-tight" id="limit-dialog-title">
-            Free Plan Limit Reached
-          </h3>
         </div>
 
         {/* Message Content */}

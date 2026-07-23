@@ -81,7 +81,10 @@ export default function SettingsView({
 
   const handleExportData = () => {
     fetch('/api/state')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch data');
+        return res.json();
+      })
       .then(data => {
         const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
           JSON.stringify(data, null, 2)

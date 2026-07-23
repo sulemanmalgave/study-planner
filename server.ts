@@ -107,44 +107,69 @@ const getInitialDatabaseState = (): DatabaseSchema => {
   };
 };
 
+const getDbFilePath = () => {
+  if (process.env.VERCEL || process.env.TMPDIR) {
+    return path.join('/tmp', 'server_db.json');
+  }
+  return DB_FILE;
+};
+
+let inMemoryDb: DatabaseSchema | null = null;
+
 // Database utility helpers
 const readDB = (): DatabaseSchema => {
   try {
-    if (!fs.existsSync(DB_FILE)) {
+    const filePath = getDbFilePath();
+    if (!fs.existsSync(filePath)) {
       const defaultState = getInitialDatabaseState();
-      fs.writeFileSync(DB_FILE, JSON.stringify(defaultState, null, 2));
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(defaultState, null, 2));
+      } catch (e) {
+        inMemoryDb = defaultState;
+      }
       return defaultState;
     }
-    const data = fs.readFileSync(DB_FILE, 'utf-8');
+    const data = fs.readFileSync(filePath, 'utf-8');
     return JSON.parse(data) as DatabaseSchema;
   } catch (err) {
-    console.error('Error reading database file, returning default state:', err);
-    return getInitialDatabaseState();
+    console.error('Error reading database file, using fallback state:', err);
+    if (!inMemoryDb) {
+      inMemoryDb = getInitialDatabaseState();
+    }
+    return inMemoryDb;
   }
 };
 
 const writeDB = (data: DatabaseSchema) => {
+  inMemoryDb = data;
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+    const filePath = getDbFilePath();
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
   } catch (err) {
-    console.error('Error writing to database:', err);
+    console.warn('Could not write database file to disk (in-memory state updated):', err);
   }
 };
 
-async function startServer() {
-  const app = express();
-  app.use(express.json());
+export const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-  // API Routes
-  // 1. Get entire state
-  app.get('/api/state', (req, res) => {
-    try {
-      const db = readDB();
-      res.json(db);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to read database state' });
-    }
-  });
+// Request logging middleware for API endpoints
+app.use('/api', (req, res, next) => {
+  console.log(`[API ${req.method}] ${req.originalUrl}`);
+  next();
+});
+
+// API Routes
+// 1. Get entire state
+app.get('/api/state', (req, res) => {
+  try {
+    const db = readDB();
+    res.json(db);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to read database state' });
+  }
+});
 
   // 2. Update user profile
   app.put('/api/profile', (req, res) => {
@@ -765,24 +790,51 @@ async function startServer() {
     }
   });
 
-  // Vite Integration & Production Static Asset Serving
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
+  // Catch-all handler for unmatched /api/* routes - GUARANTEES JSON response, never HTML
+  app.all('/api/*', (req, res) => {
+    console.warn(`[API 404] Unmatched API route: ${req.method} ${req.originalUrl}`);
+    res.status(404).json({
+      error: 'API_NOT_FOUND',
+      message: `API route ${req.method} ${req.originalUrl} does not exist on this server.`,
     });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+  });
+
+  // Global Express Error Middleware for /api routes
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path.startsWith('/api')) {
+      console.error(`[API UNHANDLED ERROR] ${req.method} ${req.originalUrl}:`, err);
+      return res.status(err.status || 500).json({
+        error: err.code || 'SERVER_ERROR',
+        message: err.message || 'An unexpected error occurred on the server.',
+      });
+    }
+    next(err);
+  });
+
+  export default app;
+
+  async function startStandaloneServer() {
+    // Vite Integration & Production Static Asset Serving
+    if (process.env.NODE_ENV !== 'production') {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://localhost:${PORT}`);
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
+  if (!process.env.VERCEL) {
+    startStandaloneServer();
+  }
 
-startServer();

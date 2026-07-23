@@ -17,6 +17,42 @@ declare global {
   }
 }
 
+// Helper function to safely fetch API JSON responses without crashing on HTML error pages
+const safeFetchJson = async (url: string, options?: RequestInit) => {
+  let response: Response;
+  try {
+    response = await fetch(url, options);
+  } catch (netErr: any) {
+    throw new Error(`Connection error: ${netErr.message || 'Unable to reach backend server'}`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+
+  let data: any = null;
+  if (isJson) {
+    try {
+      data = await response.json();
+    } catch (parseErr) {
+      throw new Error('Server response could not be parsed as JSON.');
+    }
+  } else {
+    const rawText = await response.text();
+    console.error(`[API Non-JSON Response] ${url} returned HTTP ${response.status}:`, rawText.slice(0, 300));
+    if (response.status === 404) {
+      throw new Error('Payment API endpoint not found (HTTP 404). Please ensure backend server or Vercel API routes are deployed.');
+    }
+    throw new Error(`Server returned HTTP ${response.status} (${response.statusText}) instead of JSON.`);
+  }
+
+  if (!response.ok) {
+    const errMsg = data?.message || data?.error || `Server request failed with status ${response.status}`;
+    throw new Error(errMsg);
+  }
+
+  return data;
+};
+
 export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountry = 'IN', limitReason }: UpgradeModalProps) {
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly');
   const [billingCountry, setBillingCountry] = useState<string>('IN');
@@ -32,10 +68,9 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
       if (currentCountry) {
         setBillingCountry(currentCountry.toUpperCase() === 'IN' ? 'IN' : 'US');
       } else {
-        fetch('/api/subscription/detect-country')
-          .then((res) => res.json())
+        safeFetchJson('/api/subscription/detect-country')
           .then((data) => {
-            if (data.country) {
+            if (data?.country) {
               setBillingCountry(data.country.toUpperCase() === 'IN' ? 'IN' : 'US');
             }
           })
@@ -97,17 +132,11 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
     provider: 'razorpay' | 'paypal';
   }) => {
     try {
-      const response = await fetch('/api/subscription/verify-payment', {
+      const data = await safeFetchJson('/api/subscription/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || data.error || 'Payment verification failed');
-      }
 
       setPaymentSuccessMessage('🎉 Payment verified! Welcome to StudyFlow Premium.');
       if (onSuccess && data.subscription) {
@@ -130,8 +159,8 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
     setPaymentSuccessMessage(null);
 
     try {
-      // 1. Create order on backend
-      const orderRes = await fetch('/api/subscription/create-order', {
+      // 1. Create order on backend safely
+      const orderData = await safeFetchJson('/api/subscription/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -139,12 +168,6 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
           country: billingCountry,
         }),
       });
-
-      const orderData = await orderRes.json();
-
-      if (!orderRes.ok) {
-        throw new Error(orderData.message || orderData.error || 'Failed to initialize payment order');
-      }
 
       const { orderId, provider, keyId, amount, currency } = orderData;
 
@@ -230,12 +253,18 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
         
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/70 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-[#EADDFF] text-[#21005D] rounded-xl shadow-sm">
-              <Sparkles className="w-5 h-5 text-[#6750A4]" />
-            </div>
+          <div className="flex items-center gap-2.5">
+            <img 
+              src="/logo.png" 
+              alt="StudyFlow Logo" 
+              className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/80" 
+              referrerPolicy="no-referrer"
+            />
             <div>
-              <h3 className="text-base font-bold text-[#1D1B20] tracking-tight">StudyFlow Premium</h3>
+              <h3 className="text-base font-bold text-[#1D1B20] tracking-tight flex items-center gap-1.5">
+                <span>StudyFlow Premium</span>
+                <Sparkles className="w-4 h-4 text-[#6750A4]" />
+              </h3>
               <p className="text-[11px] text-[#49454F]">Unlock unlimited academic potential</p>
             </div>
           </div>

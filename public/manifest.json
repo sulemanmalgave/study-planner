@@ -1,0 +1,36 @@
+{
+  "short_name": "StudyFlow",
+  "name": "StudyFlow - Digital Study Planner",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/maskable-icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/maskable-icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#6750a4",
+  "display": "standalone",
+  "scope": "/",
+  "description": "Digital Study Planner & Academic Tracker for Students"
+}
