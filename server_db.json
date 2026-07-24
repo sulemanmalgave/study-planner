@@ -1,0 +1,176 @@
+{
+  "profile": {
+    "name": "Alex Mercer",
+    "email": "alex.mercer@example.com",
+    "initials": "AL",
+    "subscription": {
+      "subscriptionStatus": "premium",
+      "plan": "monthly",
+      "paymentGateway": "razorpay",
+      "transactionId": "pay_test_999",
+      "purchaseDate": "2026-07-24T06:29:32.001Z",
+      "expiryDate": "2026-08-24T06:29:32.001Z",
+      "billingCountry": "IN",
+      "type": "monthly",
+      "paymentProvider": "razorpay",
+      "paymentId": "pay_test_999"
+    }
+  },
+  "courses": [
+    {
+      "id": "c1",
+      "name": "Mathematics",
+      "color": "#3b82f6",
+      "code": "MATH-301"
+    },
+    {
+      "id": "c2",
+      "name": "Physics",
+      "color": "#06b6d4",
+      "code": "PHYS-202"
+    },
+    {
+      "id": "c3",
+      "name": "Chemistry",
+      "color": "#f43f5e",
+      "code": "CHEM-101"
+    },
+    {
+      "id": "c4",
+      "name": "Literature",
+      "color": "#a855f7",
+      "code": "LIT-110"
+    },
+    {
+      "id": "c5",
+      "name": "History",
+      "color": "#eab308",
+      "code": "HIST-120"
+    }
+  ],
+  "timetable": [
+    {
+      "id": "t1",
+      "day": "Monday",
+      "subject": "Mathematics",
+      "startTime": "09:00",
+      "endTime": "10:30",
+      "courseId": "c1"
+    },
+    {
+      "id": "t2",
+      "day": "Monday",
+      "subject": "Physics",
+      "startTime": "11:00",
+      "endTime": "12:30",
+      "courseId": "c2"
+    },
+    {
+      "id": "t3",
+      "day": "Tuesday",
+      "subject": "Chemistry",
+      "startTime": "10:00",
+      "endTime": "11:30",
+      "courseId": "c3"
+    },
+    {
+      "id": "t4",
+      "day": "Wednesday",
+      "subject": "Literature",
+      "startTime": "13:00",
+      "endTime": "14:30",
+      "courseId": "c4"
+    },
+    {
+      "id": "t5",
+      "day": "Thursday",
+      "subject": "History",
+      "startTime": "14:00",
+      "endTime": "15:30",
+      "courseId": "c5"
+    }
+  ],
+  "assignments": [
+    {
+      "id": "a1",
+      "title": "Calculus Problem Set 4",
+      "courseId": "c1",
+      "dueDate": "2026-07-22",
+      "status": "pending",
+      "priority": "high",
+      "description": "Solve chapters 4 and 5 questions."
+    },
+    {
+      "id": "a2",
+      "title": "Electromagnetism Lab Report",
+      "courseId": "c2",
+      "dueDate": "2026-07-25",
+      "status": "pending",
+      "priority": "medium",
+      "description": "Analyze the flux results and submit."
+    },
+    {
+      "id": "a3",
+      "title": "Organic Chemistry Essay",
+      "courseId": "c3",
+      "dueDate": "2026-07-15",
+      "status": "completed",
+      "priority": "low",
+      "description": "Carbon compounds research writeup."
+    }
+  ],
+  "exams": [
+    {
+      "id": "e1",
+      "name": "Maths Midterms",
+      "courseId": "c1",
+      "date": "2026-07-28",
+      "status": "upcoming",
+      "description": "Algebra, geometry, calculus coverage."
+    },
+    {
+      "id": "e2",
+      "name": "Physics Final Prep",
+      "courseId": "c2",
+      "date": "2026-08-05",
+      "status": "upcoming",
+      "description": "Full syllabus overview and trial run."
+    }
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "title": "Linear Algebra Notes",
+      "content": "Vectors are mathematical entities with magnitude and direction. Matrices represent transformations.",
+      "courseId": "c1",
+      "updatedAt": "2026-07-24T05:50:08.302Z"
+    },
+    {
+      "id": "n2",
+      "title": "Newtonian Laws Cheat Sheet",
+      "content": "1. Inertia: An object remains at rest unless acted on by external force.\n2. F = ma.\n3. Action/Reaction.",
+      "courseId": "c2",
+      "updatedAt": "2026-07-24T05:50:08.302Z"
+    }
+  ],
+  "studySessions": [
+    {
+      "id": "s1",
+      "durationMinutes": 50,
+      "type": "pomodoro",
+      "date": "2026-07-18"
+    },
+    {
+      "id": "s2",
+      "durationMinutes": 25,
+      "type": "pomodoro",
+      "date": "2026-07-18"
+    },
+    {
+      "id": "s3",
+      "durationMinutes": 15,
+      "type": "break",
+      "date": "2026-07-18"
+    }
+  ]
+}
