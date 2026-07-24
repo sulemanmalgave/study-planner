@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
-import { FREE_PLAN_LIMITS, DatabaseSchema } from './src/types';
+import { FREE_PLAN_LIMITS, DatabaseSchema } from './src/types.js';
 
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
