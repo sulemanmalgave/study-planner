@@ -3,8 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
-import { createServer as createViteServer } from 'vite';
-import { FREE_PLAN_LIMITS, DatabaseSchema } from './src/types.js';
+import { FREE_PLAN_LIMITS, DatabaseSchema } from './src/types';
 
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
@@ -827,6 +826,7 @@ app.get('/api/state', (req, res) => {
   async function startStandaloneServer() {
     // Vite Integration & Production Static Asset Serving
     if (process.env.NODE_ENV !== 'production') {
+      const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: 'spa',
