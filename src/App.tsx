@@ -19,6 +19,7 @@ import NotesView from './components/NotesView';
 import StudyTimerView from './components/StudyTimerView';
 import ProgressView from './components/ProgressView';
 import SettingsView from './components/SettingsView';
+import PrivacyPolicyView from './components/PrivacyPolicyView';
 
 import UpgradeModal from './components/UpgradeModal';
 import QuickAddModal from './components/QuickAddModal';
@@ -41,10 +42,44 @@ import { db, isFirebaseConfigured } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname === '/privacy') {
+      return 'privacy';
+    }
+    return 'dashboard';
+  });
   const [dbState, setDbState] = useState<DatabaseSchema | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync route and document title
+  useEffect(() => {
+    const handlePopState = () => {
+      if (window.location.pathname === '/privacy') {
+        setActiveTab('privacy');
+      } else {
+        setActiveTab('dashboard');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleNavigateToPrivacy = () => {
+    if (window.location.pathname !== '/privacy') {
+      window.history.pushState({}, '', '/privacy');
+    }
+    setActiveTab('privacy');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleNavigateToHome = () => {
+    if (window.location.pathname !== '/') {
+      window.history.pushState({}, '', '/');
+    }
+    setActiveTab('dashboard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Global search query
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
@@ -729,6 +764,29 @@ export default function App() {
               onTriggerUpgrade={() => setIsUpgradeOpen(true)}
             />
           )}
+
+          {activeTab === 'privacy' && (
+            <PrivacyPolicyView onBackToHome={handleNavigateToHome} />
+          )}
+
+          {/* Application Footer */}
+          <footer className="mt-12 pt-6 border-t border-[#E1E3E1] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#49454F] font-medium px-2 pb-6" id="app-footer">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-[#1D1B20]">StudyFlow</span>
+              <span>• Digital Study Planner</span>
+              <span className="text-[10px] bg-[#EADDFF] text-[#21005D] font-bold px-2 py-0.5 rounded-full border border-[#D0BCFF]/60">v1.2</span>
+            </div>
+            <div className="flex items-center gap-6">
+              <button 
+                onClick={handleNavigateToPrivacy}
+                className="text-[#6750A4] hover:text-[#503E84] font-bold hover:underline cursor-pointer transition-colors"
+                id="footer-link-privacy"
+              >
+                Privacy Policy
+              </button>
+              <span className="text-slate-400">© 2026 All rights reserved</span>
+            </div>
+          </footer>
 
         </main>
       </div>
