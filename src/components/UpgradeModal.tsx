@@ -53,8 +53,18 @@ const safeFetchJson = async (url: string, options?: RequestInit) => {
   }
 
   if (!response.ok) {
-    const errMsg = data?.message || data?.error || `Server request failed with status ${response.status}`;
-    throw new Error(errMsg);
+    const code = data?.code || data?.error || `HTTP_${response.status}`;
+    const name = data?.name || 'Request Failed';
+    const desc = data?.description || data?.message || data?.error || `Server request failed with status ${response.status}`;
+    const fix = data?.suggestedFix || '';
+    
+    const formattedMsg = `[${name} (${code})]: ${desc}${fix ? ` — Fix: ${fix}` : ''}`;
+    const formattedError: any = new Error(formattedMsg);
+    formattedError.code = code;
+    formattedError.name = name;
+    formattedError.description = desc;
+    formattedError.suggestedFix = fix;
+    throw formattedError;
   }
 
   return data;
@@ -147,12 +157,17 @@ export default function UpgradeModal({
       }
       const existingScript = document.getElementById('paypal-sdk-script');
       if (existingScript) {
-        resolve(true);
+        if (window.paypal) {
+          resolve(true);
+          return;
+        }
+        existingScript.addEventListener('load', () => resolve(true));
+        existingScript.addEventListener('error', () => resolve(false));
         return;
       }
       const script = document.createElement('script');
       script.id = 'paypal-sdk-script';
-      script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
+      script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&enable-funding=venmo,paylater`;
       script.onload = () => resolve(true);
       script.onerror = () => resolve(false);
       document.body.appendChild(script);
@@ -183,7 +198,9 @@ export default function UpgradeModal({
         onClose();
       }, 1500);
     } catch (err: any) {
-      setError(err.message || 'Payment verification failed. Please contact support.');
+      const displayErr = err?.message || 'Payment verification failed. Please contact support.';
+      console.error('[Verify Payment Error]', err);
+      setError(displayErr);
       setIsLoading(false);
     }
   };
@@ -250,7 +267,11 @@ export default function UpgradeModal({
         const isPaypalLoaded = await loadPaypalScript(keyId);
 
         if (isPaypalLoaded && window.paypal) {
-          // Trigger PayPal button container overlay or direct popup authorization
+          const container = document.getElementById('paypal-button-container');
+          if (container) {
+            container.innerHTML = '';
+          }
+
           window.paypal.Buttons({
             createOrder: () => orderId,
             onApprove: async (data: any) => {
@@ -260,16 +281,19 @@ export default function UpgradeModal({
               });
             },
             onError: (err: any) => {
-              console.error('PayPal Checkout Error:', err);
-              setError('PayPal Checkout encountered an issue. Please try again.');
+              console.error('[PayPal Checkout Error Detail]', err);
+              const detailStr = typeof err === 'string' ? err : err?.message || JSON.stringify(err);
+              setError(`PayPal Checkout Error: ${detailStr}`);
               setIsLoading(false);
             },
             onCancel: () => {
               setIsLoading(false);
             }
           }).render('#paypal-button-container');
+
+          setIsLoading(false);
         } else {
-          // Fallback direct capture for test/mock backend environments
+          // Direct verification fallback if script fails to load
           await handleVerifyPaymentOnBackend({
             orderId,
             provider: 'paypal',
@@ -278,7 +302,8 @@ export default function UpgradeModal({
       }
     } catch (err: any) {
       console.error('Checkout error:', err);
-      setError(err.message || 'Payment initiation failed. Please try again.');
+      const displayErr = err?.message || 'Payment initiation failed. Please try again.';
+      setError(displayErr);
       setIsLoading(false);
     }
   };
@@ -460,6 +485,20 @@ export default function UpgradeModal({
               </div>
             </div>
           </div>
+
+          {/* Dedicated PayPal Button Mount Container for International Checkout */}
+          {!isIndia && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center justify-between">
+                <span>PayPal Express Checkout Container</span>
+                <span className="text-[10px] text-slate-400 font-medium">Official PayPal Smart Buttons</span>
+              </div>
+              <div 
+                id="paypal-button-container" 
+                className="w-full min-h-[45px] empty:hidden transition-all"
+              />
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (
