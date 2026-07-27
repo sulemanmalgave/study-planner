@@ -94,7 +94,7 @@ async function fetchPaypalAccessToken(clientId: string, clientSecret: string, ap
 const pendingOrders = new Map<string, {
   amount: number;
   currency: string;
-  planType: 'monthly' | 'yearly';
+  planType: 'monthly' | 'quarterly' | 'yearly';
   country: string;
   provider: 'razorpay' | 'paypal';
   createdAt: number;
@@ -553,14 +553,15 @@ app.get('/api/state', (req, res) => {
   app.post('/api/subscription/create-order', async (req, res) => {
     try {
       const { planType, country } = req.body || {};
-      if (!planType || (planType !== 'monthly' && planType !== 'yearly')) {
+      const validPlan = planType === 'monthly' || planType === 'quarterly' || planType === 'yearly';
+      if (!planType || !validPlan) {
         return res.status(400).json({
           success: false,
-          error: 'Valid planType (monthly or yearly) is required'
+          error: 'Valid planType (monthly, quarterly, or yearly) is required'
         });
       }
 
-      const selectedCountry = country ? String(country).toUpperCase() : 'US';
+      const selectedCountry = country ? String(country).trim().toUpperCase() : 'US';
       const isIndia = selectedCountry === 'IN';
       const provider = isIndia ? 'razorpay' : 'paypal';
 
@@ -569,10 +570,12 @@ app.get('/api/state', (req, res) => {
 
       if (isIndia) {
         currency = 'INR';
-        amount = planType === 'monthly' ? 99 : 599; // India pricing: ₹99 or ₹599
+        // India pricing: Monthly ₹199, Quarterly ₹399
+        amount = planType === 'monthly' ? 199 : 399;
       } else {
         currency = 'USD';
-        amount = planType === 'monthly' ? 2.99 : 19.99; // International pricing: $2.99 or $19.99
+        // International pricing: Monthly $4.99, Yearly $19.99
+        amount = planType === 'monthly' ? 4.99 : 19.99;
       }
 
       if (provider === 'razorpay') {
@@ -609,7 +612,7 @@ app.get('/api/state', (req, res) => {
           pendingOrders.set(orderId, {
             amount,
             currency: 'INR',
-            planType: planType as 'monthly' | 'yearly',
+            planType: planType as 'monthly' | 'quarterly' | 'yearly',
             country: selectedCountry,
             provider: 'razorpay',
             createdAt: Date.now(),
@@ -695,7 +698,7 @@ app.get('/api/state', (req, res) => {
           pendingOrders.set(orderId, {
             amount,
             currency: 'USD',
-            planType: planType as 'monthly' | 'yearly',
+            planType: planType as 'monthly' | 'quarterly' | 'yearly',
             country: selectedCountry,
             provider: 'paypal',
             createdAt: Date.now(),
@@ -849,6 +852,8 @@ app.get('/api/state', (req, res) => {
 
       if (originalOrder.planType === 'monthly') {
         expiryDate.setMonth(expiryDate.getMonth() + 1);
+      } else if (originalOrder.planType === 'quarterly') {
+        expiryDate.setMonth(expiryDate.getMonth() + 3);
       } else {
         expiryDate.setFullYear(expiryDate.getFullYear() + 1);
       }

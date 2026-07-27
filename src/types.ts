@@ -1,6 +1,6 @@
 export interface Subscription {
   subscriptionStatus: 'free' | 'premium';
-  plan: 'free' | 'premium' | 'monthly' | 'yearly' | null;
+  plan: 'free' | 'premium' | 'monthly' | 'yearly' | 'quarterly' | null;
   paymentGateway: 'razorpay' | 'paypal' | null;
   transactionId: string | null;
   purchaseDate: string | null;

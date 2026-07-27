@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Settings, User, Globe, Sparkles, RefreshCw, Check, Loader2, AlertCircle, Lock } from 'lucide-react';
 import { UserProfile, Subscription } from '../types';
+import { saveBillingCountry } from '../lib/paymentConfig';
 
 interface SettingsViewProps {
   profile: UserProfile;
@@ -49,6 +50,7 @@ export default function SettingsView({
 
       // Keep subscription in sync
       const subscriptionCopy = { ...profile.subscription, billingCountry };
+      saveBillingCountry(billingCountry);
 
       await onUpdateProfile({
         name,

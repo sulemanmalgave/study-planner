@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, Sparkles, Globe, ShieldCheck, Zap, CreditCard, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { X, Check, Sparkles, Globe, ShieldCheck, Zap, CreditCard, ArrowRight, Loader2, AlertCircle, Lock } from 'lucide-react';
 import { Subscription } from '../types';
+import { 
+  getCountryConfig, 
+  GATEWAY_CONFIGS, 
+  detectUserCountry, 
+  saveBillingCountry, 
+  PlanOption 
+} from '../lib/paymentConfig';
 
 interface UpgradeModalProps {
   isOpen: boolean;
@@ -17,7 +24,7 @@ declare global {
   }
 }
 
-// Helper function to safely fetch API JSON responses without crashing on HTML error pages
+// Helper function to safely fetch API JSON responses
 const safeFetchJson = async (url: string, options?: RequestInit) => {
   let response: Response;
   try {
@@ -40,7 +47,7 @@ const safeFetchJson = async (url: string, options?: RequestInit) => {
     const rawText = await response.text();
     console.error(`[API Non-JSON Response] ${url} returned HTTP ${response.status}:`, rawText.slice(0, 300));
     if (response.status === 404) {
-      throw new Error('Payment API endpoint not found (HTTP 404). Please ensure backend server or Vercel API routes are deployed.');
+      throw new Error('Payment API endpoint not found (HTTP 404). Please verify backend server route.');
     }
     throw new Error(`Server returned HTTP ${response.status} (${response.statusText}) instead of JSON.`);
   }
@@ -53,43 +60,70 @@ const safeFetchJson = async (url: string, options?: RequestInit) => {
   return data;
 };
 
-export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountry = 'IN', limitReason }: UpgradeModalProps) {
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly');
+export default function UpgradeModal({ 
+  isOpen, 
+  onClose, 
+  onSuccess, 
+  currentCountry, 
+  limitReason 
+}: UpgradeModalProps) {
   const [billingCountry, setBillingCountry] = useState<string>('IN');
+  const [selectedPlanId, setSelectedPlanId] = useState<'monthly' | 'quarterly' | 'yearly'>('quarterly');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
 
+  // Auto-detect billing country on modal mount or when opening
   useEffect(() => {
     if (isOpen) {
       setError(null);
       setPaymentSuccessMessage(null);
-      // Auto-detect country if not explicitly passed
-      if (currentCountry) {
-        setBillingCountry(currentCountry.toUpperCase() === 'IN' ? 'IN' : 'US');
-      } else {
-        safeFetchJson('/api/subscription/detect-country')
-          .then((data) => {
-            if (data?.country) {
-              setBillingCountry(data.country.toUpperCase() === 'IN' ? 'IN' : 'US');
-            }
-          })
-          .catch(() => setBillingCountry('IN'));
-      }
+      
+      detectUserCountry(currentCountry).then((detected) => {
+        const countryCode = detected === 'IN' ? 'IN' : 'US';
+        setBillingCountry(countryCode);
+        
+        // Default plan selection based on country
+        if (countryCode === 'IN') {
+          setSelectedPlanId('quarterly');
+        } else {
+          setSelectedPlanId('yearly');
+        }
+      });
     }
   }, [isOpen, currentCountry]);
 
   if (!isOpen) return null;
 
-  const isIndia = billingCountry === 'IN';
+  // Derive current country config and gateway config dynamically
+  const countryConfig = getCountryConfig(billingCountry);
+  const isIndia = countryConfig.code === 'IN';
+  const activeGateway = GATEWAY_CONFIGS[countryConfig.gateway];
+  const plans = countryConfig.plans;
 
-  // Prices
-  const monthlyPrice = isIndia ? '₹99' : '$2.99';
-  const yearlyPrice = isIndia ? '₹599' : '$19.99';
-  const yearlyMonthlyEquivalent = isIndia ? '₹49/mo' : '$1.66/mo';
-  const currencySymbol = isIndia ? '₹' : '$';
+  // Selected plan object
+  const activePlan = plans.find(p => p.id === selectedPlanId) || plans[0];
 
-  // Load Razorpay Script dynamically
+  // Handle manual country switch (instantly updates gateway, currency, prices, and saves to localStorage)
+  const handleCountryChange = (newCountryCode: string) => {
+    const code = newCountryCode === 'IN' ? 'IN' : 'US';
+    setBillingCountry(code);
+    saveBillingCountry(code);
+    setError(null);
+
+    // Auto switch selected plan if current plan ID doesn't exist in new country plans
+    const newConfig = getCountryConfig(code);
+    const hasPlan = newConfig.plans.some(p => p.id === selectedPlanId);
+    if (!hasPlan) {
+      if (code === 'IN') {
+        setSelectedPlanId('quarterly');
+      } else {
+        setSelectedPlanId('yearly');
+      }
+    }
+  };
+
+  // Load Razorpay Checkout SDK dynamically
   const loadRazorpayScript = (): Promise<boolean> => {
     return new Promise((resolve) => {
       if (window.Razorpay) {
@@ -104,7 +138,7 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
     });
   };
 
-  // Load PayPal Script dynamically
+  // Load PayPal SDK dynamically
   const loadPaypalScript = (clientId: string): Promise<boolean> => {
     return new Promise((resolve) => {
       if (window.paypal) {
@@ -125,6 +159,7 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
     });
   };
 
+  // Verify transaction on backend
   const handleVerifyPaymentOnBackend = async (payload: {
     orderId: string;
     paymentId?: string;
@@ -138,7 +173,7 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
         body: JSON.stringify(payload),
       });
 
-      setPaymentSuccessMessage('🎉 Payment verified! Welcome to StudyFlow Premium.');
+      setPaymentSuccessMessage('🎉 Payment verified successfully! Welcome to StudyFlow Premium.');
       if (onSuccess && data.subscription) {
         onSuccess(data.subscription);
       }
@@ -148,23 +183,24 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
         onClose();
       }, 1500);
     } catch (err: any) {
-      setError(err.message || 'Payment verification failed. Please try again.');
+      setError(err.message || 'Payment verification failed. Please contact support.');
       setIsLoading(false);
     }
   };
 
+  // Execute checkout
   const handleCheckout = async () => {
     setIsLoading(true);
     setError(null);
     setPaymentSuccessMessage(null);
 
     try {
-      // 1. Create order on backend safely
+      // 1. Create order on secure backend
       const orderData = await safeFetchJson('/api/subscription/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          planType: selectedPlan,
+          planType: activePlan.id,
           country: billingCountry,
         }),
       });
@@ -177,10 +213,10 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
         if (isScriptLoaded && window.Razorpay) {
           const options = {
             key: keyId,
-            amount: amount * 100, // in paise
+            amount: Math.round(amount * 100), // in paise
             currency: currency,
             name: 'StudyFlow Premium',
-            description: `${selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Premium Plan (${currencySymbol}${amount})`,
+            description: `${activePlan.title} (${activePlan.formattedPrice})`,
             order_id: orderId,
             handler: async function (response: any) {
               await handleVerifyPaymentOnBackend({
@@ -191,8 +227,8 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
               });
             },
             prefill: {
-              name: 'Alex Mercer',
-              email: 'alex.mercer@example.com',
+              name: 'Student User',
+              email: 'student@studyflow.edu',
             },
             theme: {
               color: '#6750A4',
@@ -207,14 +243,14 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
           const rzp = new window.Razorpay(options);
           rzp.open();
         } else {
-          throw new Error('Razorpay Checkout SDK failed to load. Please check network connection.');
+          throw new Error('Razorpay Checkout SDK failed to load. Please check your network connection.');
         }
       } else {
-        // PayPal Flow
+        // PayPal Gateway Flow
         const isPaypalLoaded = await loadPaypalScript(keyId);
 
         if (isPaypalLoaded && window.paypal) {
-          // Trigger PayPal Modal or popup window
+          // Trigger PayPal button container overlay or direct popup authorization
           window.paypal.Buttons({
             createOrder: () => orderId,
             onApprove: async (data: any) => {
@@ -224,8 +260,8 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
               });
             },
             onError: (err: any) => {
-              console.error('PayPal Buttons Error:', err);
-              setError('PayPal Checkout encountered an error.');
+              console.error('PayPal Checkout Error:', err);
+              setError('PayPal Checkout encountered an issue. Please try again.');
               setIsLoading(false);
             },
             onCancel: () => {
@@ -233,7 +269,7 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
             }
           }).render('#paypal-button-container');
         } else {
-          // Fallback verification call directly for order authorization
+          // Fallback direct capture for test/mock backend environments
           await handleVerifyPaymentOnBackend({
             orderId,
             provider: 'paypal',
@@ -242,7 +278,7 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
       }
     } catch (err: any) {
       console.error('Checkout error:', err);
-      setError(err.message || 'Payment process failed. Please try again.');
+      setError(err.message || 'Payment initiation failed. Please try again.');
       setIsLoading(false);
     }
   };
@@ -280,7 +316,7 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5 text-left">
           
-          {/* Limit Notification Notice if triggered by limit */}
+          {/* Limit Notice if triggered by feature cap */}
           {limitReason && (
             <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-start gap-3 text-amber-900 animate-slide-down">
               <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
@@ -291,109 +327,120 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
             </div>
           )}
 
-          {/* Region / Gateway Selector */}
+          {/* Billing Region Selector */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider flex items-center gap-1.5">
                 <Globe className="w-3.5 h-3.5 text-[#6750A4]" />
-                Select Billing Region
+                Select Billing Country
               </label>
-              <span className="text-[10px] text-[#49454F] font-medium">
-                {isIndia ? 'Razorpay (UPI / Cards / Netbanking)' : 'PayPal (Cards / International)'}
+              <span className="text-[10px] text-[#6750A4] font-bold uppercase tracking-wider bg-[#F3EDF7] px-2 py-0.5 rounded-md border border-[#E1E3E1]">
+                Gateway: {activeGateway.name}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 bg-[#F3EDF7] p-1 rounded-2xl border border-slate-200/60">
+            {/* Country Radio Toggle */}
+            <div className="grid grid-cols-2 gap-2 bg-[#F3EDF7] p-1 rounded-2xl border border-slate-200/60" id="billing-country-selector">
               <button
                 type="button"
-                onClick={() => setBillingCountry('IN')}
-                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                onClick={() => handleCountryChange('IN')}
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all ${
                   isIndia 
                     ? 'bg-white text-[#21005D] shadow-sm border border-slate-200/80' 
                     : 'text-[#49454F] hover:text-[#1D1B20]'
                 }`}
                 id="select-country-in-btn"
               >
-                <span>🇮🇳 India (INR)</span>
+                <div className="flex items-center gap-2">
+                  <span>🇮🇳</span>
+                  <span>India (INR)</span>
+                </div>
                 {isIndia && <Check className="w-3.5 h-3.5 text-[#6750A4]" />}
               </button>
 
               <button
                 type="button"
-                onClick={() => setBillingCountry('US')}
-                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                onClick={() => handleCountryChange('US')}
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all ${
                   !isIndia 
                     ? 'bg-white text-[#21005D] shadow-sm border border-slate-200/80' 
                     : 'text-[#49454F] hover:text-[#1D1B20]'
                 }`}
                 id="select-country-us-btn"
               >
-                <span>🌎 International (USD)</span>
+                <div className="flex items-center gap-2">
+                  <span>🌎</span>
+                  <span>International (USD)</span>
+                </div>
                 {!isIndia && <Check className="w-3.5 h-3.5 text-[#6750A4]" />}
               </button>
             </div>
+            <p className="text-[10px] text-[#49454F] italic pl-1">
+              Gateway selected: <span className="font-semibold text-[#1D1B20]">{activeGateway.name}</span> ({activeGateway.supportedMethods})
+            </p>
           </div>
 
           {/* Plan Duration Cards */}
           <div className="space-y-2.5">
             <label className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">Choose Subscription Plan</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3" id="plan-selection-cards">
               
-              {/* Monthly Plan */}
-              <div
-                onClick={() => setSelectedPlan('monthly')}
-                className={`p-4 rounded-2xl border cursor-pointer transition-all relative space-y-2 ${
-                  selectedPlan === 'monthly'
-                    ? 'border-[#6750A4] bg-[#F3EDF7]/80 ring-2 ring-[#6750A4]/20 shadow-sm'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-                id="select-monthly-plan-card"
-              >
-                <div className="flex justify-between items-start">
-                  <span className="text-xs font-bold text-[#1D1B20]">Monthly</span>
-                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                    selectedPlan === 'monthly' ? 'border-[#6750A4] bg-[#6750A4]' : 'border-slate-300'
-                  }`}>
-                    {selectedPlan === 'monthly' && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+              {plans.map((plan: PlanOption) => {
+                const isSelected = selectedPlanId === plan.id;
+                return (
+                  <div
+                    key={plan.id}
+                    onClick={() => setSelectedPlanId(plan.id)}
+                    className={`p-4 rounded-2xl border cursor-pointer transition-all relative space-y-2 ${
+                      isSelected
+                        ? 'border-[#6750A4] bg-[#F3EDF7]/80 ring-2 ring-[#6750A4]/20 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                    id={`select-plan-${plan.id}-card`}
+                  >
+                    {plan.badge && (
+                      <span className="absolute -top-2.5 right-3 px-2 py-0.5 text-[9px] font-black bg-[#6750A4] text-white rounded-full uppercase shadow-sm tracking-wider">
+                        {plan.badge} • {plan.savingsText}
+                      </span>
+                    )}
+
+                    <div className="flex justify-between items-start">
+                      <span className="text-xs font-bold text-[#1D1B20]">{plan.title}</span>
+                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                        isSelected ? 'border-[#6750A4] bg-[#6750A4]' : 'border-slate-300'
+                      }`}>
+                        {isSelected && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-lg font-black text-[#1D1B20]">{plan.formattedPrice}</div>
+                      <div className="text-[10px] text-[#49454F] font-medium">{plan.billingText}</div>
+                      {plan.monthlyEquivalent && (
+                        <div className="text-[10px] text-[#0f5132] font-semibold mt-0.5">
+                          {plan.monthlyEquivalent} equivalent
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-
-                <div>
-                  <div className="text-lg font-black text-[#1D1B20]">{monthlyPrice}</div>
-                  <div className="text-[10px] text-[#49454F] font-medium">Billed monthly</div>
-                </div>
-              </div>
-
-              {/* Yearly Plan */}
-              <div
-                onClick={() => setSelectedPlan('yearly')}
-                className={`p-4 rounded-2xl border cursor-pointer transition-all relative space-y-2 ${
-                  selectedPlan === 'yearly'
-                    ? 'border-[#6750A4] bg-[#F3EDF7]/80 ring-2 ring-[#6750A4]/20 shadow-sm'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-                id="select-yearly-plan-card"
-              >
-                <span className="absolute -top-2.5 right-3 px-2 py-0.5 text-[9px] font-black bg-[#6750A4] text-white rounded-full uppercase shadow-sm tracking-wider">
-                  BEST VALUE • SAVE {isIndia ? '50%' : '44%'}
-                </span>
-
-                <div className="flex justify-between items-start">
-                  <span className="text-xs font-bold text-[#1D1B20]">Yearly Plan</span>
-                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                    selectedPlan === 'yearly' ? 'border-[#6750A4] bg-[#6750A4]' : 'border-slate-300'
-                  }`}>
-                    {selectedPlan === 'yearly' && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-lg font-black text-[#1D1B20]">{yearlyPrice}</div>
-                  <div className="text-[10px] text-[#0f5132] font-semibold">{yearlyMonthlyEquivalent} • Billed yearly</div>
-                </div>
-              </div>
+                );
+              })}
 
             </div>
+          </div>
+
+          {/* Relevant Payment Gateway Highlight */}
+          <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between text-xs text-[#1D1B20]">
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-[#6750A4]" />
+              <div>
+                <span className="font-bold">{activeGateway.name} Gateway</span>
+                <p className="text-[10px] text-[#49454F]">{activeGateway.description}</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-extrabold text-[#21005D] bg-[#EADDFF] px-2.5 py-1 rounded-full uppercase tracking-wider">
+              {isIndia ? 'Razorpay' : 'PayPal'}
+            </span>
           </div>
 
           {/* Premium Features Included */}
@@ -426,7 +473,7 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Full Lifetime History Analytics</span>
+                <span>Full Lifetime Analytics</span>
               </div>
             </div>
           </div>
@@ -454,7 +501,7 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
           <button
             onClick={handleCheckout}
             disabled={isLoading || !!paymentSuccessMessage}
-            className="w-full py-3.5 px-4 text-xs font-bold text-white bg-[#6750A4] hover:bg-[#503E84] rounded-2xl shadow-lg shadow-[#6750A4]/20 flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full py-3.5 px-4 text-xs font-bold text-white bg-[#6750A4] hover:bg-[#503E84] rounded-2xl shadow-lg shadow-[#6750A4]/20 flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             id="pay-now-btn"
           >
             {isLoading ? (
@@ -466,7 +513,7 @@ export default function UpgradeModal({ isOpen, onClose, onSuccess, currentCountr
               <>
                 <CreditCard className="w-4 h-4" />
                 <span>
-                  Pay {selectedPlan === 'monthly' ? monthlyPrice : yearlyPrice} with {isIndia ? 'Razorpay' : 'PayPal'}
+                  Pay {activePlan.formattedPrice} with {activeGateway.name}
                 </span>
                 <ArrowRight className="w-4 h-4" />
               </>
