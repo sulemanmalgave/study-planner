@@ -124,7 +124,7 @@ export function getCountryConfig(countryCode?: string): CountryConfig {
 
 // Client-side country auto-detection with multi-layered fallbacks
 export async function detectUserCountry(savedProfileCountry?: string): Promise<string> {
-  // 1. Check explicitly saved selection in localStorage
+  // Priority 1: Saved billing country in localStorage
   try {
     const localSaved = localStorage.getItem('studyflow_billing_country');
     if (localSaved) {
@@ -135,14 +135,30 @@ export async function detectUserCountry(savedProfileCountry?: string): Promise<s
     console.warn('LocalStorage billing country access error:', e);
   }
 
-  // 2. Check saved billing country in user profile
+  // Priority 1 (b): Saved billing country in user profile
   if (savedProfileCountry) {
     const cleanProfile = savedProfileCountry.trim().toUpperCase();
     if (cleanProfile === 'IN') return 'IN';
     if (cleanProfile && cleanProfile !== 'IN') return 'US';
   }
 
-  // 3. Try backend API country detection
+  // Priority 2: Browser locale (navigator.language / navigator.languages)
+  try {
+    const mainLang = navigator.language || '';
+    if (mainLang.toLowerCase().endsWith('-in') || mainLang.toLowerCase().startsWith('hi')) {
+      return 'IN';
+    }
+    const languages = navigator.languages || [];
+    for (const lang of languages) {
+      if (lang && (lang.toLowerCase().endsWith('-in') || lang.toLowerCase().startsWith('hi'))) {
+        return 'IN';
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  // Priority 3: IP Geolocation (via backend API)
   try {
     const res = await fetch('/api/subscription/detect-country', { method: 'GET' });
     if (res.ok) {
@@ -153,10 +169,10 @@ export async function detectUserCountry(savedProfileCountry?: string): Promise<s
       }
     }
   } catch (e) {
-    console.warn('Backend country detection call failed, falling back to browser locale:', e);
+    console.warn('Backend IP country detection call failed, using timezone fallback:', e);
   }
 
-  // 4. Fallback: Browser Timezone Check
+  // Priority 4: Timezone Fallback
   try {
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
     if (timeZone.includes('Kolkata') || timeZone.includes('Calcutta') || timeZone.includes('Asia/Kolkata')) {
@@ -166,19 +182,7 @@ export async function detectUserCountry(savedProfileCountry?: string): Promise<s
     // ignore
   }
 
-  // 5. Fallback: Browser Languages Check
-  try {
-    const languages = navigator.languages || [navigator.language || ''];
-    for (const lang of languages) {
-      if (lang && (lang.toLowerCase().endsWith('-in') || lang.toLowerCase().startsWith('hi'))) {
-        return 'IN';
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-
-  // 6. Final Default
+  // Final Default
   return 'US';
 }
 

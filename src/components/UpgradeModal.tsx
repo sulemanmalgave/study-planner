@@ -332,14 +332,14 @@ export default function UpgradeModal({
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider flex items-center gap-1.5">
                 <Globe className="w-3.5 h-3.5 text-[#6750A4]" />
-                Select Billing Country
+                Billing Country
               </label>
-              <span className="text-[10px] text-[#6750A4] font-bold uppercase tracking-wider bg-[#F3EDF7] px-2 py-0.5 rounded-md border border-[#E1E3E1]">
-                Gateway: {activeGateway.name}
+              <span className="text-[10px] text-[#49454F] font-semibold bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                {isIndia ? 'INR (₹)' : 'USD ($)'}
               </span>
             </div>
 
-            {/* Country Radio Toggle */}
+            {/* Country Switcher */}
             <div className="grid grid-cols-2 gap-2 bg-[#F3EDF7] p-1 rounded-2xl border border-slate-200/60" id="billing-country-selector">
               <button
                 type="button"
@@ -353,7 +353,7 @@ export default function UpgradeModal({
               >
                 <div className="flex items-center gap-2">
                   <span>🇮🇳</span>
-                  <span>India (INR)</span>
+                  <span>India</span>
                 </div>
                 {isIndia && <Check className="w-3.5 h-3.5 text-[#6750A4]" />}
               </button>
@@ -370,14 +370,11 @@ export default function UpgradeModal({
               >
                 <div className="flex items-center gap-2">
                   <span>🌎</span>
-                  <span>International (USD)</span>
+                  <span>International</span>
                 </div>
                 {!isIndia && <Check className="w-3.5 h-3.5 text-[#6750A4]" />}
               </button>
             </div>
-            <p className="text-[10px] text-[#49454F] italic pl-1">
-              Gateway selected: <span className="font-semibold text-[#1D1B20]">{activeGateway.name}</span> ({activeGateway.supportedMethods})
-            </p>
           </div>
 
           {/* Plan Duration Cards */}
@@ -427,20 +424,6 @@ export default function UpgradeModal({
               })}
 
             </div>
-          </div>
-
-          {/* Relevant Payment Gateway Highlight */}
-          <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between text-xs text-[#1D1B20]">
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-[#6750A4]" />
-              <div>
-                <span className="font-bold">{activeGateway.name} Gateway</span>
-                <p className="text-[10px] text-[#49454F]">{activeGateway.description}</p>
-              </div>
-            </div>
-            <span className="text-[10px] font-extrabold text-[#21005D] bg-[#EADDFF] px-2.5 py-1 rounded-full uppercase tracking-wider">
-              {isIndia ? 'Razorpay' : 'PayPal'}
-            </span>
           </div>
 
           {/* Premium Features Included */}
