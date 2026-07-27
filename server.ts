@@ -8,22 +8,59 @@ import { FREE_PLAN_LIMITS, DatabaseSchema } from './src/types.js';
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
 
+const sanitizeEnvVar = (val: string | undefined): string | undefined => {
+  if (!val) return undefined;
+  // Strip whitespace, tabs, newlines, carriage returns
+  let clean = val.trim().replace(/[\r\n\t]/g, '');
+  // Strip surrounding double/single quotes if present
+  clean = clean.replace(/^["']|["']$/g, '').trim();
+  return clean || undefined;
+};
+
 const getRazorpayCredentials = () => {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  const keyId = sanitizeEnvVar(process.env.RAZORPAY_KEY_ID);
+  const keySecret = sanitizeEnvVar(process.env.RAZORPAY_KEY_SECRET);
   return { keyId, keySecret };
 };
 
 const getPaypalCredentials = () => {
-  const clientId = process.env.PAYPAL_CLIENT_ID;
-  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
-  const apiBase = process.env.PAYPAL_API_BASE || 'https://api-m.sandbox.paypal.com';
+  const clientId = sanitizeEnvVar(process.env.PAYPAL_CLIENT_ID);
+  const clientSecret = sanitizeEnvVar(process.env.PAYPAL_CLIENT_SECRET);
+  let apiBase = sanitizeEnvVar(process.env.PAYPAL_API_BASE);
+
+  if (!apiBase) {
+    const envMode = (process.env.PAYPAL_MODE || process.env.PAYPAL_ENV || '').toLowerCase();
+    if (envMode === 'live' || envMode === 'production' || process.env.NODE_ENV === 'production') {
+      apiBase = 'https://api-m.paypal.com';
+    } else {
+      apiBase = 'https://api-m.sandbox.paypal.com';
+    }
+  }
+
+  // Remove trailing slashes
+  apiBase = apiBase.replace(/\/+$/, '');
+
   return { clientId, clientSecret, apiBase };
 };
 
 async function fetchPaypalAccessToken(clientId: string, clientSecret: string, apiBase: string): Promise<string> {
+  const hasClientId = Boolean(clientId && clientId.length > 0);
+  const hasClientSecret = Boolean(clientSecret && clientSecret.length > 0);
+
+  console.log(`[PayPal OAuth Audit] Client ID Present: ${hasClientId} (Length: ${clientId?.length || 0}), Client Secret Present: ${hasClientSecret} (Length: ${clientSecret?.length || 0}), Base URL: ${apiBase}`);
+
+  if (!hasClientId || !hasClientSecret) {
+    const missing: string[] = [];
+    if (!hasClientId) missing.push('PAYPAL_CLIENT_ID');
+    if (!hasClientSecret) missing.push('PAYPAL_CLIENT_SECRET');
+    console.error(`[PayPal OAuth Error] Missing credentials: ${missing.join(', ')}`);
+    throw new Error(`Missing PayPal environment variables: ${missing.join(', ')}`);
+  }
+
   const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-  const response = await fetch(`${apiBase}/v1/oauth2/token`, {
+  const tokenUrl = `${apiBase}/v1/oauth2/token`;
+
+  const response = await fetch(tokenUrl, {
     method: 'POST',
     headers: {
       'Authorization': `Basic ${auth}`,
@@ -32,12 +69,24 @@ async function fetchPaypalAccessToken(clientId: string, clientSecret: string, ap
     body: 'grant_type=client_credentials',
   });
 
+  const responseText = await response.text();
+  console.log(`[PayPal OAuth Response] Status: ${response.status}, Body: ${responseText}`);
+
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`PayPal OAuth authentication failed (${response.status}): ${text}`);
+    throw new Error(`PayPal OAuth authentication failed (${response.status}): ${responseText}`);
   }
 
-  const data = (await response.json()) as { access_token: string };
+  let data: { access_token?: string };
+  try {
+    data = JSON.parse(responseText);
+  } catch (e) {
+    throw new Error(`Failed to parse PayPal OAuth response JSON: ${responseText}`);
+  }
+
+  if (!data.access_token) {
+    throw new Error(`PayPal OAuth response did not contain access_token: ${responseText}`);
+  }
+
   return data.access_token;
 }
 
@@ -588,66 +637,88 @@ app.get('/api/state', (req, res) => {
         // PayPal
         const { clientId, clientSecret, apiBase } = getPaypalCredentials();
         if (!clientId || !clientSecret) {
-          console.error('[PayPal Config Error] Missing PAYPAL_CLIENT_ID or PAYPAL_CLIENT_SECRET environment variables.');
+          const missingVars: string[] = [];
+          if (!clientId) missingVars.push('PAYPAL_CLIENT_ID');
+          if (!clientSecret) missingVars.push('PAYPAL_CLIENT_SECRET');
+          console.error(`[PayPal Config Error] Missing environment variables: ${missingVars.join(', ')}`);
           return res.status(400).json({
             success: false,
-            error: 'PayPal API keys (PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET) are missing. Please configure them in environment variables.',
+            error: `PayPal API configuration error: Missing ${missingVars.join(', ')} in environment variables.`,
           });
         }
 
-        const accessToken = await fetchPaypalAccessToken(clientId, clientSecret, apiBase);
+        try {
+          const accessToken = await fetchPaypalAccessToken(clientId, clientSecret, apiBase);
 
-        const ppRes = await fetch(`${apiBase}/v2/checkout/orders`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            intent: 'CAPTURE',
-            purchase_units: [
-              {
-                amount: {
-                  currency_code: 'USD',
-                  value: amount.toFixed(2),
+          const ppRes = await fetch(`${apiBase}/v2/checkout/orders`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              intent: 'CAPTURE',
+              purchase_units: [
+                {
+                  amount: {
+                    currency_code: 'USD',
+                    value: amount.toFixed(2),
+                  },
+                  description: `StudyFlow Premium (${planType})`,
                 },
-                description: `StudyFlow Premium (${planType})`,
-              },
-            ],
-          }),
-        });
+              ],
+            }),
+          });
 
-        if (!ppRes.ok) {
-          const errBody = await ppRes.text();
-          console.error('[PayPal Order Creation Error]:', errBody);
-          return res.status(ppRes.status).json({
+          const ppBodyText = await ppRes.text();
+          console.log(`[PayPal Create Order Response] Status: ${ppRes.status}, Body: ${ppBodyText}`);
+
+          if (!ppRes.ok) {
+            return res.status(ppRes.status).json({
+              success: false,
+              error: `PayPal Order Creation Failed (${ppRes.status}): ${ppBodyText}`,
+            });
+          }
+
+          let ppData: { id: string };
+          try {
+            ppData = JSON.parse(ppBodyText);
+          } catch (e) {
+            return res.status(500).json({
+              success: false,
+              error: `Invalid JSON returned by PayPal order creation: ${ppBodyText}`,
+            });
+          }
+
+          const orderId = ppData.id;
+
+          pendingOrders.set(orderId, {
+            amount,
+            currency: 'USD',
+            planType: planType as 'monthly' | 'yearly',
+            country: selectedCountry,
+            provider: 'paypal',
+            createdAt: Date.now(),
+          });
+
+          return res.json({
+            success: true,
+            orderId,
+            amount,
+            currency: 'USD',
+            provider: 'paypal',
+            planType,
+            country: selectedCountry,
+            keyId: clientId,
+          });
+        } catch (ppErr: any) {
+          console.error('[PayPal Order Creation Exception]:', ppErr);
+          const errorMessage = ppErr?.message || (typeof ppErr === 'string' ? ppErr : JSON.stringify(ppErr)) || 'PayPal order creation failed';
+          return res.status(500).json({
             success: false,
-            error: `PayPal Order Creation Failed: ${errBody}`,
+            error: `PayPal Order Creation Error: ${errorMessage}`,
           });
         }
-
-        const ppData = (await ppRes.json()) as { id: string };
-        const orderId = ppData.id;
-
-        pendingOrders.set(orderId, {
-          amount,
-          currency: 'USD',
-          planType: planType as 'monthly' | 'yearly',
-          country: selectedCountry,
-          provider: 'paypal',
-          createdAt: Date.now(),
-        });
-
-        return res.json({
-          success: true,
-          orderId,
-          amount,
-          currency: 'USD',
-          provider: 'paypal',
-          planType,
-          country: selectedCountry,
-          keyId: clientId,
-        });
       }
     } catch (error: any) {
       console.error('[Error creating subscription order]:', error);
@@ -714,35 +785,57 @@ app.get('/api/state', (req, res) => {
       } else if (provider === 'paypal') {
         const { clientId, clientSecret, apiBase } = getPaypalCredentials();
         if (!clientId || !clientSecret) {
+          const missingVars: string[] = [];
+          if (!clientId) missingVars.push('PAYPAL_CLIENT_ID');
+          if (!clientSecret) missingVars.push('PAYPAL_CLIENT_SECRET');
           return res.status(400).json({
             error: 'MISSING_PAYPAL_CONFIG',
-            message: 'PayPal API credentials are missing on the backend server.',
+            message: `PayPal API credentials missing on backend server: ${missingVars.join(', ')}.`,
           });
         }
 
-        // Capture PayPal order on PayPal servers
-        const accessToken = await fetchPaypalAccessToken(clientId, clientSecret, apiBase);
-        const captureRes = await fetch(`${apiBase}/v2/checkout/orders/${orderId}/capture`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!captureRes.ok) {
-          const errText = await captureRes.text();
-          return res.status(captureRes.status).json({
-            error: 'PAYPAL_CAPTURE_FAILED',
-            message: `PayPal order capture failed: ${errText}`,
+        try {
+          // Capture PayPal order on PayPal servers
+          const accessToken = await fetchPaypalAccessToken(clientId, clientSecret, apiBase);
+          const captureRes = await fetch(`${apiBase}/v2/checkout/orders/${orderId}/capture`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
           });
-        }
 
-        const captureData = (await captureRes.json()) as any;
-        if (captureData.status !== 'COMPLETED') {
-          return res.status(400).json({
-            error: 'PAYPAL_NOT_COMPLETED',
-            message: `PayPal payment status is ${captureData.status}, expected COMPLETED.`,
+          const captureText = await captureRes.text();
+          console.log(`[PayPal Capture Response] Status: ${captureRes.status}, Body: ${captureText}`);
+
+          if (!captureRes.ok) {
+            return res.status(captureRes.status).json({
+              error: 'PAYPAL_CAPTURE_FAILED',
+              message: `PayPal order capture failed (${captureRes.status}): ${captureText}`,
+            });
+          }
+
+          let captureData: any;
+          try {
+            captureData = JSON.parse(captureText);
+          } catch (e) {
+            return res.status(500).json({
+              error: 'PAYPAL_CAPTURE_RESPONSE_INVALID',
+              message: `PayPal capture returned invalid JSON: ${captureText}`,
+            });
+          }
+
+          if (captureData.status !== 'COMPLETED') {
+            return res.status(400).json({
+              error: 'PAYPAL_NOT_COMPLETED',
+              message: `PayPal payment status is ${captureData.status}, expected COMPLETED.`,
+            });
+          }
+        } catch (ppCaptureErr: any) {
+          console.error('[PayPal Verify Payment Exception]:', ppCaptureErr);
+          return res.status(500).json({
+            error: 'PAYPAL_VERIFICATION_ERROR',
+            message: ppCaptureErr?.message || 'Failed to verify PayPal payment.',
           });
         }
       }
