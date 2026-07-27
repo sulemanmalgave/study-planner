@@ -714,7 +714,7 @@ app.get('/api/state', (req, res) => {
                   currency_code: 'USD',
                   value: amount.toFixed(2),
                 },
-                description: `StudyFlow Premium (${planType})`,
+                description: `Study Planner Premium (${planType})`,
               },
             ],
           };
@@ -968,7 +968,7 @@ app.get('/api/state', (req, res) => {
 
       res.json({
         success: true,
-        message: 'Payment verified successfully! Welcome to StudyFlow Premium.',
+        message: 'Payment verified successfully! Welcome to Study Planner Premium.',
         subscription: db.profile.subscription,
       });
     } catch (error: any) {

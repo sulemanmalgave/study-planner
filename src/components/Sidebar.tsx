@@ -42,13 +42,13 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
         <div className="flex items-center gap-2.5 px-3 mb-4 mt-1" id="sidebar-header">
           <img 
             src="/logo.png" 
-            alt="StudyFlow Logo" 
-            className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/60" 
+            alt="Study Planner Logo" 
+            className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/60 shrink-0" 
             referrerPolicy="no-referrer"
           />
-          <div>
-            <h1 className="text-sm font-bold tracking-tight text-[#1D1B20] leading-none">StudyFlow</h1>
-            <span className="text-[8px] font-mono font-bold tracking-wider text-[#6750A4] uppercase mt-0.5 block">Digital Planner</span>
+          <div className="min-w-0">
+            <h1 className="text-sm font-extrabold tracking-tight text-[#1D1B20] leading-none truncate">Study Planner</h1>
+            <span className="text-[8px] font-mono font-bold tracking-wider text-[#6750A4] uppercase mt-0.5 block truncate">Timetable, Timer &amp; Notes</span>
           </div>
         </div>
 
@@ -88,7 +88,7 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
           <div className="p-3 bg-[#EADDFF]/30 border border-[#D0BCFF]/40 rounded-2xl" id="sidebar-premium-card">
             <div className="flex items-center gap-1.5 text-xs font-bold text-[#21005D]">
               <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
-              <span>StudyFlow Premium</span>
+              <span>Study Planner Premium</span>
             </div>
             <p className="text-[10px] text-[#49454F] font-medium mt-1 leading-snug">
               Unlock advanced productivity tools

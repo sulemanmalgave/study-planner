@@ -21,7 +21,7 @@ interface PrivacyPolicyViewProps {
 export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewProps) {
   useEffect(() => {
     // Update Document Title and Meta Description for SEO & Google Play Compliance
-    document.title = "Privacy Policy | StudyFlow";
+    document.title = "Privacy Policy | Study Planner - Timetable, Study Timer & Notes";
     
     let metaDesc = document.querySelector('meta[name="description"]');
     if (!metaDesc) {
@@ -29,7 +29,7 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
       metaDesc.setAttribute('name', 'description');
       document.head.appendChild(metaDesc);
     }
-    metaDesc.setAttribute('content', 'Read the Privacy Policy for StudyFlow Digital Study Planner and learn how your data is collected, used, and protected.');
+    metaDesc.setAttribute('content', 'Read the Privacy Policy for Study Planner - Timetable, Study Timer & Notes and learn how your data is collected, used, and protected.');
 
     // Scroll smoothly to top on mount
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -39,19 +39,34 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
     <div className="max-w-4xl mx-auto py-6 px-4 sm:px-6 lg:px-8 text-[#1D1B20]" id="privacy-policy-viewport">
       
       {/* Top Header & Navigation */}
-      <div className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-[#E1E3E1]">
-        <button
-          onClick={onBackToHome}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-[#F3EDF7] border border-[#E1E3E1] text-[#6750A4] font-bold text-xs rounded-full transition-all shadow-sm cursor-pointer"
-          id="btn-back-to-home-top"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Home</span>
-        </button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-[#E1E3E1]">
+        <div className="flex items-center gap-3">
+          <img 
+            src="/logo.png" 
+            alt="Study Planner Logo" 
+            className="w-10 h-10 rounded-2xl object-cover shadow-sm border border-slate-200/80 shrink-0" 
+            referrerPolicy="no-referrer"
+          />
+          <div>
+            <h2 className="text-sm font-extrabold text-[#1D1B20] leading-tight">Study Planner</h2>
+            <span className="text-[10px] text-[#6750A4] font-medium block">Timetable, Study Timer &amp; Notes</span>
+          </div>
+        </div>
 
-        <div className="flex items-center gap-2 text-xs font-semibold text-[#49454F]" id="privacy-badge">
-          <ShieldCheck className="w-4 h-4 text-[#6750A4]" />
-          <span>Verified Data Protection</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBackToHome}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-[#F3EDF7] border border-[#E1E3E1] text-[#6750A4] font-bold text-xs rounded-full transition-all shadow-sm cursor-pointer"
+            id="btn-back-to-home-top"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Home</span>
+          </button>
+
+          <div className="hidden sm:flex items-center gap-2 text-xs font-semibold text-[#49454F]" id="privacy-badge">
+            <ShieldCheck className="w-4 h-4 text-[#6750A4]" />
+            <span>Verified Data Protection</span>
+          </div>
         </div>
       </div>
 
@@ -67,7 +82,7 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
           </div>
         </div>
         <p className="text-xs sm:text-sm text-[#49454F] font-medium leading-relaxed max-w-2xl mt-2">
-          StudyFlow – Digital Study Planner is committed to maintaining complete transparency, data security, and privacy for students and learners worldwide.
+          <strong>Study Planner - Timetable, Study Timer &amp; Notes</strong> is committed to maintaining complete transparency, data security, and privacy for students and learners worldwide.
         </p>
 
         <div className="mt-4 pt-4 border-t border-[#E1E3E1]/60 flex flex-wrap items-center justify-between gap-3 text-[11px] text-[#49454F] font-medium">
@@ -99,7 +114,7 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
           </div>
           <div>
             <h4 className="text-xs font-bold text-[#1D1B20]">Secure Payment Gateways</h4>
-            <p className="text-[11px] text-[#49454F] mt-0.5 leading-snug">Razorpay & PayPal handle payments directly. StudyFlow never stores card or bank details.</p>
+            <p className="text-[11px] text-[#49454F] mt-0.5 leading-snug">Razorpay &amp; PayPal handle payments directly. Study Planner never stores card or bank details.</p>
           </div>
         </div>
 
@@ -124,11 +139,11 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
             <h2 className="text-lg font-bold text-[#1D1B20]">Introduction</h2>
           </div>
           <p className="text-xs sm:text-sm text-[#49454F] leading-relaxed pl-8">
-            Welcome to <strong>StudyFlow – Digital Study Planner</strong> ("StudyFlow", "we", "our", or "us"). 
-            StudyFlow is a digital study management platform designed to help students and learners organize study schedules, tasks, assignments, notes, timetables, and exams effectively.
+            Welcome to <strong>Study Planner - Timetable, Study Timer &amp; Notes</strong> ("Study Planner", "we", "our", or "us"). 
+            Study Planner is a digital study management platform designed to help students and learners organize study schedules, tasks, assignments, notes, timetables, and exams effectively.
           </p>
           <p className="text-xs sm:text-sm text-[#49454F] leading-relaxed pl-8">
-            This Privacy Policy explains how we collect, use, store, and protect your personal information when you use our application. By using StudyFlow, you agree to the collection and use of information in accordance with this policy. We collect only the minimum necessary information required to provide our service.
+            This Privacy Policy explains how we collect, use, store, and protect your personal information when you use our application. By using Study Planner, you agree to the collection and use of information in accordance with this policy. We collect only the minimum necessary information required to provide our service.
           </p>
         </section>
 
@@ -141,7 +156,7 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
             <h2 className="text-lg font-bold text-[#1D1B20]">Information We Collect</h2>
           </div>
           <p className="text-xs sm:text-sm text-[#49454F] leading-relaxed pl-8">
-            We collect only the essential information needed to operate StudyFlow and provide a personalized experience:
+            We collect only the essential information needed to operate Study Planner and provide a personalized experience:
           </p>
           <ul className="list-disc pl-14 space-y-2 text-xs sm:text-sm text-[#49454F]">
             <li>
@@ -187,7 +202,7 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
             <h2 className="text-lg font-bold text-[#1D1B20]">Local Storage</h2>
           </div>
           <p className="text-xs sm:text-sm text-[#49454F] leading-relaxed pl-8">
-            StudyFlow uses standard web browser <code>localStorage</code> to store your local study planner state, theme preferences, and offline cache. This allows the application to function quickly and support offline study planning. You can clear your local storage at any time through your browser settings or by using the Reset Workspace feature in Settings.
+            Study Planner uses standard web browser <code>localStorage</code> to store your local study planner state, theme preferences, and offline cache. This allows the application to function quickly and support offline study planning. You can clear your local storage at any time through your browser settings or by using the Reset Workspace feature in Settings.
           </p>
         </section>
 
@@ -197,10 +212,10 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
         <section className="space-y-3" id="sec-cloud-storage">
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-[#EADDFF] text-[#21005D] text-xs font-black flex items-center justify-center shrink-0">5</span>
-            <h2 className="text-lg font-bold text-[#1D1B20]">Cloud Storage & Synchronization</h2>
+            <h2 className="text-lg font-bold text-[#1D1B20]">Cloud Storage &amp; Synchronization</h2>
           </div>
           <p className="text-xs sm:text-sm text-[#49454F] leading-relaxed pl-8">
-            When connected, StudyFlow synchronizes your study planner data with Google Firebase Cloud Firestore. This ensures your academic schedules, assignments, and study records are securely backed up and accessible across your authenticated devices.
+            When connected, Study Planner synchronizes your study planner data with Google Firebase Cloud Firestore. This ensures your academic schedules, assignments, and study records are securely backed up and accessible across your authenticated devices.
           </p>
         </section>
 
@@ -210,7 +225,7 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
         <section className="space-y-3" id="sec-account-information">
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-[#EADDFF] text-[#21005D] text-xs font-black flex items-center justify-center shrink-0">6</span>
-            <h2 className="text-lg font-bold text-[#1D1B20]">Account Information & Authentication</h2>
+            <h2 className="text-lg font-bold text-[#1D1B20]">Account Information &amp; Authentication</h2>
           </div>
           <p className="text-xs sm:text-sm text-[#49454F] leading-relaxed pl-8">
             Account authentication and identity security are managed securely via Firebase Authentication. Your login credentials, user token, and profile preferences are used strictly to maintain your session security and sync state. You can manage or update your profile details anytime within the Settings section.
@@ -227,7 +242,7 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
           </div>
           <div className="pl-8 space-y-3">
             <p className="text-xs sm:text-sm text-[#49454F] leading-relaxed">
-              When subscribing to StudyFlow Premium, payments are processed by PCI-DSS compliant third-party payment gateways:
+              When subscribing to Study Planner Premium, payments are processed by PCI-DSS compliant third-party payment gateways:
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-2">
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
@@ -240,7 +255,7 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
               </div>
             </div>
             <p className="text-xs sm:text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 p-3 rounded-xl font-medium leading-relaxed">
-              <strong>Strict Payment Security Policy:</strong> StudyFlow servers <u>never</u> collect, store, process, or transmit your credit card numbers, debit card details, bank credentials, or PINs. All billing details are handled directly within the official payment provider's secure encrypted interface.
+              <strong>Strict Payment Security Policy:</strong> Study Planner servers <u>never</u> collect, store, process, or transmit your credit card numbers, debit card details, bank credentials, or PINs. All billing details are handled directly within the official payment provider's secure encrypted interface.
             </p>
           </div>
         </section>
@@ -254,7 +269,7 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
             <h2 className="text-lg font-bold text-[#1D1B20]">Third-Party Services</h2>
           </div>
           <p className="text-xs sm:text-sm text-[#49454F] leading-relaxed pl-8">
-            StudyFlow integrates with trusted third-party service providers solely to perform necessary backend operations:
+            Study Planner integrates with trusted third-party service providers solely to perform necessary backend operations:
           </p>
           <ul className="list-disc pl-14 space-y-1.5 text-xs sm:text-sm text-[#49454F]">
             <li><strong>Google Firebase:</strong> Cloud authentication and Firestore database infrastructure.</li>
@@ -272,10 +287,10 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
         <section className="space-y-3" id="sec-cookies-web">
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-[#EADDFF] text-[#21005D] text-xs font-black flex items-center justify-center shrink-0">9</span>
-            <h2 className="text-lg font-bold text-[#1D1B20]">Cookies & Web Technologies</h2>
+            <h2 className="text-lg font-bold text-[#1D1B20]">Cookies &amp; Web Technologies</h2>
           </div>
           <p className="text-xs sm:text-sm text-[#49454F] leading-relaxed pl-8">
-            StudyFlow uses essential session tokens and local browser storage to keep you signed in, preserve your theme settings, and secure API requests against cross-site vulnerabilities. We do not use third-party advertising cookies or cross-site tracking scripts.
+            Study Planner uses essential session tokens and local browser storage to keep you signed in, preserve your theme settings, and secure API requests against cross-site vulnerabilities. We do not use third-party advertising cookies or cross-site tracking scripts.
           </p>
         </section>
 
@@ -298,7 +313,7 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
         <section className="space-y-3" id="sec-data-retention-deletion">
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-[#EADDFF] text-[#21005D] text-xs font-black flex items-center justify-center shrink-0">11</span>
-            <h2 className="text-lg font-bold text-[#1D1B20]">Data Retention & Account Deletion</h2>
+            <h2 className="text-lg font-bold text-[#1D1B20]">Data Retention &amp; Account Deletion</h2>
           </div>
           <p className="text-xs sm:text-sm text-[#49454F] leading-relaxed pl-8">
             We retain your study planner data only for as long as your account remains active. You have full ownership and control over your personal data:
@@ -318,7 +333,7 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
             <h2 className="text-lg font-bold text-[#1D1B20]">Children's Privacy</h2>
           </div>
           <p className="text-xs sm:text-sm text-[#49454F] leading-relaxed pl-8">
-            StudyFlow is intended for general audiences, students, and adult learners. We do not knowingly collect personal identifiable information from children under the age of 13. If we discover that a child under 13 has provided us with personal information without parental consent, we will delete such information immediately.
+            Study Planner is intended for general audiences, students, and adult learners. We do not knowingly collect personal identifiable information from children under the age of 13. If we discover that a child under 13 has provided us with personal information without parental consent, we will delete such information immediately.
           </p>
         </section>
 

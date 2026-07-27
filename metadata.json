@@ -1,5 +1,5 @@
 {
-  "name": "Digital Study Planner",
+  "name": "Study Planner - Timetable, Study Timer & Notes",
   "description": "A comprehensive digital study planner featuring academic class schedules, assignment trackers, automated revision clocks, and custom countdown lists.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

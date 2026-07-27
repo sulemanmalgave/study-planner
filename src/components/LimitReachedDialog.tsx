@@ -45,21 +45,21 @@ export default function LimitReachedDialog({
         <div className="flex items-center gap-3">
           <img 
             src="/logo.png" 
-            alt="StudyFlow Logo" 
-            className="w-10 h-10 rounded-2xl object-cover shadow-sm border border-slate-200/80" 
+            alt="Study Planner Logo" 
+            className="w-10 h-10 rounded-2xl object-cover shadow-sm border border-slate-200/80 shrink-0" 
             referrerPolicy="no-referrer"
           />
           <div>
             <h3 className="text-base font-bold text-[#1D1B20] tracking-tight flex items-center gap-1.5" id="limit-dialog-title">
               <span>Free Plan Limit Reached</span>
             </h3>
-            <span className="text-[10px] text-[#6750A4] font-semibold">StudyFlow Quota</span>
+            <span className="text-[10px] text-[#6750A4] font-semibold">Study Planner Quota</span>
           </div>
         </div>
 
         {/* Message Content */}
         <p className="text-xs text-[#49454F] leading-relaxed font-medium" id="limit-dialog-message">
-          You've reached the free plan limit for {name} ({limit}). Upgrade to StudyFlow Premium to unlock unlimited Tasks, Exams, Notes, and the full Timetable.
+          You've reached the free plan limit for {name} ({limit}). Upgrade to Study Planner Premium to unlock unlimited Tasks, Exams, Notes, and the full Timetable.
         </p>
 
         {/* Perks list */}

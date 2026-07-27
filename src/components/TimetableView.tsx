@@ -246,7 +246,7 @@ export default function TimetableView({
                   </div>
                   <h4 className="text-[11px] font-black text-[#1D1B20] uppercase tracking-wide">Locked on Free Plan</h4>
                   <p className="text-[9px] text-[#49454F] max-w-[280px] mt-1 font-medium leading-relaxed">
-                    View only Today, Tomorrow, and Day After Tomorrow. Upgrade to StudyFlow Premium to unlock the full weekly timetable schedule.
+                    View only Today, Tomorrow, and Day After Tomorrow. Upgrade to Study Planner Premium to unlock the full weekly timetable schedule.
                   </p>
                   <button
                     onClick={onTriggerUpgrade}

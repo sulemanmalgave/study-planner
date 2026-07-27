@@ -188,7 +188,7 @@ export default function UpgradeModal({
         body: JSON.stringify(payload),
       });
 
-      setPaymentSuccessMessage('🎉 Payment verified successfully! Welcome to StudyFlow Premium.');
+      setPaymentSuccessMessage('🎉 Payment verified successfully! Welcome to Study Planner Premium.');
       if (onSuccess && data.subscription) {
         onSuccess(data.subscription);
       }
@@ -232,7 +232,7 @@ export default function UpgradeModal({
             key: keyId,
             amount: Math.round(amount * 100), // in paise
             currency: currency,
-            name: 'StudyFlow Premium',
+            name: 'Study Planner Premium',
             description: `${activePlan.title} (${activePlan.formattedPrice})`,
             order_id: orderId,
             handler: async function (response: any) {
@@ -245,7 +245,7 @@ export default function UpgradeModal({
             },
             prefill: {
               name: 'Student User',
-              email: 'student@studyflow.edu',
+              email: 'student@studyplanner.app',
             },
             theme: {
               color: '#6750A4',
@@ -317,13 +317,13 @@ export default function UpgradeModal({
           <div className="flex items-center gap-2.5">
             <img 
               src="/logo.png" 
-              alt="StudyFlow Logo" 
-              className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/80" 
+              alt="Study Planner Logo" 
+              className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/80 shrink-0" 
               referrerPolicy="no-referrer"
             />
             <div>
               <h3 className="text-base font-bold text-[#1D1B20] tracking-tight flex items-center gap-1.5">
-                <span>StudyFlow Premium</span>
+                <span>Study Planner Premium</span>
                 <Sparkles className="w-4 h-4 text-[#6750A4]" />
               </h3>
               <p className="text-[11px] text-[#49454F]">Unlock unlimited academic potential</p>

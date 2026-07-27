@@ -114,7 +114,7 @@ export default function ProgressView({ courses, timetable, assignments, exams, s
             <Star className="w-4 h-4 text-amber-400 shrink-0" />
             <div className="text-left">
               <p className="text-xs font-bold text-amber-200">Free Plan History Limit</p>
-              <p className="text-[10px] text-amber-300/80 mt-0.5">You are currently viewing academic statistics from only the last 7 days. Upgrade to StudyFlow Premium to access lifetime history analytics.</p>
+              <p className="text-[10px] text-amber-300/80 mt-0.5">You are currently viewing academic statistics from only the last 7 days. Upgrade to Study Planner Premium to access lifetime history analytics.</p>
             </div>
           </div>
           <button

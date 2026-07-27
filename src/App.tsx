@@ -173,7 +173,7 @@ export default function App() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#0a0f1d] text-white space-y-4" id="app-loading-spinner">
         <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
-        <p className="text-xs font-mono text-slate-400 uppercase tracking-widest animate-pulse">Initializing Digital Study Planner...</p>
+        <p className="text-xs font-mono text-slate-400 uppercase tracking-widest animate-pulse">Initializing Study Planner...</p>
       </div>
     );
   }
@@ -772,8 +772,8 @@ export default function App() {
           {/* Application Footer */}
           <footer className="mt-12 pt-6 border-t border-[#E1E3E1] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#49454F] font-medium px-2 pb-6" id="app-footer">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-[#1D1B20]">StudyFlow</span>
-              <span>• Digital Study Planner</span>
+              <span className="font-bold text-[#1D1B20]">Study Planner</span>
+              <span>• Timetable, Study Timer &amp; Notes</span>
               <span className="text-[10px] bg-[#EADDFF] text-[#21005D] font-bold px-2 py-0.5 rounded-full border border-[#D0BCFF]/60">v1.2</span>
             </div>
             <div className="flex items-center gap-6">
