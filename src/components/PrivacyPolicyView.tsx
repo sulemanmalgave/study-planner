@@ -42,10 +42,21 @@ export default function PrivacyPolicyView({ onBackToHome }: PrivacyPolicyViewPro
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-[#E1E3E1]">
         <div className="flex items-center gap-3">
           <img 
-            src="/logo.png" 
+            src={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/logo.png`}
             alt="Study Planner Logo" 
             className="w-10 h-10 rounded-2xl object-cover shadow-sm border border-slate-200/80 shrink-0" 
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              const target = e.currentTarget;
+              const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+              if (!target.dataset.triedFallback) {
+                target.dataset.triedFallback = '1';
+                target.src = `${base}/logo.jpg`;
+              } else if (target.dataset.triedFallback === '1') {
+                target.dataset.triedFallback = '2';
+                target.src = `${base}/icon-512.png`;
+              }
+            }}
           />
           <div>
             <h2 className="text-sm font-extrabold text-[#1D1B20] leading-tight">Study Planner</h2>

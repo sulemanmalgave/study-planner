@@ -41,10 +41,21 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
         {/* Brand Header */}
         <div className="flex items-center gap-2.5 px-3 mb-4 mt-1" id="sidebar-header">
           <img 
-            src="/logo.png" 
+            src={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/logo.png`}
             alt="Study Planner Logo" 
             className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/60 shrink-0" 
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              const target = e.currentTarget;
+              const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+              if (!target.dataset.triedFallback) {
+                target.dataset.triedFallback = '1';
+                target.src = `${base}/logo.jpg`;
+              } else if (target.dataset.triedFallback === '1') {
+                target.dataset.triedFallback = '2';
+                target.src = `${base}/icon-512.png`;
+              }
+            }}
           />
           <div className="min-w-0">
             <h1 className="text-sm font-extrabold tracking-tight text-[#1D1B20] leading-none truncate">Study Planner</h1>
