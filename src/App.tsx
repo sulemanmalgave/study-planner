@@ -796,7 +796,6 @@ export default function App() {
         isOpen={isUpgradeOpen} 
         onClose={() => setIsUpgradeOpen(false)} 
         onSuccess={handleUpgradeSuccess}
-        currentCountry={profile.subscription.billingCountry}
       />
 
       <QuickAddModal 

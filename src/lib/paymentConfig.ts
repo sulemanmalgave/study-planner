@@ -50,16 +50,16 @@ export const COUNTRY_CONFIGS: Record<string, CountryConfig> = {
         billingText: 'Billed monthly',
       },
       {
-        id: 'quarterly',
-        title: 'Quarterly Plan',
-        price: 399,
+        id: 'yearly',
+        title: 'Yearly Plan',
+        price: 999,
         currency: 'INR',
         currencySymbol: '₹',
-        formattedPrice: '₹399',
-        billingText: 'Billed quarterly (3 months)',
+        formattedPrice: '₹999',
+        billingText: 'Billed yearly',
         badge: 'BEST VALUE',
-        savingsText: 'SAVE 33%',
-        monthlyEquivalent: '₹133/mo',
+        savingsText: 'SAVE 58%',
+        monthlyEquivalent: '₹83/mo',
       },
     ],
   },
@@ -122,76 +122,26 @@ export function getCountryConfig(countryCode?: string): CountryConfig {
   return COUNTRY_CONFIGS.INTERNATIONAL;
 }
 
-// Client-side country auto-detection with multi-layered fallbacks
-export async function detectUserCountry(savedProfileCountry?: string): Promise<string> {
-  // Priority 1: Saved billing country in localStorage
-  try {
-    const localSaved = localStorage.getItem('studyflow_billing_country');
-    if (localSaved) {
-      const clean = localSaved.trim().toUpperCase();
-      if (clean === 'IN' || clean === 'US') return clean;
-    }
-  } catch (e) {
-    console.warn('LocalStorage billing country access error:', e);
-  }
-
-  // Priority 1 (b): Saved billing country in user profile
-  if (savedProfileCountry) {
-    const cleanProfile = savedProfileCountry.trim().toUpperCase();
-    if (cleanProfile === 'IN') return 'IN';
-    if (cleanProfile && cleanProfile !== 'IN') return 'US';
-  }
-
-  // Priority 2: Browser locale (navigator.language / navigator.languages)
-  try {
-    const mainLang = navigator.language || '';
-    if (mainLang.toLowerCase().endsWith('-in') || mainLang.toLowerCase().startsWith('hi')) {
-      return 'IN';
-    }
-    const languages = navigator.languages || [];
-    for (const lang of languages) {
-      if (lang && (lang.toLowerCase().endsWith('-in') || lang.toLowerCase().startsWith('hi'))) {
-        return 'IN';
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-
-  // Priority 3: IP Geolocation (via backend API)
+// Server-side country auto-detection API call with International fallback
+export async function detectUserCountry(): Promise<string> {
   try {
     const res = await fetch('/api/subscription/detect-country', { method: 'GET' });
     if (res.ok) {
       const data = await res.json();
       if (data?.country) {
         const detected = String(data.country).trim().toUpperCase();
+        console.log(`[Country Auto-Detect] Server detected country: ${detected}`);
         return detected === 'IN' ? 'IN' : 'US';
       }
     }
+    console.warn('[Country Detection Warning] Server detection returned non-OK status or empty payload. Defaulting to International (US).');
   } catch (e) {
-    console.warn('Backend IP country detection call failed, using timezone fallback:', e);
+    console.warn('[Country Detection Warning] Failed to reach backend country detection API. Defaulting to International (US):', e);
   }
-
-  // Priority 4: Timezone Fallback
-  try {
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-    if (timeZone.includes('Kolkata') || timeZone.includes('Calcutta') || timeZone.includes('Asia/Kolkata')) {
-      return 'IN';
-    }
-  } catch (e) {
-    // ignore
-  }
-
-  // Final Default
   return 'US';
 }
 
-// Save country choice locally and in storage
+// No-op or safe local save
 export function saveBillingCountry(countryCode: string): void {
-  const cleanCode = countryCode.trim().toUpperCase() === 'IN' ? 'IN' : 'US';
-  try {
-    localStorage.setItem('studyflow_billing_country', cleanCode);
-  } catch (e) {
-    console.warn('Failed to save billing country to localStorage:', e);
-  }
+  // Manual country saving disabled; country is automatically detected server-side.
 }

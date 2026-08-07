@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { Settings, User, Globe, Sparkles, RefreshCw, Check, Loader2, AlertCircle, Lock } from 'lucide-react';
-import { UserProfile, Subscription } from '../types';
-import { saveBillingCountry } from '../lib/paymentConfig';
+import { Settings, User, Sparkles, RefreshCw, Check, Loader2, AlertCircle, Lock } from 'lucide-react';
+import { UserProfile } from '../types';
 
 interface SettingsViewProps {
   profile: UserProfile;
@@ -28,7 +27,6 @@ export default function SettingsView({
 }: SettingsViewProps) {
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
-  const [billingCountry, setBillingCountry] = useState(profile.subscription.billingCountry);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
@@ -48,15 +46,10 @@ export default function SettingsView({
         .toUpperCase()
         .slice(0, 2) || 'AM';
 
-      // Keep subscription in sync
-      const subscriptionCopy = { ...profile.subscription, billingCountry };
-      saveBillingCountry(billingCountry);
-
       await onUpdateProfile({
         name,
         email,
         initials,
-        subscription: subscriptionCopy
       });
 
       setUpdateMessage('Profile settings saved successfully!');
@@ -156,44 +149,6 @@ export default function SettingsView({
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-white border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
                 />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 border-b border-[#E1E3E1] pb-3 pt-3">
-              <Globe className="w-4 h-4 text-[#0f5132]" />
-              <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">Region Preference</h3>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-[10px] text-[#49454F] leading-relaxed max-w-lg">
-                Choose your local region preference for currency formatting and regional academic standards.
-              </p>
-              
-              <div className="grid grid-cols-2 gap-2 max-w-md">
-                <button
-                  type="button"
-                  onClick={() => setBillingCountry('IN')}
-                  className={`p-3 text-xs font-medium rounded-xl border flex items-center justify-between transition-all ${
-                    billingCountry === 'IN'
-                      ? 'bg-[#EADDFF] border-[#6750A4] text-[#1D1B20]'
-                      : 'bg-[#F3EDF7]/50 border-[#E1E3E1] text-[#49454F]'
-                  }`}
-                >
-                  <span>🇮🇳 India (INR)</span>
-                  {billingCountry === 'IN' && <Check className="w-4 h-4 text-[#6750A4]" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBillingCountry('US')}
-                  className={`p-3 text-xs font-medium rounded-xl border flex items-center justify-between transition-all ${
-                    billingCountry !== 'IN'
-                      ? 'bg-[#EADDFF] border-[#6750A4] text-[#1D1B20]'
-                      : 'bg-[#F3EDF7]/50 border-[#E1E3E1] text-[#49454F]'
-                  }`}
-                >
-                  <span>🌎 International (USD)</span>
-                  {billingCountry !== 'IN' && <Check className="w-4 h-4 text-[#6750A4]" />}
-                </button>
               </div>
             </div>
 

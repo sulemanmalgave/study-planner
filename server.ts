@@ -151,13 +151,24 @@ const pendingOrders = new Map<string, {
 
 const verifiedPayments = new Set<string>();
 
-// Seed Initial Mock Data (Exactly matching screenshots & UI specs)
+// Helper function to evaluate subscription status and expiration
+function isSubscriptionActive(sub: any): boolean {
+  if (!sub) return false;
+  const isStatusPremium = sub.subscriptionStatus === 'premium' || sub.plan === 'premium' || sub.plan === 'monthly' || sub.plan === 'yearly' || sub.plan === 'quarterly';
+  if (!isStatusPremium) return false;
+  if (sub.expiryDate) {
+    return new Date(sub.expiryDate).getTime() > Date.now();
+  }
+  return true;
+}
+
+// Clean Initial State for New Users
 const getInitialDatabaseState = (): DatabaseSchema => {
   return {
     profile: {
-      name: 'Alex Mercer',
-      email: 'alex.mercer@example.com',
-      initials: 'AL',
+      name: 'Student',
+      email: '',
+      initials: 'ST',
       subscription: {
         subscriptionStatus: 'free',
         plan: null,
@@ -165,43 +176,17 @@ const getInitialDatabaseState = (): DatabaseSchema => {
         transactionId: null,
         purchaseDate: null,
         expiryDate: null,
-        billingCountry: 'IN', // Default to India, auto-detected or manually toggled
+        billingCountry: 'US',
         paymentProvider: null,
         paymentId: null,
       },
     },
-    courses: [
-      { id: 'c1', name: 'Mathematics', color: '#3b82f6', code: 'MATH-301' },
-      { id: 'c2', name: 'Physics', color: '#06b6d4', code: 'PHYS-202' },
-      { id: 'c3', name: 'Chemistry', color: '#f43f5e', code: 'CHEM-101' },
-      { id: 'c4', name: 'Literature', color: '#a855f7', code: 'LIT-110' },
-      { id: 'c5', name: 'History', color: '#eab308', code: 'HIST-120' },
-    ],
-    timetable: [
-      { id: 't1', day: 'Monday', subject: 'Mathematics', startTime: '09:00', endTime: '10:30', courseId: 'c1' },
-      { id: 't2', day: 'Monday', subject: 'Physics', startTime: '11:00', endTime: '12:30', courseId: 'c2' },
-      { id: 't3', day: 'Tuesday', subject: 'Chemistry', startTime: '10:00', endTime: '11:30', courseId: 'c3' },
-      { id: 't4', day: 'Wednesday', subject: 'Literature', startTime: '13:00', endTime: '14:30', courseId: 'c4' },
-      { id: 't5', day: 'Thursday', subject: 'History', startTime: '14:00', endTime: '15:30', courseId: 'c5' },
-    ],
-    assignments: [
-      { id: 'a1', title: 'Calculus Problem Set 4', courseId: 'c1', dueDate: '2026-07-22', status: 'pending', priority: 'high', description: 'Solve chapters 4 and 5 questions.' },
-      { id: 'a2', title: 'Electromagnetism Lab Report', courseId: 'c2', dueDate: '2026-07-25', status: 'pending', priority: 'medium', description: 'Analyze the flux results and submit.' },
-      { id: 'a3', title: 'Organic Chemistry Essay', courseId: 'c3', dueDate: '2026-07-15', status: 'completed', priority: 'low', description: 'Carbon compounds research writeup.' },
-    ],
-    exams: [
-      { id: 'e1', name: 'Maths Midterms', courseId: 'c1', date: '2026-07-28', status: 'upcoming', description: 'Algebra, geometry, calculus coverage.' },
-      { id: 'e2', name: 'Physics Final Prep', courseId: 'c2', date: '2026-08-05', status: 'upcoming', description: 'Full syllabus overview and trial run.' },
-    ],
-    notes: [
-      { id: 'n1', title: 'Linear Algebra Notes', content: 'Vectors are mathematical entities with magnitude and direction. Matrices represent transformations.', courseId: 'c1', updatedAt: new Date().toISOString() },
-      { id: 'n2', title: 'Newtonian Laws Cheat Sheet', content: '1. Inertia: An object remains at rest unless acted on by external force.\n2. F = ma.\n3. Action/Reaction.', courseId: 'c2', updatedAt: new Date().toISOString() },
-    ],
-    studySessions: [
-      { id: 's1', durationMinutes: 50, type: 'pomodoro', date: '2026-07-18' },
-      { id: 's2', durationMinutes: 25, type: 'pomodoro', date: '2026-07-18' },
-      { id: 's3', durationMinutes: 15, type: 'break', date: '2026-07-18' },
-    ],
+    courses: [],
+    timetable: [],
+    assignments: [],
+    exams: [],
+    notes: [],
+    studySessions: [],
   };
 };
 
@@ -285,7 +270,7 @@ app.get('/api/state', (req, res) => {
   app.post('/api/courses', (req, res) => {
     try {
       const db = readDB();
-      if (db.profile.subscription.subscriptionStatus !== 'premium' && db.courses.length >= FREE_PLAN_LIMITS.courses) {
+      if (!isSubscriptionActive(db.profile.subscription) && db.courses.length >= FREE_PLAN_LIMITS.courses) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
           message: 'You have reached the free plan limit of 5 courses. Upgrade to Premium for unlimited access.',
@@ -354,7 +339,7 @@ app.get('/api/state', (req, res) => {
       // Let's count periods. If free, let's allow at most 2 periods as the core limit for simpler demo testing, or separate schedules. Let's make it 2 periods for the free limit to trigger easily, or allow creating at most 2 separate weekly schedules.
       // Let's enforce that a user on the Free plan can create at most 2 period entries in their timetable so they hit the limit beautifully, and can upgrade.
       const totalPeriods = db.timetable.length;
-      if (db.profile.subscription.subscriptionStatus !== 'premium' && totalPeriods >= FREE_PLAN_LIMITS.timetables) {
+      if (!isSubscriptionActive(db.profile.subscription) && totalPeriods >= FREE_PLAN_LIMITS.timetables) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
           message: 'You have reached the free plan limit of 10 Timetables / Schedule Entries. Upgrade to Premium for unlimited access.',
@@ -406,7 +391,7 @@ app.get('/api/state', (req, res) => {
       const db = readDB();
       const activeTasks = db.assignments.filter((a) => a.status === 'pending').length;
       if (
-        db.profile.subscription.subscriptionStatus !== 'premium' &&
+        !isSubscriptionActive(db.profile.subscription) &&
         (db.assignments.length >= FREE_PLAN_LIMITS.assignments || activeTasks >= FREE_PLAN_LIMITS.tasks)
       ) {
         return res.status(403).json({
@@ -459,7 +444,7 @@ app.get('/api/state', (req, res) => {
   app.post('/api/exams', (req, res) => {
     try {
       const db = readDB();
-      if (db.profile.subscription.subscriptionStatus !== 'premium' && db.exams.length >= FREE_PLAN_LIMITS.exams) {
+      if (!isSubscriptionActive(db.profile.subscription) && db.exams.length >= FREE_PLAN_LIMITS.exams) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
           message: 'You have reached the free plan limit of 5 exams. Upgrade to Premium for unlimited access.',
@@ -509,7 +494,7 @@ app.get('/api/state', (req, res) => {
   app.post('/api/notes', (req, res) => {
     try {
       const db = readDB();
-      if (db.profile.subscription.subscriptionStatus !== 'premium' && db.notes.length >= FREE_PLAN_LIMITS.notes) {
+      if (!isSubscriptionActive(db.profile.subscription) && db.notes.length >= FREE_PLAN_LIMITS.notes) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
           message: 'You have reached the free plan limit of 10 notes. Upgrade to Premium for unlimited access.',
@@ -579,29 +564,44 @@ app.get('/api/state', (req, res) => {
   });
 
   // 9. Subscriptions & Billing Status
-  // Detect country based on headers, IP, or timezone
-  app.get('/api/subscription/detect-country', (req, res) => {
-    const cfCountry = req.headers['cf-ipcountry'] as string;
-    const acceptLanguage = req.headers['accept-language'] as string;
-    
-    let country = 'US';
-    if (cfCountry) {
-      country = cfCountry.toUpperCase();
-    } else if (acceptLanguage && acceptLanguage.toLowerCase().includes('in')) {
-      country = 'IN';
-    } else {
-      const ipTimezone = req.headers['x-appengine-user-timezone'] as string;
-      if (ipTimezone && (ipTimezone.includes('Calcutta') || ipTimezone.includes('Kolkata') || ipTimezone.includes('Asia/Kolkata'))) {
-        country = 'IN';
+  // Helper function for strict server-side geographic/IP country detection
+  function detectCountryFromRequest(req: express.Request): string {
+    const geoHeaders = [
+      'x-vercel-ip-country',
+      'cf-ipcountry',
+      'x-appengine-country',
+      'x-country-code',
+      'cloudfront-viewer-country',
+      'x-client-geo-country',
+      'x-geoip-country-code',
+    ];
+
+    for (const headerName of geoHeaders) {
+      const val = req.headers[headerName];
+      if (val && typeof val === 'string' && val.trim().length === 2) {
+        const code = val.trim().toUpperCase();
+        if (code !== 'XX' && code !== 'T1' && code !== 'UNKNOWN') {
+          console.log(`[Country Detection] Server detected geographic country code '${code}' via header '${headerName}'`);
+          return code;
+        }
       }
     }
-    res.json({ country });
+
+    // Log detection failure before defaulting to International
+    console.warn('[Country Detection Failure] Unable to detect geographic/IP country from request headers. Defaulting to International (US / USD / PayPal). Headers present:', Object.keys(req.headers).filter(h => h.includes('country') || h.includes('geo') || h.includes('ip') || h.includes('vercel') || h.includes('cf')));
+    return 'US';
+  }
+
+  // Server-side country detection endpoint
+  app.get('/api/subscription/detect-country', (req, res) => {
+    const country = detectCountryFromRequest(req);
+    res.json({ country, isIndia: country === 'IN' });
   });
 
   // Create Checkout Order securely on the backend
   app.post('/api/subscription/create-order', async (req, res) => {
     try {
-      const { planType, country } = req.body || {};
+      const { planType } = req.body || {};
       const validPlan = planType === 'monthly' || planType === 'quarterly' || planType === 'yearly';
       if (!planType || !validPlan) {
         return res.status(400).json({
@@ -610,7 +610,9 @@ app.get('/api/state', (req, res) => {
         });
       }
 
-      const selectedCountry = country ? String(country).trim().toUpperCase() : 'US';
+      // ALWAYS perform server-side country detection from request headers/IP info.
+      // NEVER trust any country value sent from the frontend for payment routing!
+      const selectedCountry = detectCountryFromRequest(req);
       const isIndia = selectedCountry === 'IN';
       const provider = isIndia ? 'razorpay' : 'paypal';
 
@@ -619,12 +621,12 @@ app.get('/api/state', (req, res) => {
 
       if (isIndia) {
         currency = 'INR';
-        // India pricing: Monthly ₹199, Quarterly ₹399
-        amount = planType === 'monthly' ? 199 : 399;
+        // India pricing: Monthly ₹199, Quarterly ₹399, Yearly ₹999
+        amount = planType === 'monthly' ? 199 : planType === 'yearly' ? 999 : 399;
       } else {
         currency = 'USD';
-        // International pricing: Monthly $4.99, Yearly $19.99
-        amount = planType === 'monthly' ? 4.99 : 19.99;
+        // International pricing: Monthly $4.99, Quarterly $11.99, Yearly $19.99
+        amount = planType === 'monthly' ? 4.99 : planType === 'yearly' ? 19.99 : 11.99;
       }
 
       if (provider === 'razorpay') {

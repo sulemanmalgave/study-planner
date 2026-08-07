@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, Sparkles, Globe, ShieldCheck, Zap, CreditCard, ArrowRight, Loader2, AlertCircle, Lock } from 'lucide-react';
+import { X, Check, Sparkles, ShieldCheck, Zap, CreditCard, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { Subscription } from '../types';
 import { 
   getCountryConfig, 
   GATEWAY_CONFIGS, 
   detectUserCountry, 
-  saveBillingCountry, 
   PlanOption 
 } from '../lib/paymentConfig';
 
@@ -74,11 +73,10 @@ export default function UpgradeModal({
   isOpen, 
   onClose, 
   onSuccess, 
-  currentCountry, 
   limitReason 
 }: UpgradeModalProps) {
-  const [billingCountry, setBillingCountry] = useState<string>('IN');
-  const [selectedPlanId, setSelectedPlanId] = useState<'monthly' | 'quarterly' | 'yearly'>('quarterly');
+  const [billingCountry, setBillingCountry] = useState<string>('US');
+  const [selectedPlanId, setSelectedPlanId] = useState<'monthly' | 'quarterly' | 'yearly'>('yearly');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
@@ -89,19 +87,13 @@ export default function UpgradeModal({
       setError(null);
       setPaymentSuccessMessage(null);
       
-      detectUserCountry(currentCountry).then((detected) => {
+      detectUserCountry().then((detected) => {
         const countryCode = detected === 'IN' ? 'IN' : 'US';
         setBillingCountry(countryCode);
-        
-        // Default plan selection based on country
-        if (countryCode === 'IN') {
-          setSelectedPlanId('quarterly');
-        } else {
-          setSelectedPlanId('yearly');
-        }
+        setSelectedPlanId('yearly');
       });
     }
-  }, [isOpen, currentCountry]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -113,25 +105,6 @@ export default function UpgradeModal({
 
   // Selected plan object
   const activePlan = plans.find(p => p.id === selectedPlanId) || plans[0];
-
-  // Handle manual country switch (instantly updates gateway, currency, prices, and saves to localStorage)
-  const handleCountryChange = (newCountryCode: string) => {
-    const code = newCountryCode === 'IN' ? 'IN' : 'US';
-    setBillingCountry(code);
-    saveBillingCountry(code);
-    setError(null);
-
-    // Auto switch selected plan if current plan ID doesn't exist in new country plans
-    const newConfig = getCountryConfig(code);
-    const hasPlan = newConfig.plans.some(p => p.id === selectedPlanId);
-    if (!hasPlan) {
-      if (code === 'IN') {
-        setSelectedPlanId('quarterly');
-      } else {
-        setSelectedPlanId('yearly');
-      }
-    }
-  };
 
   // Load Razorpay Checkout SDK dynamically
   const loadRazorpayScript = (): Promise<boolean> => {
@@ -351,56 +324,6 @@ export default function UpgradeModal({
               </div>
             </div>
           )}
-
-          {/* Billing Region Selector */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider flex items-center gap-1.5">
-                <Globe className="w-3.5 h-3.5 text-[#6750A4]" />
-                Billing Country
-              </label>
-              <span className="text-[10px] text-[#49454F] font-semibold bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                {isIndia ? 'INR (₹)' : 'USD ($)'}
-              </span>
-            </div>
-
-            {/* Country Switcher */}
-            <div className="grid grid-cols-2 gap-2 bg-[#F3EDF7] p-1 rounded-2xl border border-slate-200/60" id="billing-country-selector">
-              <button
-                type="button"
-                onClick={() => handleCountryChange('IN')}
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all ${
-                  isIndia 
-                    ? 'bg-white text-[#21005D] shadow-sm border border-slate-200/80' 
-                    : 'text-[#49454F] hover:text-[#1D1B20]'
-                }`}
-                id="select-country-in-btn"
-              >
-                <div className="flex items-center gap-2">
-                  <span>🇮🇳</span>
-                  <span>India</span>
-                </div>
-                {isIndia && <Check className="w-3.5 h-3.5 text-[#6750A4]" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleCountryChange('US')}
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all ${
-                  !isIndia 
-                    ? 'bg-white text-[#21005D] shadow-sm border border-slate-200/80' 
-                    : 'text-[#49454F] hover:text-[#1D1B20]'
-                }`}
-                id="select-country-us-btn"
-              >
-                <div className="flex items-center gap-2">
-                  <span>🌎</span>
-                  <span>International</span>
-                </div>
-                {!isIndia && <Check className="w-3.5 h-3.5 text-[#6750A4]" />}
-              </button>
-            </div>
-          </div>
 
           {/* Plan Duration Cards */}
           <div className="space-y-2.5">
