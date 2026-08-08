@@ -43,10 +43,10 @@ export const COUNTRY_CONFIGS: Record<string, CountryConfig> = {
       {
         id: 'monthly',
         title: 'Monthly Plan',
-        price: 199,
+        price: 99,
         currency: 'INR',
         currencySymbol: '₹',
-        formattedPrice: '₹199',
+        formattedPrice: '₹99',
         billingText: 'Billed monthly',
       },
       {
@@ -58,8 +58,8 @@ export const COUNTRY_CONFIGS: Record<string, CountryConfig> = {
         formattedPrice: '₹999',
         billingText: 'Billed yearly',
         badge: 'BEST VALUE',
-        savingsText: 'SAVE 58%',
-        monthlyEquivalent: '₹83/mo',
+        savingsText: 'SAVE 16%',
+        monthlyEquivalent: '₹83.25/mo',
       },
     ],
   },
@@ -74,10 +74,10 @@ export const COUNTRY_CONFIGS: Record<string, CountryConfig> = {
       {
         id: 'monthly',
         title: 'Monthly Plan',
-        price: 4.99,
+        price: 1.99,
         currency: 'USD',
         currencySymbol: '$',
-        formattedPrice: '$4.99',
+        formattedPrice: '$1.99',
         billingText: 'Billed monthly',
       },
       {
@@ -89,8 +89,8 @@ export const COUNTRY_CONFIGS: Record<string, CountryConfig> = {
         formattedPrice: '$19.99',
         billingText: 'Billed yearly',
         badge: 'BEST VALUE',
-        savingsText: 'SAVE 67%',
-        monthlyEquivalent: '$1.66/mo',
+        savingsText: 'SAVE 16%',
+        monthlyEquivalent: '$1.67/mo',
       },
     ],
   },
@@ -122,7 +122,7 @@ export function getCountryConfig(countryCode?: string): CountryConfig {
   return COUNTRY_CONFIGS.INTERNATIONAL;
 }
 
-// Server-side country auto-detection API call with International fallback
+// Automatic server-side country detection call
 export async function detectUserCountry(): Promise<string> {
   try {
     const res = await fetch('/api/subscription/detect-country', { method: 'GET' });
@@ -141,7 +141,7 @@ export async function detectUserCountry(): Promise<string> {
   return 'US';
 }
 
-// No-op or safe local save
-export function saveBillingCountry(countryCode: string): void {
-  // Manual country saving disabled; country is automatically detected server-side.
+// Legacy function retained for backward compatibility (no-op)
+export function saveBillingCountry(_countryCode: string): void {
+  // Billing country selection is strictly automatic and non-overridable.
 }

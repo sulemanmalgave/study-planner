@@ -610,9 +610,10 @@ app.get('/api/state', (req, res) => {
         });
       }
 
-      // ALWAYS perform server-side country detection from request headers/IP info.
-      // NEVER trust any country value sent from the frontend for payment routing!
+      // Strictly enforce server-side geolocation detection from request headers/IP.
+      // Do NOT trust any country parameter supplied by the frontend.
       const selectedCountry = detectCountryFromRequest(req);
+
       const isIndia = selectedCountry === 'IN';
       const provider = isIndia ? 'razorpay' : 'paypal';
 
@@ -621,12 +622,12 @@ app.get('/api/state', (req, res) => {
 
       if (isIndia) {
         currency = 'INR';
-        // India pricing: Monthly ₹199, Quarterly ₹399, Yearly ₹999
-        amount = planType === 'monthly' ? 199 : planType === 'yearly' ? 999 : 399;
+        // India pricing: Monthly ₹99, Yearly ₹999
+        amount = planType === 'monthly' ? 99 : 999;
       } else {
         currency = 'USD';
-        // International pricing: Monthly $4.99, Quarterly $11.99, Yearly $19.99
-        amount = planType === 'monthly' ? 4.99 : planType === 'yearly' ? 19.99 : 11.99;
+        // International pricing: Monthly $1.99, Yearly $19.99
+        amount = planType === 'monthly' ? 1.99 : 19.99;
       }
 
       if (provider === 'razorpay') {

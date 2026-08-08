@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, Sparkles, ShieldCheck, Zap, CreditCard, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { X, Check, Sparkles, ShieldCheck, Zap, CreditCard, ArrowRight, Loader2, AlertCircle, Globe } from 'lucide-react';
 import { Subscription } from '../types';
 import { 
   getCountryConfig, 
@@ -335,6 +335,22 @@ export default function UpgradeModal({
               </div>
             </div>
           )}
+
+          {/* Billing Region Information (Non-interactive) */}
+          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1 text-xs" id="billing-region-info">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-bold text-[#1D1B20]">
+                <Globe className="w-4 h-4 text-[#6750A4]" />
+                <span>Billing Region:</span>
+              </div>
+              <span className="font-extrabold text-[#1D1B20] bg-white px-2.5 py-1 rounded-lg border border-slate-200/60 shadow-2xs">
+                {isIndia ? '🇮🇳 India (₹ INR)' : '🌎 International ($ USD)'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium">
+              Prices are automatically determined based on your location.
+            </p>
+          </div>
 
           {/* Plan Duration Cards */}
           <div className="space-y-2.5">
