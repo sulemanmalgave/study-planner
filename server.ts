@@ -276,11 +276,24 @@ app.get('/api/state', (req, res) => {
           message: 'You have reached the free plan limit of 5 courses. Upgrade to Premium for unlimited access.',
         });
       }
+      const rawName = (req.body.name || '').trim();
+      if (!rawName) {
+        return res.status(400).json({ error: 'Name is required' });
+      }
+      const normalizedNew = rawName.toLowerCase();
+      const isDuplicate = db.courses.some((c) => c.name.trim().toLowerCase() === normalizedNew);
+      if (isDuplicate) {
+        return res.status(400).json({
+          error: 'DUPLICATE_NAME',
+          message: `A subject with the name "${rawName}" already exists.`,
+        });
+      }
+
       const newCourse = {
         id: 'c_' + crypto.randomUUID().slice(0, 8),
-        name: req.body.name || 'Untitled Course',
+        name: rawName,
         color: req.body.color || '#3b82f6',
-        code: req.body.code || '',
+        code: (req.body.code || '').trim(),
       };
       db.courses.push(newCourse);
       writeDB(db);
@@ -295,6 +308,22 @@ app.get('/api/state', (req, res) => {
       const db = readDB();
       const index = db.courses.findIndex((c) => c.id === req.params.id);
       if (index === -1) return res.status(404).json({ error: 'Course not found' });
+
+      if (req.body.name) {
+        const rawName = req.body.name.trim();
+        const normalizedNew = rawName.toLowerCase();
+        const isDuplicate = db.courses.some(
+          (c) => c.id !== req.params.id && c.name.trim().toLowerCase() === normalizedNew
+        );
+        if (isDuplicate) {
+          return res.status(400).json({
+            error: 'DUPLICATE_NAME',
+            message: `A subject with the name "${rawName}" already exists.`,
+          });
+        }
+        req.body.name = rawName;
+      }
+
       db.courses[index] = { ...db.courses[index], ...req.body };
       writeDB(db);
       res.json(db.courses[index]);
@@ -306,10 +335,8 @@ app.get('/api/state', (req, res) => {
   app.delete('/api/courses/:id', (req, res) => {
     try {
       const db = readDB();
+      // Safe deletion: remove course from courses list but keep user assignments, timetable, exams & notes intact
       db.courses = db.courses.filter((c) => c.id !== req.params.id);
-      db.timetable = db.timetable.filter((t) => t.courseId !== req.params.id);
-      db.assignments = db.assignments.filter((a) => a.courseId !== req.params.id);
-      db.exams = db.exams.filter((e) => e.courseId !== req.params.id);
       writeDB(db);
       res.json({ success: true });
     } catch (error) {

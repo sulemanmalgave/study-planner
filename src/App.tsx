@@ -11,6 +11,7 @@ import {
 
 import Sidebar from './components/Sidebar';
 import DashboardView from './components/DashboardView';
+import SubjectsView from './components/SubjectsView';
 import CalendarView from './components/CalendarView';
 import TimetableView from './components/TimetableView';
 import AssignmentsView from './components/AssignmentsView';
@@ -675,6 +676,19 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'subjects' && (
+            <SubjectsView 
+              courses={courses}
+              assignments={assignments}
+              timetable={timetable}
+              exams={exams}
+              notes={notes}
+              onAddCourse={handleAddCourse}
+              onUpdateCourse={handleUpdateCourse}
+              onDeleteCourse={handleDeleteCourse}
+            />
+          )}
+
           {activeTab === 'calendar' && (
             <CalendarView 
               courses={courses}
@@ -689,6 +703,7 @@ export default function App() {
               courses={courses}
               timetable={timetable}
               isPremium={isPremium}
+              onAddCourse={handleAddCourse}
               onAddPeriod={handleAddTimetable}
               onUpdatePeriod={handleUpdateTimetable}
               onDeletePeriod={handleDeleteTimetable}
@@ -701,6 +716,7 @@ export default function App() {
               courses={courses}
               assignments={globalFilterAssignments()}
               isPremium={isPremium}
+              onAddCourse={handleAddCourse}
               onAddAssignment={handleAddAssignment}
               onUpdateAssignment={handleUpdateAssignment}
               onDeleteAssignment={handleDeleteAssignment}
@@ -713,6 +729,7 @@ export default function App() {
               courses={courses}
               exams={exams}
               isPremium={isPremium}
+              onAddCourse={handleAddCourse}
               onAddExam={handleAddExam}
               onUpdateExam={handleUpdateExam}
               onDeleteExam={handleDeleteExam}
@@ -732,6 +749,7 @@ export default function App() {
               courses={courses}
               notes={notes}
               isPremium={isPremium}
+              onAddCourse={handleAddCourse}
               onAddNote={handleAddNote}
               onUpdateNote={handleUpdateNote}
               onDeleteNote={handleDeleteNote}
@@ -803,6 +821,7 @@ export default function App() {
         onClose={() => setIsQuickAddOpen(false)}
         courses={courses}
         defaultType={quickAddDefaultType}
+        onAddCourse={handleAddCourse}
         onAddAssignment={handleAddAssignment}
         onAddTimetable={handleAddTimetable}
         onAddNote={handleAddNote}

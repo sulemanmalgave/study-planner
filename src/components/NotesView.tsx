@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { FileText, Plus, Trash2, Edit2, Search, BookOpen, Clock, Loader2, AlertCircle } from 'lucide-react';
 import { Course, Note } from '../types';
+import SubjectSelect from './SubjectSelect';
 
 interface NotesViewProps {
   courses: Course[];
   notes: Note[];
   isPremium: boolean;
+  onAddCourse: (course: Omit<Course, 'id'>) => Promise<{ success: boolean; error?: string }>;
   onAddNote: (note: Omit<Note, 'id' | 'updatedAt'>) => Promise<{ success: boolean; error?: string }>;
   onUpdateNote: (id: string, note: Partial<Note>) => Promise<void>;
   onDeleteNote: (id: string) => Promise<void>;
@@ -16,6 +18,7 @@ export default function NotesView({
   courses,
   notes,
   isPremium,
+  onAddCourse,
   onAddNote,
   onUpdateNote,
   onDeleteNote,
@@ -227,19 +230,14 @@ export default function NotesView({
                     className="w-full bg-white border border-[#E1E3E1] text-xs font-bold text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-[#49454F] uppercase">Class Category</label>
-                  <select
-                    value={courseId}
-                    onChange={(e) => setCourseId(e.target.value)}
-                    className="w-full bg-white border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
-                  >
-                    <option value="">No Course Tag</option>
-                    {courses.map(course => (
-                      <option key={course.id} value={course.id}>{course.name}</option>
-                    ))}
-                  </select>
-                </div>
+                <SubjectSelect
+                  courses={courses}
+                  value={courseId}
+                  onChange={setCourseId}
+                  onAddCourse={onAddCourse}
+                  label="Class Category"
+                  id="note-course-select"
+                />
               </div>
 
               <div className="flex-1 space-y-1">

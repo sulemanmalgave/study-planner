@@ -1,13 +1,14 @@
 import React from 'react';
 import { 
   LayoutDashboard, 
+  BookOpen,
   Calendar, 
   Clock, 
   FileText, 
   GraduationCap, 
   CalendarDays, 
   CheckSquare, 
-  BookOpen, 
+  BarChart3,
   Settings, 
   Sparkles 
 } from 'lucide-react';
@@ -25,13 +26,14 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'subjects', label: 'Subjects', icon: BookOpen },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'timetable', label: 'Timetable', icon: CalendarDays },
     { id: 'assignments', label: 'Assignments', icon: CheckSquare },
     { id: 'exams', label: 'Exams', icon: GraduationCap },
     { id: 'study-timer', label: 'Study Sessions', icon: Clock },
     { id: 'notes', label: 'Notes', icon: FileText },
-    { id: 'progress', label: 'Progress', icon: BookOpen },
+    { id: 'progress', label: 'Progress', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 

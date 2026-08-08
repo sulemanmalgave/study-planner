@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, CheckSquare, CalendarDays, FileText, GraduationCap, Loader2, AlertCircle } from 'lucide-react';
 import { Course, DayOfWeek, Assignment, TimetablePeriod, Note, Exam } from '../types';
+import SubjectSelect from './SubjectSelect';
 
 interface QuickAddModalProps {
   isOpen: boolean;
   onClose: () => void;
   courses: Course[];
   defaultType?: 'task' | 'class' | 'note' | 'exam';
+  onAddCourse: (course: Omit<Course, 'id'>) => Promise<{ success: boolean; error?: string }>;
   onAddAssignment: (assignment: Omit<Assignment, 'id'>) => Promise<{ success: boolean; error?: string }>;
   onAddTimetable: (period: Omit<TimetablePeriod, 'id'>) => Promise<{ success: boolean; error?: string }>;
   onAddNote: (note: Omit<Note, 'id' | 'updatedAt'>) => Promise<{ success: boolean; error?: string }>;
@@ -19,6 +21,7 @@ export default function QuickAddModal({
   onClose,
   courses,
   defaultType = 'task',
+  onAddCourse,
   onAddAssignment,
   onAddTimetable,
   onAddNote,
@@ -207,18 +210,15 @@ export default function QuickAddModal({
           </div>
 
           {/* Subject link */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase">Linked Subject</label>
-            <select
-              value={courseId}
-              onChange={(e) => setCourseId(e.target.value)}
-              className="w-full bg-[#1e293b]/50 border border-slate-800 text-xs text-white rounded-xl px-3 py-2.5 focus:border-blue-500 outline-none"
-            >
-              {courses.map(course => (
-                <option key={course.id} value={course.id}>{course.name}</option>
-              ))}
-            </select>
-          </div>
+          <SubjectSelect
+            courses={courses}
+            value={courseId}
+            onChange={setCourseId}
+            onAddCourse={onAddCourse}
+            dark={true}
+            label="Linked Subject"
+            id="quick-add-subject-select"
+          />
 
           {/* Type specific fields */}
           {activeType === 'task' && (

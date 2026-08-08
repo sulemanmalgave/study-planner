@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { CheckSquare, Plus, Trash2, Edit2, Check, Clock, AlertCircle, Loader2 } from 'lucide-react';
 import { Course, Assignment } from '../types';
+import SubjectSelect from './SubjectSelect';
 
 interface AssignmentsViewProps {
   courses: Course[];
   assignments: Assignment[];
   isPremium: boolean;
+  onAddCourse: (course: Omit<Course, 'id'>) => Promise<{ success: boolean; error?: string }>;
   onAddAssignment: (assignment: Omit<Assignment, 'id'>) => Promise<{ success: boolean; error?: string }>;
   onUpdateAssignment: (id: string, assignment: Partial<Assignment>) => Promise<void>;
   onDeleteAssignment: (id: string) => Promise<void>;
@@ -16,6 +18,7 @@ export default function AssignmentsView({
   courses,
   assignments,
   isPremium,
+  onAddCourse,
   onAddAssignment,
   onUpdateAssignment,
   onDeleteAssignment,
@@ -233,18 +236,14 @@ export default function AssignmentsView({
             </div>
 
             {/* Course Link */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#49454F] uppercase block">Course Subject</label>
-              <select
-                value={courseId}
-                onChange={(e) => setCourseId(e.target.value)}
-                className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
-              >
-                {courses.map(course => (
-                  <option key={course.id} value={course.id} className="text-slate-900 bg-white">{course.name}</option>
-                ))}
-              </select>
-            </div>
+            <SubjectSelect
+              courses={courses}
+              value={courseId}
+              onChange={setCourseId}
+              onAddCourse={onAddCourse}
+              label="Course Subject"
+              id="assignment-course-select"
+            />
 
             {/* Due Date */}
             <div className="space-y-1">

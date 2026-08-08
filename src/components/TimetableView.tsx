@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { CalendarDays, Plus, Trash2, Edit2, Clock, MapPin, Loader2, Sparkles, AlertCircle, Lock } from 'lucide-react';
 import { Course, TimetablePeriod, DayOfWeek } from '../types';
+import SubjectSelect from './SubjectSelect';
 
 interface TimetableViewProps {
   courses: Course[];
   timetable: TimetablePeriod[];
   isPremium: boolean;
+  onAddCourse: (course: Omit<Course, 'id'>) => Promise<{ success: boolean; error?: string }>;
   onAddPeriod: (period: Omit<TimetablePeriod, 'id'>) => Promise<{ success: boolean; error?: string }>;
   onUpdatePeriod: (id: string, period: Partial<TimetablePeriod>) => Promise<void>;
   onDeletePeriod: (id: string) => Promise<void>;
@@ -16,6 +18,7 @@ export default function TimetableView({
   courses,
   timetable,
   isPremium,
+  onAddCourse,
   onAddPeriod,
   onUpdatePeriod,
   onDeletePeriod,
@@ -151,18 +154,15 @@ export default function TimetableView({
             </div>
 
             {/* Course Link */}
-            <div className="space-y-1 md:col-span-1">
-              <label className="text-[10px] font-bold text-[#49454F] uppercase">Related Course</label>
-              <select
-                value={courseId}
-                onChange={(e) => setCourseId(e.target.value)}
-                className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-2 py-2 focus:ring-1 focus:ring-[#6750A4] outline-none"
-              >
-                {courses.map(course => (
-                  <option key={course.id} value={course.id} className="text-slate-900 bg-white">{course.name}</option>
-                ))}
-              </select>
-            </div>
+            <SubjectSelect
+              courses={courses}
+              value={courseId}
+              onChange={setCourseId}
+              onAddCourse={onAddCourse}
+              label="Related Course"
+              className="md:col-span-1"
+              id="timetable-course-select"
+            />
 
             {/* Day */}
             <div className="space-y-1 md:col-span-1">
