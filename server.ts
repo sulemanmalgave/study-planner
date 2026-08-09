@@ -151,6 +151,18 @@ const pendingOrders = new Map<string, {
 
 const verifiedPayments = new Set<string>();
 
+interface PairingSessionData {
+  token: string;
+  createdAt: number;
+  expiresAt: number;
+  status: 'pending' | 'paired' | 'cancelled' | 'expired';
+  deviceName?: string;
+  pairedAt?: string;
+  deviceToken?: string;
+}
+
+const pairingSessions = new Map<string, PairingSessionData>();
+
 // Helper function to evaluate subscription status and expiration
 function isSubscriptionActive(sub: any): boolean {
   if (!sub) return false;
@@ -587,6 +599,221 @@ app.get('/api/state', (req, res) => {
       res.json(newSession);
     } catch (error) {
       res.status(500).json({ error: 'Failed to save study session' });
+    }
+  });
+
+  // 8b. Mobile Companion Pairing & Cross-Device Sync Endpoints
+  app.post('/api/mobile-companion/create-pairing-session', (req, res) => {
+    try {
+      const db = readDB();
+      if (!isSubscriptionActive(db.profile.subscription)) {
+        return res.status(403).json({
+          error: 'PREMIUM_REQUIRED',
+          message: 'Mobile Companion is a Premium feature. Please upgrade to Premium to connect your mobile device.',
+        });
+      }
+
+      const token = 'pair_' + crypto.randomUUID();
+      const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes expiration
+
+      pairingSessions.set(token, {
+        token,
+        createdAt: Date.now(),
+        expiresAt,
+        status: 'pending',
+      });
+
+      res.json({
+        success: true,
+        token,
+        expiresAt,
+        expiresInSeconds: 300,
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create mobile pairing session' });
+    }
+  });
+
+  app.get('/api/mobile-companion/session-status', (req, res) => {
+    try {
+      const token = (req.query.token as string) || '';
+      if (!token || !pairingSessions.has(token)) {
+        return res.json({ status: 'expired', message: 'Session expired or not found' });
+      }
+
+      const session = pairingSessions.get(token)!;
+      if (Date.now() > session.expiresAt && session.status === 'pending') {
+        session.status = 'expired';
+      }
+
+      res.json({
+        status: session.status,
+        deviceName: session.deviceName || null,
+        pairedAt: session.pairedAt || null,
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to check session status' });
+    }
+  });
+
+  app.post('/api/mobile-companion/cancel-pairing-session', (req, res) => {
+    try {
+      const { token } = req.body || {};
+      if (token && pairingSessions.has(token)) {
+        const session = pairingSessions.get(token)!;
+        session.status = 'cancelled';
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to cancel pairing session' });
+    }
+  });
+
+  app.get('/api/mobile-companion/verify-pairing-token', (req, res) => {
+    try {
+      const token = (req.query.token as string) || '';
+      const db = readDB();
+
+      if (!isSubscriptionActive(db.profile.subscription)) {
+        return res.json({
+          valid: false,
+          reason: 'PREMIUM_EXPIRED',
+          message: 'Mobile Companion requires an active Premium subscription.',
+        });
+      }
+
+      if (!token || !pairingSessions.has(token)) {
+        return res.json({
+          valid: false,
+          reason: 'INVALID_OR_EXPIRED',
+          message: 'This connection code is no longer valid or has expired. Please generate a new code on your desktop.',
+        });
+      }
+
+      const session = pairingSessions.get(token)!;
+      if (Date.now() > session.expiresAt || session.status !== 'pending') {
+        return res.json({
+          valid: false,
+          reason: session.status === 'paired' ? 'ALREADY_USED' : 'INVALID_OR_EXPIRED',
+          message: session.status === 'paired'
+            ? 'This connection code has already been used.'
+            : 'This connection code is no longer valid or has expired. Please generate a new code on your desktop.',
+        });
+      }
+
+      res.json({
+        valid: true,
+        expiresAt: session.expiresAt,
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to verify pairing token' });
+    }
+  });
+
+  app.post('/api/mobile-companion/confirm-pairing', (req, res) => {
+    try {
+      const { token, deviceName } = req.body || {};
+      const db = readDB();
+
+      if (!isSubscriptionActive(db.profile.subscription)) {
+        return res.status(403).json({
+          error: 'PREMIUM_REQUIRED',
+          message: 'Mobile Companion requires an active Premium subscription.',
+        });
+      }
+
+      if (!token || !pairingSessions.has(token)) {
+        return res.status(400).json({
+          error: 'INVALID_TOKEN',
+          message: 'This connection code is no longer valid or has expired.',
+        });
+      }
+
+      const session = pairingSessions.get(token)!;
+      if (Date.now() > session.expiresAt || session.status !== 'pending') {
+        return res.status(400).json({
+          error: 'TOKEN_EXPIRED_OR_USED',
+          message: 'This connection code is no longer valid or has expired.',
+        });
+      }
+
+      const deviceToken = 'dev_tok_' + crypto.randomUUID();
+      const nowIso = new Date().toISOString();
+
+      session.status = 'paired';
+      session.deviceName = deviceName || 'Mobile Phone';
+      session.pairedAt = nowIso;
+      session.deviceToken = deviceToken;
+
+      db.profile.mobileDevice = {
+        id: 'dev_' + crypto.randomUUID().slice(0, 8),
+        name: deviceName || 'Mobile Phone',
+        pairedAt: nowIso,
+        lastSyncedAt: nowIso,
+        status: 'connected',
+        deviceToken,
+      };
+
+      writeDB(db);
+
+      res.json({
+        success: true,
+        deviceToken,
+        profile: db.profile,
+        state: db,
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to confirm mobile pairing' });
+    }
+  });
+
+  app.post('/api/mobile-companion/disconnect-device', (req, res) => {
+    try {
+      const db = readDB();
+      db.profile.mobileDevice = null;
+      writeDB(db);
+      res.json({ success: true, message: 'Mobile device disconnected successfully.' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to disconnect mobile device' });
+    }
+  });
+
+  app.post('/api/mobile-companion/sync', (req, res) => {
+    try {
+      const db = readDB();
+
+      if (!isSubscriptionActive(db.profile.subscription)) {
+        return res.status(403).json({
+          error: 'PREMIUM_REQUIRED',
+          message: 'Mobile Companion is a Premium feature. Renew Premium to continue syncing.',
+        });
+      }
+
+      // If client supplied updated items, perform a safe merge
+      const { clientState } = req.body || {};
+      if (clientState && typeof clientState === 'object') {
+        if (Array.isArray(clientState.courses)) db.courses = clientState.courses;
+        if (Array.isArray(clientState.timetable)) db.timetable = clientState.timetable;
+        if (Array.isArray(clientState.assignments)) db.assignments = clientState.assignments;
+        if (Array.isArray(clientState.exams)) db.exams = clientState.exams;
+        if (Array.isArray(clientState.notes)) db.notes = clientState.notes;
+        if (Array.isArray(clientState.studySessions)) db.studySessions = clientState.studySessions;
+      }
+
+      if (db.profile.mobileDevice) {
+        db.profile.mobileDevice.lastSyncedAt = new Date().toISOString();
+        db.profile.mobileDevice.status = 'connected';
+      }
+
+      writeDB(db);
+
+      res.json({
+        success: true,
+        syncedAt: new Date().toISOString(),
+        state: db,
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to sync device data' });
     }
   });
 

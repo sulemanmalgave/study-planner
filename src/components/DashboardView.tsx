@@ -79,85 +79,85 @@ export default function DashboardView({
     <div className="space-y-4 text-[#1D1B20]" id="dashboard-view-container">
       
       {/* 4 Bento Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4" id="dashboard-stats-bento">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4" id="dashboard-stats-bento">
         {/* Pending Tasks */}
-        <div className="p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-3.5 hover:shadow-sm transition-all cursor-pointer" onClick={() => onNavigateToTab('assignments')}>
-          <div className="p-2.5 bg-amber-50 text-amber-700 border border-amber-200/60 rounded-xl">
-            <CheckSquare className="w-4.5 h-4.5" />
+        <div className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 hover:shadow-sm transition-all cursor-pointer min-w-0" onClick={() => onNavigateToTab('assignments')}>
+          <div className="p-2 sm:p-2.5 bg-amber-50 text-amber-700 border border-amber-200/60 rounded-xl shrink-0">
+            <CheckSquare className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-[#49454F] tracking-wider uppercase block">Pending Tasks</span>
-            <span className="text-base font-black text-[#1D1B20] mt-0.5 block">{pendingTasks} Tasks</span>
+          <div className="min-w-0">
+            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Pending Tasks</span>
+            <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{pendingTasks} Tasks</span>
           </div>
         </div>
 
         {/* Upcoming Exams */}
-        <div className="p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-3.5 hover:shadow-sm transition-all cursor-pointer" onClick={() => onNavigateToTab('exams')}>
-          <div className="p-2.5 bg-purple-50 text-purple-700 border border-purple-200/60 rounded-xl">
-            <GraduationCap className="w-4.5 h-4.5" />
+        <div className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 hover:shadow-sm transition-all cursor-pointer min-w-0" onClick={() => onNavigateToTab('exams')}>
+          <div className="p-2 sm:p-2.5 bg-purple-50 text-purple-700 border border-purple-200/60 rounded-xl shrink-0">
+            <GraduationCap className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-[#49454F] tracking-wider uppercase block">Upcoming Exams</span>
-            <span className="text-base font-black text-[#1D1B20] mt-0.5 block">{upcomingExamsCount} Exams</span>
+          <div className="min-w-0">
+            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Upcoming Exams</span>
+            <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{upcomingExamsCount} Exams</span>
           </div>
         </div>
 
         {/* Study Hours */}
-        <div className="p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-3.5 hover:shadow-sm transition-all cursor-pointer" onClick={() => onNavigateToTab('study-timer')}>
-          <div className="p-2.5 bg-teal-50 text-teal-700 border border-teal-200/60 rounded-xl">
-            <Clock className="w-4.5 h-4.5" />
+        <div className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 hover:shadow-sm transition-all cursor-pointer min-w-0" onClick={() => onNavigateToTab('study-timer')}>
+          <div className="p-2 sm:p-2.5 bg-teal-50 text-teal-700 border border-teal-200/60 rounded-xl shrink-0">
+            <Clock className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-[#49454F] tracking-wider uppercase block">Study Hours</span>
-            <span className="text-base font-black text-[#1D1B20] mt-0.5 block">{studyHours} hrs</span>
+          <div className="min-w-0">
+            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Study Hours</span>
+            <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{studyHours} hrs</span>
           </div>
         </div>
 
         {/* Completion Rate */}
-        <div className="p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-3.5 hover:shadow-sm transition-all cursor-pointer" onClick={() => onNavigateToTab('assignments')}>
-          <div className="p-2.5 bg-blue-50 text-blue-700 border border-blue-200/60 rounded-xl">
-            <Star className="w-4.5 h-4.5" />
+        <div className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 hover:shadow-sm transition-all cursor-pointer min-w-0" onClick={() => onNavigateToTab('assignments')}>
+          <div className="p-2 sm:p-2.5 bg-blue-50 text-blue-700 border border-blue-200/60 rounded-xl shrink-0">
+            <Star className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-[#49454F] tracking-wider uppercase block">Completion Rate</span>
-            <span className="text-base font-black text-[#1D1B20] mt-0.5 block">{completionRate}%</span>
+          <div className="min-w-0">
+            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Completion Rate</span>
+            <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{completionRate}%</span>
           </div>
         </div>
       </div>
 
       {/* Quick Controls Section (Exactly matches layout & color) */}
-      <div className="p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4" id="dashboard-quick-controls">
-        <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
+      <div className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-4" id="dashboard-quick-controls">
+        <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2 w-full sm:w-auto">
           <span className="text-amber-500">⚡</span> Quick Student Workspace Controls
         </h3>
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
           <button
             onClick={() => onQuickAddClick('task')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5 text-[#6750A4]" />
-            <span>Add Task</span>
+            <Plus className="w-3.5 h-3.5 text-[#6750A4] shrink-0" />
+            <span className="truncate">Add Task</span>
           </button>
           <button
             onClick={() => onQuickAddClick('class')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Schedule Class</span>
+            <Plus className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span className="truncate">Schedule Class</span>
           </button>
           <button
             onClick={() => onQuickAddClick('note')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer"
           >
-            <FileText className="w-3.5 h-3.5 text-purple-600" />
-            <span>Write Note</span>
+            <FileText className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <span className="truncate">Write Note</span>
           </button>
           <button
             onClick={onFocusNowClick}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full transition-colors shadow-sm cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full transition-colors shadow-sm cursor-pointer"
           >
-            <Timer className="w-3.5 h-3.5 text-white" />
-            <span>Focus Now</span>
+            <Timer className="w-3.5 h-3.5 text-white shrink-0" />
+            <span className="truncate">Focus Now</span>
           </button>
         </div>
       </div>
@@ -166,7 +166,7 @@ export default function DashboardView({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5" id="dashboard-bottom-grid">
         
         {/* Column 1: Today's Tasks */}
-        <div className="lg:col-span-3 flex flex-col bg-white border border-[#E1E3E1] rounded-2xl p-4" id="today-tasks-container">
+        <div className="lg:col-span-3 flex flex-col bg-white border border-[#E1E3E1] rounded-2xl p-3.5 sm:p-4" id="today-tasks-container">
           <div className="flex items-center justify-between mb-3 border-b border-[#E1E3E1] pb-2">
             <h4 className="text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
               <CheckSquare className="w-4 h-4 text-[#6750A4]" /> TODAY'S TASKS
@@ -211,7 +211,7 @@ export default function DashboardView({
         </div>
 
         {/* Column 2: Weekly Overview */}
-        <div className="lg:col-span-6 bg-white border border-[#E1E3E1] rounded-2xl p-4" id="weekly-overview-container">
+        <div className="lg:col-span-6 bg-white border border-[#E1E3E1] rounded-2xl p-3.5 sm:p-4" id="weekly-overview-container">
           <div className="flex items-center justify-between mb-3 border-b border-[#E1E3E1] pb-2">
             <h4 className="text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
               <CalendarDays className="w-4 h-4 text-emerald-600" /> WEEKLY OVERVIEW
@@ -263,7 +263,7 @@ export default function DashboardView({
         </div>
 
         {/* Column 3: Exams Countdown */}
-        <div className="lg:col-span-3 flex flex-col bg-white border border-[#E1E3E1] rounded-2xl p-4" id="exams-countdown-container">
+        <div className="lg:col-span-3 flex flex-col bg-white border border-[#E1E3E1] rounded-2xl p-3.5 sm:p-4" id="exams-countdown-container">
           <div className="flex items-center justify-between mb-3 border-b border-[#E1E3E1] pb-2">
             <h4 className="text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
               <Trophy className="w-4 h-4 text-amber-600" /> EXAMS COUNTDOWN

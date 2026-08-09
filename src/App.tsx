@@ -6,7 +6,12 @@ import {
   Sparkles, 
   AlertCircle, 
   Loader2, 
-  RefreshCw 
+  RefreshCw,
+  Menu,
+  LayoutDashboard,
+  Calendar,
+  CheckSquare,
+  Clock
 } from 'lucide-react';
 
 import Sidebar from './components/Sidebar';
@@ -21,6 +26,9 @@ import StudyTimerView from './components/StudyTimerView';
 import ProgressView from './components/ProgressView';
 import SettingsView from './components/SettingsView';
 import PrivacyPolicyView from './components/PrivacyPolicyView';
+import MobileCompanionView from './components/MobileCompanionView';
+import MobilePairingPage from './components/MobilePairingPage';
+import MobileHomeView from './components/MobileHomeView';
 
 import UpgradeModal from './components/UpgradeModal';
 import QuickAddModal from './components/QuickAddModal';
@@ -44,10 +52,28 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>(() => {
-    if (typeof window !== 'undefined' && window.location.pathname === '/privacy') {
-      return 'privacy';
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token') || urlParams.get('pairToken');
+      if (token || window.location.pathname.includes('/mobile-pair')) {
+        return 'mobile-pair';
+      }
+      if (window.location.pathname === '/privacy') {
+        return 'privacy';
+      }
     }
     return 'dashboard';
+  });
+
+  const [pairingToken, setPairingToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token') || urlParams.get('pairToken');
+      if (token || window.location.pathname.includes('/mobile-pair')) {
+        return token || '';
+      }
+    }
+    return null;
   });
   const [dbState, setDbState] = useState<DatabaseSchema | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -85,7 +111,8 @@ export default function App() {
   // Global search query
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
 
-  // Modals state
+  // Modals & Navigation state
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [isUpgradeOpen, setIsUpgradeOpen] = useState<boolean>(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [quickAddDefaultType, setQuickAddDefaultType] = useState<'task' | 'class' | 'note' | 'exam'>('task');
@@ -602,6 +629,30 @@ export default function App() {
     });
   };
 
+  // Mobile pairing route handler
+  if (pairingToken !== null || activeTab === 'mobile-pair') {
+    return (
+      <MobilePairingPage
+        token={pairingToken || ''}
+        onPairingComplete={() => {
+          setPairingToken(null);
+          if (window.location.search || window.location.pathname !== '/') {
+            window.history.pushState({}, '', '/');
+          }
+          fetchState();
+          setActiveTab('mobile-companion');
+        }}
+        onCancel={() => {
+          setPairingToken(null);
+          if (window.location.search || window.location.pathname !== '/') {
+            window.history.pushState({}, '', '/');
+          }
+          setActiveTab('dashboard');
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen bg-[#F7F9FC] overflow-hidden text-[#1D1B20]" id="study-planner-workspace">
       
@@ -611,47 +662,83 @@ export default function App() {
         setActiveTab={setActiveTab} 
         profile={profile} 
         onUpgradeClick={() => setIsUpgradeOpen(true)} 
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
       />
 
       {/* 2. Main Workspace (Right Panel) */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden" id="workspace-main-panel">
         
         {/* Top Header Bar */}
-        <header className="h-16 border-b border-[#E1E3E1] bg-white px-6 flex items-center justify-between shrink-0 z-10" id="main-header">
-          {/* Global search input */}
-          <div className="relative w-full max-w-sm" id="header-global-search">
-            <Search className="absolute left-3.5 top-3 w-4 h-4 text-[#49454F]" />
-            <input
-              type="text"
-              value={globalSearchQuery}
-              onChange={(e) => setGlobalSearchQuery(e.target.value)}
-              placeholder="Search notes, assignments..."
-              className="w-full bg-[#F3EDF7] border-none rounded-full pl-10 pr-4 py-2 text-xs text-[#1D1B20] placeholder:text-[#49454F] focus:ring-2 focus:ring-[#6750A4] focus:outline-none"
-            />
+        <header className="h-16 border-b border-[#E1E3E1] bg-white px-3 sm:px-6 flex items-center justify-between shrink-0 z-10 gap-2 min-w-0" id="main-header">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {/* Mobile/Tablet Menu Hamburger Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="p-2 lg:hidden text-[#49454F] hover:text-[#1D1B20] hover:bg-[#F3EDF7] rounded-xl transition-colors cursor-pointer shrink-0 min-w-[40px] min-h-[40px] flex items-center justify-center"
+              aria-label="Open navigation menu"
+              id="mobile-menu-hamburger-btn"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {/* Mobile Brand Logo & Title on smaller screens */}
+            <div className="flex items-center gap-2 lg:hidden min-w-0">
+              <img 
+                src={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/logo.png`}
+                alt="Study Planner Logo" 
+                className="w-7 h-7 rounded-lg object-cover shadow-xs border border-slate-200 shrink-0" 
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+                  if (!target.dataset.triedFallback) {
+                    target.dataset.triedFallback = '1';
+                    target.src = `${base}/logo.jpg`;
+                  } else if (target.dataset.triedFallback === '1') {
+                    target.dataset.triedFallback = '2';
+                    target.src = `${base}/icon-512.png`;
+                  }
+                }}
+              />
+              <span className="text-xs font-black tracking-tight text-[#1D1B20] truncate">Study Planner</span>
+            </div>
+
+            {/* Global search input */}
+            <div className="relative hidden md:block w-full max-w-xs lg:max-w-sm" id="header-global-search">
+              <Search className="absolute left-3.5 top-3 w-4 h-4 text-[#49454F]" />
+              <input
+                type="text"
+                value={globalSearchQuery}
+                onChange={(e) => setGlobalSearchQuery(e.target.value)}
+                placeholder="Search notes, assignments..."
+                className="w-full bg-[#F3EDF7] border-none rounded-full pl-10 pr-4 py-2 text-xs text-[#1D1B20] placeholder:text-[#49454F] focus:ring-2 focus:ring-[#6750A4] focus:outline-none"
+              />
+            </div>
           </div>
 
           {/* Right Header Quick Controls */}
-          <div className="flex items-center gap-3" id="header-quick-actions">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0" id="header-quick-actions">
             <button
               onClick={() => handleQuickAddClick('task')}
-              className="flex items-center gap-1 px-3 py-1.5 bg-[#EADDFF] hover:bg-[#D0BCFF] text-[10px] font-black text-[#21005D] rounded-full border border-[#E1E3E1] transition-colors"
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 bg-[#EADDFF] hover:bg-[#D0BCFF] text-[10px] font-black text-[#21005D] rounded-full border border-[#E1E3E1] transition-colors cursor-pointer"
               id="header-quick-add-btn"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>QUICK ADD</span>
+              <span className="hidden xs:inline">QUICK ADD</span>
             </button>
 
             {/* Notification bell alert triggers */}
-            <button className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] rounded-full text-[#49454F] border border-[#E1E3E1] transition-colors relative" title="Notifications">
+            <button className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] rounded-full text-[#49454F] border border-[#E1E3E1] transition-colors relative cursor-pointer" title="Notifications">
               <Bell className="w-4 h-4" />
               <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full" />
             </button>
 
             {/* Account Status Badge */}
-            <div className="flex items-center gap-2 border-l border-[#E1E3E1] pl-3">
+            <div className="flex items-center gap-2 border-l border-[#E1E3E1] pl-2 sm:pl-3">
               <div 
                 onClick={() => setActiveTab('settings')}
-                className="w-8 h-8 rounded-full bg-[#6750A4] hover:bg-[#503E84] flex items-center justify-center text-xs font-bold text-white shadow cursor-pointer transition-all"
+                className="w-8 h-8 rounded-full bg-[#6750A4] hover:bg-[#503E84] flex items-center justify-center text-xs font-bold text-white shadow cursor-pointer transition-all shrink-0"
               >
                 {profile.initials}
               </div>
@@ -660,7 +747,7 @@ export default function App() {
         </header>
 
         {/* Dynamic Workspace Container */}
-        <main className="flex-1 overflow-y-auto p-6 bg-[#F7F9FC]" id="workspace-viewports">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 pb-20 md:pb-6 bg-[#F7F9FC] min-w-0" id="workspace-viewports">
           
           {/* Active Tab Dispatcher */}
           {activeTab === 'dashboard' && (
@@ -769,6 +856,15 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'mobile-companion' && (
+            <MobileCompanionView 
+              profile={profile}
+              onUpgradeClick={() => setIsUpgradeOpen(true)}
+              dbState={dbState}
+              onRefreshState={fetchState}
+            />
+          )}
+
           {activeTab === 'settings' && (
             <SettingsView 
               profile={profile}
@@ -835,6 +931,76 @@ export default function App() {
         onUpgradeClick={() => setIsUpgradeOpen(true)}
         limitType={limitType}
       />
+
+      {/* 4. Mobile Bottom Navigation Bar (< 768px) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#E1E3E1] z-40 px-1 py-1 flex items-center justify-around shadow-lg" id="mobile-bottom-nav">
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer min-w-[52px] ${
+            activeTab === 'dashboard' ? 'text-[#21005D] font-bold' : 'text-[#49454F] hover:text-[#1D1B20]'
+          }`}
+          id="bottom-nav-home"
+        >
+          <div className={`p-1 rounded-full ${activeTab === 'dashboard' ? 'bg-[#EADDFF]' : ''}`}>
+            <LayoutDashboard className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] tracking-tight font-medium mt-0.5">Home</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('calendar')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer min-w-[52px] ${
+            activeTab === 'calendar' ? 'text-[#21005D] font-bold' : 'text-[#49454F] hover:text-[#1D1B20]'
+          }`}
+          id="bottom-nav-calendar"
+        >
+          <div className={`p-1 rounded-full ${activeTab === 'calendar' ? 'bg-[#EADDFF]' : ''}`}>
+            <Calendar className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] tracking-tight font-medium mt-0.5">Calendar</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('assignments')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer min-w-[52px] ${
+            activeTab === 'assignments' ? 'text-[#21005D] font-bold' : 'text-[#49454F] hover:text-[#1D1B20]'
+          }`}
+          id="bottom-nav-tasks"
+        >
+          <div className={`p-1 rounded-full ${activeTab === 'assignments' ? 'bg-[#EADDFF]' : ''}`}>
+            <CheckSquare className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] tracking-tight font-medium mt-0.5">Tasks</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('study-timer')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer min-w-[52px] ${
+            activeTab === 'study-timer' ? 'text-[#21005D] font-bold' : 'text-[#49454F] hover:text-[#1D1B20]'
+          }`}
+          id="bottom-nav-timer"
+        >
+          <div className={`p-1 rounded-full ${activeTab === 'study-timer' ? 'bg-[#EADDFF]' : ''}`}>
+            <Clock className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] tracking-tight font-medium mt-0.5">Timer</span>
+        </button>
+
+        <button
+          onClick={() => setIsMobileMenuOpen(true)}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer min-w-[52px] ${
+            ['subjects', 'timetable', 'exams', 'notes', 'progress', 'mobile-companion', 'settings'].includes(activeTab)
+              ? 'text-[#21005D] font-bold'
+              : 'text-[#49454F] hover:text-[#1D1B20]'
+          }`}
+          id="bottom-nav-more"
+        >
+          <div className={`p-1 rounded-full ${['subjects', 'timetable', 'exams', 'notes', 'progress', 'mobile-companion', 'settings'].includes(activeTab) ? 'bg-[#EADDFF]' : ''}`}>
+            <Menu className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] tracking-tight font-medium mt-0.5">More</span>
+        </button>
+      </nav>
 
     </div>
   );

@@ -11,11 +11,21 @@ export interface Subscription {
   paymentId?: string | null;
 }
 
+export interface MobileDevice {
+  id: string;
+  name: string;
+  pairedAt: string;
+  lastSyncedAt: string;
+  status: 'connected' | 'disconnected';
+  deviceToken: string;
+}
+
 export interface UserProfile {
   name: string;
   email: string;
   initials: string;
   subscription: Subscription;
+  mobileDevice?: MobileDevice | null;
 }
 
 export interface Course {

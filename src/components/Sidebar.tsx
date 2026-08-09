@@ -10,7 +10,9 @@ import {
   CheckSquare, 
   BarChart3,
   Settings, 
-  Sparkles 
+  Sparkles,
+  Smartphone,
+  X
 } from 'lucide-react';
 import { UserProfile } from '../types';
 
@@ -19,9 +21,11 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   profile: UserProfile;
   onUpgradeClick: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
-export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeClick }: SidebarProps) {
+export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeClick, isOpen, onClose }: SidebarProps) {
   const isPremium = profile.subscription.subscriptionStatus === 'premium' || profile.subscription.plan === 'premium';
 
   const menuItems = [
@@ -34,55 +38,82 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
     { id: 'study-timer', label: 'Study Sessions', icon: Clock },
     { id: 'notes', label: 'Notes', icon: FileText },
     { id: 'progress', label: 'Progress', icon: BarChart3 },
+    { id: 'mobile-companion', label: 'Mobile Companion', icon: Smartphone, isPremiumFeature: true },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
-  return (
-    <aside className="w-64 bg-white border-r border-[#E1E3E1] flex flex-col justify-between h-screen shrink-0 text-[#49454F] p-4 md:p-3 lg:p-4" id="main-sidebar">
+  const handleItemClick = (id: string) => {
+    setActiveTab(id);
+    if (onClose) {
+      onClose();
+    }
+  };
+
+  const renderContent = (isDrawer: boolean = false) => (
+    <>
       <div>
         {/* Brand Header */}
-        <div className="flex items-center gap-2.5 px-3 mb-4 mt-1" id="sidebar-header">
-          <img 
-            src={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/logo.png`}
-            alt="Study Planner Logo" 
-            className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/60 shrink-0" 
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              const target = e.currentTarget;
-              const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-              if (!target.dataset.triedFallback) {
-                target.dataset.triedFallback = '1';
-                target.src = `${base}/logo.jpg`;
-              } else if (target.dataset.triedFallback === '1') {
-                target.dataset.triedFallback = '2';
-                target.src = `${base}/icon-512.png`;
-              }
-            }}
-          />
-          <div className="min-w-0">
-            <h1 className="text-sm font-extrabold tracking-tight text-[#1D1B20] leading-none truncate">Study Planner</h1>
-            <span className="text-[8px] font-mono font-bold tracking-wider text-[#6750A4] uppercase mt-0.5 block truncate">Timetable, Timer &amp; Notes</span>
+        <div className="flex items-center justify-between px-3 mb-4 mt-1" id={isDrawer ? "drawer-header" : "sidebar-header"}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img 
+              src={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/logo.png`}
+              alt="Study Planner Logo" 
+              className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/60 shrink-0" 
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                const target = e.currentTarget;
+                const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+                if (!target.dataset.triedFallback) {
+                  target.dataset.triedFallback = '1';
+                  target.src = `${base}/logo.jpg`;
+                } else if (target.dataset.triedFallback === '1') {
+                  target.dataset.triedFallback = '2';
+                  target.src = `${base}/icon-512.png`;
+                }
+              }}
+            />
+            <div className="min-w-0">
+              <h1 className="text-sm font-extrabold tracking-tight text-[#1D1B20] leading-none truncate">Study Planner</h1>
+              <span className="text-[8px] font-mono font-bold tracking-wider text-[#6750A4] uppercase mt-0.5 block truncate">Timetable, Timer &amp; Notes</span>
+            </div>
           </div>
+          {isDrawer && (
+            <button
+              onClick={onClose}
+              className="p-1.5 text-[#49454F] hover:text-[#1D1B20] hover:bg-[#F3EDF7] rounded-full transition-colors cursor-pointer shrink-0 ml-1"
+              aria-label="Close navigation drawer"
+              id="close-drawer-btn"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Navigation Links */}
-        <nav className="space-y-0.5" id="sidebar-nav">
+        <nav className="space-y-0.5" id={isDrawer ? "drawer-nav" : "sidebar-nav"}>
           {menuItems.map((item) => {
             const IconComponent = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                onClick={() => handleItemClick(item.id)}
+                className={`w-full flex items-center justify-between px-3.5 py-2 lg:py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all cursor-pointer ${
                   isActive
                     ? 'bg-[#EADDFF] text-[#21005D] font-bold shadow-sm'
                     : 'text-[#49454F] hover:bg-[#F3EDF7] hover:text-[#1D1B20]'
                 }`}
-                id={`nav-link-${item.id}`}
+                id={`${isDrawer ? 'drawer' : 'nav'}-link-${item.id}`}
               >
-                <IconComponent className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#21005D]' : 'text-[#49454F]'}`} />
-                <span>{item.label}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <IconComponent className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#21005D]' : 'text-[#49454F]'}`} />
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {item.isPremiumFeature && !isPremium && (
+                  <span className="px-1.5 py-0.5 text-[8px] font-black bg-[#6750A4] text-white rounded uppercase tracking-wider shrink-0">
+                    PRO
+                  </span>
+                )}
               </button>
             );
           })}
@@ -90,15 +121,15 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
       </div>
 
       {/* Bottom section with Premium Card and Profile */}
-      <div className="pt-3 border-t border-[#E1E3E1] flex flex-col gap-3" id="sidebar-bottom-section">
+      <div className="pt-3 border-t border-[#E1E3E1] flex flex-col gap-3 mt-4" id={isDrawer ? "drawer-bottom-section" : "sidebar-bottom-section"}>
         {/* Premium Upgrade or Premium Active Card */}
         {isPremium ? (
-          <div className="p-3 bg-emerald-50 border border-emerald-200/60 rounded-2xl flex items-center justify-center gap-2 text-emerald-800" id="sidebar-premium-active-card">
+          <div className="p-3 bg-emerald-50 border border-emerald-200/60 rounded-2xl flex items-center justify-center gap-2 text-emerald-800" id={isDrawer ? "drawer-premium-active-card" : "sidebar-premium-active-card"}>
             <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
             <span className="text-xs font-bold">Premium Active ✓</span>
           </div>
         ) : (
-          <div className="p-3 bg-[#EADDFF]/30 border border-[#D0BCFF]/40 rounded-2xl" id="sidebar-premium-card">
+          <div className="p-3 bg-[#EADDFF]/30 border border-[#D0BCFF]/40 rounded-2xl" id={isDrawer ? "drawer-premium-card" : "sidebar-premium-card"}>
             <div className="flex items-center gap-1.5 text-xs font-bold text-[#21005D]">
               <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
               <span>Study Planner Premium</span>
@@ -118,9 +149,12 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
               </li>
             </ul>
             <button
-              onClick={onUpgradeClick}
+              onClick={() => {
+                onUpgradeClick();
+                if (onClose) onClose();
+              }}
               className="w-full mt-3 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-[10px] rounded-full uppercase tracking-wider transition-colors shadow-sm cursor-pointer"
-              id="sidebar-upgrade-button"
+              id={isDrawer ? "drawer-upgrade-button" : "sidebar-upgrade-button"}
             >
               Upgrade
             </button>
@@ -128,7 +162,7 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
         )}
 
         {/* Compact Profile Detail Card */}
-        <div className="flex items-center gap-2.5 px-2 py-1" id="sidebar-profile-card">
+        <div className="flex items-center gap-2.5 px-2 py-1" id={isDrawer ? "drawer-profile-card" : "sidebar-profile-card"}>
           <div className="w-8 h-8 rounded-full bg-[#6750A4] flex items-center justify-center text-xs font-bold text-white shadow-sm shrink-0">
             {profile.initials}
           </div>
@@ -136,11 +170,11 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
             <h4 className="text-xs font-bold text-[#1D1B20] truncate leading-tight">{profile.name}</h4>
             <div className="mt-1">
               {isPremium ? (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-black bg-[#EADDFF] text-[#21005D] border border-[#D0BCFF] uppercase tracking-wider" id="sidebar-badge-premium">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-black bg-[#EADDFF] text-[#21005D] border border-[#D0BCFF] uppercase tracking-wider" id={isDrawer ? "drawer-badge-premium" : "sidebar-badge-premium"}>
                   Premium
                 </span>
               ) : (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-[#79747E]/10 text-[#49454F] border border-[#79747E]/20 uppercase tracking-wider" id="sidebar-badge-free">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-[#79747E]/10 text-[#49454F] border border-[#79747E]/20 uppercase tracking-wider" id={isDrawer ? "drawer-badge-free" : "sidebar-badge-free"}>
                   Free Plan
                 </span>
               )}
@@ -148,6 +182,35 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
           </div>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* 1. Desktop Sidebar (always visible on lg: screens and above) */}
+      <aside className="hidden lg:flex w-64 bg-white border-r border-[#E1E3E1] flex-col justify-between h-screen shrink-0 text-[#49454F] p-4 lg:p-4" id="main-sidebar">
+        {renderContent(false)}
+      </aside>
+
+      {/* 2. Mobile/Tablet Overlay Drawer (rendered when isOpen is true on screens < 1024px) */}
+      {isOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex" id="mobile-sidebar-container">
+          {/* Backdrop overlay */}
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-300" 
+            onClick={onClose} 
+            id="mobile-drawer-backdrop"
+          />
+
+          {/* Slide-out drawer panel */}
+          <aside 
+            className="relative w-72 max-w-[85vw] bg-white h-full flex flex-col justify-between p-4 overflow-y-auto shadow-2xl z-10 text-[#49454F]" 
+            id="mobile-sidebar-drawer"
+          >
+            {renderContent(true)}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }
