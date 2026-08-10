@@ -93,14 +93,6 @@ export interface StudySession {
   createdAt?: string;
 }
 
-export interface DistractionApp {
-  id: string;
-  name: string;
-  category: string;
-  iconName?: string;
-  selected: boolean;
-}
-
 export interface AudioLecture {
   id: string;
   userId?: string;

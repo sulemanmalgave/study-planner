@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Clock,
   Play,
@@ -9,24 +9,18 @@ import {
   Volume2,
   Timer,
   Loader2,
-  BellOff,
-  SlidersHorizontal,
+  Target,
+  Zap,
   Plus,
   BookOpen,
   Sparkles,
   AlertCircle,
   X,
   Check,
-  Smartphone,
-  Info,
   Calendar,
-  Flame,
-  ShieldCheck,
-  ShieldAlert,
-  Monitor
+  Flame
 } from 'lucide-react';
-import { Course, StudySession, DistractionApp } from '../types';
-import { windowsNotificationService } from '../lib/windowsNotificationService';
+import { Course, StudySession } from '../types';
 
 interface StudyTimerViewProps {
   courses: Course[];
@@ -35,19 +29,6 @@ interface StudyTimerViewProps {
   onAddCourse?: (course: Omit<Course, 'id'>) => Promise<any>;
   onNavigateToTab?: (tab: string) => void;
 }
-
-const DEFAULT_DISTRACTION_APPS: DistractionApp[] = [
-  { id: 'insta', name: 'Instagram', category: 'Social Media', selected: false },
-  { id: 'fb', name: 'Facebook', category: 'Social Media', selected: false },
-  { id: 'snap', name: 'Snapchat', category: 'Social Media', selected: false },
-  { id: 'tiktok', name: 'TikTok', category: 'Social Media', selected: false },
-  { id: 'x', name: 'X / Twitter', category: 'Social Media', selected: false },
-  { id: 'yt', name: 'YouTube', category: 'Media', selected: false },
-  { id: 'wa', name: 'WhatsApp', category: 'Messaging', selected: false },
-  { id: 'reddit', name: 'Reddit', category: 'Social Media', selected: false },
-  { id: 'discord', name: 'Discord', category: 'Messaging', selected: false },
-  { id: 'netflix', name: 'Netflix', category: 'Media', selected: false },
-];
 
 export default function StudyTimerView({
   courses,
@@ -72,39 +53,19 @@ export default function StudyTimerView({
   const [actualFocusedSeconds, setActualFocusedSeconds] = useState(0);
   const [pausedDurationSeconds, setPausedDurationSeconds] = useState(0);
 
-  // Focus Mode & Notification Suppression States
+  // Focus Mode State
   const [isFocusModeEnabled, setIsFocusModeEnabled] = useState(true);
-  const [distractionApps, setDistractionApps] = useState<DistractionApp[]>(() => {
+
+  // Clean legacy notification storage keys if present
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem('study_planner_distraction_apps_v2');
-      if (saved) {
-        return JSON.parse(saved);
-      }
+      localStorage.removeItem('study_planner_distraction_apps_v2');
       localStorage.removeItem('study_planner_distraction_apps');
+      localStorage.removeItem('study_planner_win_notif_status');
     } catch (e) {
-      console.warn('Failed to load distraction apps from localStorage:', e);
+      // Ignore
     }
-    return DEFAULT_DISTRACTION_APPS;
-  });
-
-  const handleSaveDistractionPreferences = () => {
-    try {
-      localStorage.setItem('study_planner_distraction_apps_v2', JSON.stringify(distractionApps));
-    } catch (e) {
-      console.warn('Failed to save distraction apps to localStorage:', e);
-    }
-    setIsAppConfigOpen(false);
-
-    if (isRunning && isFocusModeEnabled) {
-      const selectedApps = distractionApps.filter((a) => a.selected).map((a) => a.name);
-      windowsNotificationService.startFocusSuppression(selectedApps);
-    }
-  };
-  const [isAppConfigOpen, setIsAppConfigOpen] = useState(false);
-  const [isWindowsNoticeOpen, setIsWindowsNoticeOpen] = useState(false);
-  const [winPermissionState, setWinPermissionState] = useState<
-    'allowed' | 'denied' | 'unsupported' | 'unknown' | 'granted' | 'prompt'
-  >('prompt');
+  }, []);
 
   // Modals
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
@@ -120,29 +81,6 @@ export default function StudyTimerView({
   const [isLogging, setIsLogging] = useState(false);
 
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Single Source of Truth: Check Windows Notification Permission State
-  const checkWinPermission = useCallback(async () => {
-    const status = await windowsNotificationService.checkNotificationAccess();
-    setWinPermissionState(status);
-    return status;
-  }, []);
-
-  useEffect(() => {
-    checkWinPermission();
-
-    const handleFocusOrVisibility = () => {
-      checkWinPermission();
-    };
-
-    window.addEventListener('focus', handleFocusOrVisibility);
-    document.addEventListener('visibilitychange', handleFocusOrVisibility);
-
-    return () => {
-      window.removeEventListener('focus', handleFocusOrVisibility);
-      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
-    };
-  }, [checkWinPermission]);
 
   // Set default selected subject
   useEffect(() => {
@@ -252,29 +190,18 @@ export default function StudyTimerView({
 
     setIsRunning(true);
     setIsPaused(false);
-
-    if (isFocusModeEnabled) {
-      const selectedApps = distractionApps.filter((a) => a.selected).map((a) => a.name);
-      windowsNotificationService.startFocusSuppression(selectedApps);
-    }
   };
 
   // Pause Timer Handler
   const handlePauseFocus = () => {
     setIsRunning(false);
     setIsPaused(true);
-    windowsNotificationService.stopFocusSuppression();
   };
 
   // Resume Timer Handler
   const handleResumeFocus = () => {
     setIsRunning(true);
     setIsPaused(false);
-
-    if (isFocusModeEnabled) {
-      const selectedApps = distractionApps.filter((a) => a.selected).map((a) => a.name);
-      windowsNotificationService.startFocusSuppression(selectedApps);
-    }
   };
 
   // Reset Timer Handler
@@ -284,7 +211,6 @@ export default function StudyTimerView({
     setStartTime(null);
     setActualFocusedSeconds(0);
     setPausedDurationSeconds(0);
-    windowsNotificationService.stopFocusSuppression();
 
     if (preset === '25') {
       setDuration(1500);
@@ -304,7 +230,6 @@ export default function StudyTimerView({
     if (isRunning || isPaused || actualFocusedSeconds > 0) {
       setIsRunning(false);
       setIsPaused(false);
-      windowsNotificationService.stopFocusSuppression();
       setIsInterruptedModalOpen(true);
     } else {
       handleResetTimer();
@@ -315,7 +240,6 @@ export default function StudyTimerView({
   const handleTimerComplete = async () => {
     setIsRunning(false);
     setIsPaused(false);
-    windowsNotificationService.stopFocusSuppression();
     playAlertBuzzer();
 
     const selectedCourse = courses.find((c) => c.id === selectedCourseId);
@@ -710,11 +634,11 @@ export default function StudyTimerView({
 
         {/* RIGHT COLUMN: FOCUS MODE & NOTIFICATIONS & SESSION HISTORY */}
         <div className="lg:col-span-4 space-y-6">
-          {/* FOCUS MODE / DISTRACTION NOTIFICATIONS CARD */}
-          <div className="bg-white border border-[#E1E3E1] rounded-3xl p-5 space-y-4 shadow-xs" id="focus-mode-card">
+          {/* FOCUS MODE CARD */}
+          <div className="bg-white border border-[#E1E3E1] rounded-3xl p-5 space-y-3 shadow-xs" id="focus-mode-card">
             <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
               <div className="flex items-center gap-2">
-                <BellOff className="w-5 h-5 text-[#6750A4]" />
+                <Target className="w-5 h-5 text-[#6750A4]" />
                 <h4 className="text-sm font-black text-[#1D1B20] tracking-tight">
                   Focus Mode
                 </h4>
@@ -737,70 +661,16 @@ export default function StudyTimerView({
             </div>
 
             <p className="text-xs text-[#49454F] font-medium leading-relaxed">
-              Silence distracting notifications while studying.
+              Stay focused and track your study session.
             </p>
 
-            {/* WINDOWS PERMISSION STATUS INDICATOR */}
-            <div className="p-3 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-2 bg-[#F3EDF7]/60 border-[#E1E3E1]">
-              <div className="flex items-center gap-2">
-                {winPermissionState === 'allowed' || winPermissionState === 'granted' ? (
-                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                ) : winPermissionState === 'unsupported' ? (
-                  <Info className="w-4 h-4 text-slate-500 shrink-0" />
-                ) : (
-                  <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
-                )}
-                <span
-                  className={
-                    winPermissionState === 'allowed' || winPermissionState === 'granted'
-                      ? 'text-emerald-800 font-extrabold'
-                      : winPermissionState === 'unsupported'
-                      ? 'text-slate-700 font-bold'
-                      : 'text-amber-900 font-bold'
-                  }
-                >
-                  {winPermissionState === 'allowed' || winPermissionState === 'granted'
-                    ? 'Windows notification access enabled'
-                    : winPermissionState === 'unsupported'
-                    ? 'Windows notification control is available only in the packaged Windows version of Study Planner.'
-                    : '⚠ Notification access required'}
-                </span>
-              </div>
-
-              {winPermissionState !== 'allowed' &&
-                winPermissionState !== 'granted' &&
-                winPermissionState !== 'unsupported' && (
-                  <button
-                    onClick={() => {
-                      checkWinPermission();
-                      setIsWindowsNoticeOpen(true);
-                    }}
-                    className="px-2.5 py-1 bg-[#6750A4] hover:bg-[#503E84] text-white text-[11px] font-extrabold rounded-lg shrink-0 cursor-pointer transition-colors shadow-2xs"
-                    id="enable-win-access-btn"
-                  >
-                    Enable Access
-                  </button>
-                )}
-            </div>
-
-            <div className="flex items-center justify-between pt-1">
-              <button
-                onClick={() => setIsAppConfigOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] text-xs font-extrabold rounded-xl transition-colors cursor-pointer"
-                id="configure-distraction-apps-btn"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-[#6750A4]" />
-                <span>Configure Apps ({distractionApps.filter((a) => a.selected).length})</span>
-              </button>
-
-              <button
-                onClick={() => setIsWindowsNoticeOpen(true)}
-                className="text-xs font-bold text-[#6750A4] hover:underline flex items-center gap-1 cursor-pointer"
-                id="windows-permission-notice-btn"
-              >
-                <Monitor className="w-3.5 h-3.5" />
-                <span>Windows Notification Access</span>
-              </button>
+            <div className="p-3 rounded-2xl bg-[#F3EDF7]/60 border border-[#E1E3E1] flex items-center gap-2 text-xs font-semibold text-[#1D1B20]">
+              <Zap className="w-4 h-4 text-[#6750A4] shrink-0" />
+              <span>
+                {isFocusModeEnabled
+                  ? 'Focus tracking active. Start timer when ready.'
+                  : 'Focus Mode paused.'}
+              </span>
             </div>
           </div>
 
@@ -967,127 +837,6 @@ export default function StudyTimerView({
                 className="w-full py-2 bg-transparent text-rose-600 hover:text-rose-700 font-bold text-xs cursor-pointer"
               >
                 Discard
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* DISTRACTION APPS CONFIG MODAL */}
-      {isAppConfigOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" id="distraction-apps-modal">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E1E3E1]">
-            <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
-              <h3 className="text-base font-black text-[#1D1B20] flex items-center gap-2">
-                <SlidersHorizontal className="w-5 h-5 text-[#6750A4]" />
-                <span>Select Distracting Apps</span>
-              </h3>
-              <button
-                onClick={() => setIsAppConfigOpen(false)}
-                className="p-1 text-[#79747E] hover:text-[#1D1B20] rounded-full cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-[#49454F] font-medium">
-              Check the apps you want suppressed during Focus Mode sessions.
-            </p>
-
-            <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
-              {distractionApps.map((app) => (
-                <label
-                  key={app.id}
-                  className="flex items-center justify-between p-3 bg-[#F3EDF7]/40 border border-[#E1E3E1] rounded-2xl cursor-pointer hover:bg-[#F3EDF7] transition-colors"
-                >
-                  <div>
-                    <span className="text-xs font-extrabold text-[#1D1B20] block">
-                      {app.name}
-                    </span>
-                    <span className="text-[10px] text-[#79747E]">{app.category}</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={app.selected}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setDistractionApps((prev) =>
-                        prev.map((a) => (a.id === app.id ? { ...a, selected: checked } : a))
-                      );
-                    }}
-                    className="w-4 h-4 accent-[#6750A4] rounded cursor-pointer"
-                  />
-                </label>
-              ))}
-            </div>
-
-            <div className="flex justify-end border-t border-[#E1E3E1] pt-3">
-              <button
-                onClick={handleSaveDistractionPreferences}
-                className="px-5 py-2 bg-[#6750A4] text-white text-xs font-extrabold rounded-full cursor-pointer shadow-xs"
-              >
-                Save Preferences
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* WINDOWS NOTIFICATION PERMISSION EXPLANATION MODAL */}
-      {isWindowsNoticeOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" id="windows-notice-modal">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E1E3E1]">
-            <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
-              <h3 className="text-base font-black text-[#1D1B20] flex items-center gap-2">
-                <Monitor className="w-5 h-5 text-[#6750A4]" />
-                <span>Windows Notification Access</span>
-              </h3>
-              <button
-                onClick={() => setIsWindowsNoticeOpen(false)}
-                className="p-1 text-[#79747E] hover:text-[#1D1B20] rounded-full cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-[#49454F] font-medium leading-relaxed">
-              <p className="text-sm font-semibold text-[#1D1B20]">
-                Study Planner needs notification access to manage notifications during Focus Mode.
-              </p>
-              {winPermissionState === 'unsupported' && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 font-semibold text-[11px] space-y-1">
-                  <div>Windows notification control is available only in the packaged Windows version of Study Planner.</div>
-                  <div className="text-[10px] text-amber-800 font-normal">
-                    When installed as a packaged Windows app (MSIX/App SDK with UserNotificationListener capability), Windows notification suppression triggers automatically.
-                  </div>
-                </div>
-              )}
-              <div className="p-3 bg-[#F3EDF7] border border-[#D0BCFF] rounded-2xl text-[#21005D] font-semibold text-[11px]">
-                Note: Study timer countdowns, subject tracking, and session stats remain fully functional regardless of notification permissions.
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-[#E1E3E1]">
-              {winPermissionState !== 'unsupported' && (
-                <button
-                  onClick={async () => {
-                    await windowsNotificationService.requestNotificationAccess();
-                    const latestStatus = await checkWinPermission();
-                    if (latestStatus === 'allowed' || latestStatus === 'granted') {
-                      setIsWindowsNoticeOpen(false);
-                    }
-                  }}
-                  className="flex-1 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-extrabold rounded-full cursor-pointer shadow-xs transition-colors"
-                  id="allow-notification-access-btn"
-                >
-                  Allow Notification Access
-                </button>
-              )}
-              <button
-                onClick={() => setIsWindowsNoticeOpen(false)}
-                className="py-2.5 px-5 bg-slate-100 hover:bg-slate-200 text-[#1D1B20] text-xs font-extrabold rounded-full cursor-pointer transition-colors"
-              >
-                {winPermissionState === 'unsupported' ? 'Close' : 'Not Now'}
               </button>
             </div>
           </div>
