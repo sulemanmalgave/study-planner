@@ -919,8 +919,11 @@ export default function App() {
 
           {activeTab === 'study-timer' && (
             <StudyTimerView 
+              courses={courses}
               studySessions={studySessions}
               onLogSession={handleLogStudySession}
+              onAddCourse={handleAddCourse}
+              onNavigateToTab={(tab) => setActiveTab(tab)}
             />
           )}
 

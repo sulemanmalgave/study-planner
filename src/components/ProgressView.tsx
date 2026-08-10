@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Star, Clock, CheckSquare, GraduationCap, ChevronRight, TrendingUp } from 'lucide-react';
+import { BookOpen, Star, Clock, CheckSquare, GraduationCap, Flame, Target, Award, Sparkles } from 'lucide-react';
 import { Course, TimetablePeriod, Assignment, Exam, StudySession } from '../types';
 
 interface ProgressViewProps {
@@ -12,8 +12,15 @@ interface ProgressViewProps {
   onTriggerUpgrade: () => void;
 }
 
-export default function ProgressView({ courses, timetable, assignments, exams, studySessions, isPremium, onTriggerUpgrade }: ProgressViewProps) {
-  
+export default function ProgressView({
+  courses,
+  timetable,
+  assignments,
+  exams,
+  studySessions,
+  isPremium,
+  onTriggerUpgrade
+}: ProgressViewProps) {
   // Cutoff calculation for last 7 days
   const getCutoffDateStr = () => {
     const d = new Date();
@@ -24,38 +31,125 @@ export default function ProgressView({ courses, timetable, assignments, exams, s
   const cutoffDateStr = getCutoffDateStr();
 
   // Filter lists based on premium plan limits (last 7 days only for free plan)
-  const displaySessions = isPremium 
-    ? studySessions 
-    : studySessions.filter(s => s.date >= cutoffDateStr);
+  const displaySessions = isPremium
+    ? studySessions
+    : studySessions.filter((s) => s.date >= cutoffDateStr);
 
   const displayAssignments = isPremium
     ? assignments
-    : assignments.filter(a => a.dueDate >= cutoffDateStr);
+    : assignments.filter((a) => a.dueDate >= cutoffDateStr);
 
   const displayExams = isPremium
     ? exams
-    : exams.filter(e => {
+    : exams.filter((e) => {
         const examDateStr = e.date.split('T')[0];
         return examDateStr >= cutoffDateStr;
       });
 
   // 1. Calculations
-  const pendingTasks = displayAssignments.filter(a => a.status === 'pending').length;
-  const completedTasks = displayAssignments.filter(a => a.status === 'completed').length;
+  const pendingTasks = displayAssignments.filter((a) => a.status === 'pending').length;
+  const completedTasks = displayAssignments.filter((a) => a.status === 'completed').length;
   const totalTasks = displayAssignments.length;
   const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-  const totalStudyMins = displaySessions.filter(s => s.type !== 'break').reduce((acc, curr) => acc + curr.durationMinutes, 0);
+  const totalStudyMins = displaySessions
+    .filter((s) => s.type !== 'break')
+    .reduce((acc, curr) => {
+      if (curr.actualFocusedDurationSeconds) {
+        return acc + Math.round(curr.actualFocusedDurationSeconds / 60);
+      }
+      return acc + (curr.durationMinutes || 0);
+    }, 0);
+
   const studyHrs = (totalStudyMins / 60).toFixed(1);
 
-  const upcomingExams = displayExams.filter(e => e.status === 'upcoming').length;
-  const completedExams = displayExams.filter(e => e.status === 'completed').length;
+  const upcomingExams = displayExams.filter((e) => e.status === 'upcoming').length;
+  const completedExams = displayExams.filter((e) => e.status === 'completed').length;
 
-  // 2. Calculate distribution of tasks per course for workload visualization
-  const courseDistribution = courses.map(course => {
-    const courseAssignments = displayAssignments.filter(a => a.courseId === course.id);
+  // TODAY'S STUDY STATS
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todaySessions = displaySessions.filter((s) => s.date === todayStr);
+  const todayFocusedMins = todaySessions.reduce((acc, curr) => {
+    if (curr.actualFocusedDurationSeconds) {
+      return acc + Math.round(curr.actualFocusedDurationSeconds / 60);
+    }
+    return acc + (curr.durationMinutes || 0);
+  }, 0);
+
+  const todayHoursStr =
+    todayFocusedMins >= 60
+      ? `${Math.floor(todayFocusedMins / 60)}h ${todayFocusedMins % 60}m`
+      : `${todayFocusedMins}m`;
+
+  // WEEK'S STUDY STATS
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const weekCutoff = sevenDaysAgo.toISOString().split('T')[0];
+  const weekSessions = displaySessions.filter((s) => s.date >= weekCutoff);
+
+  // SUBJECT-WISE STUDY STATS
+  const subjectStatsMap = courses.map((course) => {
+    // Match sessions for this course
+    const courseSessions = displaySessions.filter((s) => {
+      if (s.status === 'cancelled') return false; // Do not count cancelled sessions
+      if (s.courseId) return s.courseId === course.id;
+      if (s.subjectName) return s.subjectName.toLowerCase() === course.name.toLowerCase();
+      return false;
+    });
+
+    const completedSessions = courseSessions.filter((s) => s.status !== 'interrupted' && s.completed !== false);
+
+    const totalMins = courseSessions.reduce((acc, curr) => {
+      if (curr.actualFocusedDurationSeconds) {
+        return acc + Math.round(curr.actualFocusedDurationSeconds / 60);
+      }
+      return acc + (curr.durationMinutes || 0);
+    }, 0);
+
+    const todayMins = courseSessions
+      .filter((s) => s.date === todayStr)
+      .reduce((acc, curr) => {
+        if (curr.actualFocusedDurationSeconds) {
+          return acc + Math.round(curr.actualFocusedDurationSeconds / 60);
+        }
+        return acc + (curr.durationMinutes || 0);
+      }, 0);
+
+    const weekMins = courseSessions
+      .filter((s) => s.date >= weekCutoff)
+      .reduce((acc, curr) => {
+        if (curr.actualFocusedDurationSeconds) {
+          return acc + Math.round(curr.actualFocusedDurationSeconds / 60);
+        }
+        return acc + (curr.durationMinutes || 0);
+      }, 0);
+
+    const sessionCount = completedSessions.length;
+    const avgMins = sessionCount > 0 ? Math.round(totalMins / sessionCount) : 0;
+
+    const formattedTotal =
+      totalMins >= 60
+        ? `${Math.floor(totalMins / 60)}h ${totalMins % 60}m`
+        : `${totalMins}m`;
+
+    return {
+      courseId: course.id,
+      courseName: course.name,
+      color: course.color,
+      totalMins,
+      formattedTotal,
+      sessionCount,
+      avgMins,
+      todayMins,
+      weekMins,
+    };
+  });
+
+  // Calculate distribution of tasks per course
+  const courseDistribution = courses.map((course) => {
+    const courseAssignments = displayAssignments.filter((a) => a.courseId === course.id);
     const total = courseAssignments.length;
-    const completed = courseAssignments.filter(a => a.status === 'completed').length;
+    const completed = courseAssignments.filter((a) => a.status === 'completed').length;
     const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     return {
@@ -63,58 +157,55 @@ export default function ProgressView({ courses, timetable, assignments, exams, s
       color: course.color,
       total,
       completed,
-      rate
+      rate,
     };
   });
 
-  // 3. Weekly hours distribution (Timetable workload per day)
-  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const dayWorkload = daysOfWeek.map(day => {
-    const periods = timetable.filter(t => t.day === day);
-    // Suppose each period is roughly 1.5 hours on average, or we can compute actual duration
-    let totalMins = 0;
-    periods.forEach(p => {
-      try {
-        const [sh, sm] = p.startTime.split(':').map(Number);
-        const [eh, em] = p.endTime.split(':').map(Number);
-        const diff = (eh * 60 + em) - (sh * 60 + sm);
-        totalMins += diff > 0 ? diff : 60; // fallback to 60 mins if times are corrupted
-      } catch (e) {
-        totalMins += 60;
-      }
-    });
+  // Daily & Weekly Goal
+  const dailyGoalMins = 180; // 3 hours
+  const dailyGoalPercent = Math.min(100, Math.round((todayFocusedMins / dailyGoalMins) * 100));
 
-    return {
-      day,
-      hours: (totalMins / 60).toFixed(1),
-      count: periods.length
-    };
-  });
+  const weeklyGoalMins = 900; // 15 hours
+  const weekFocusedMins = weekSessions.reduce((acc, curr) => {
+    if (curr.actualFocusedDurationSeconds) {
+      return acc + Math.round(curr.actualFocusedDurationSeconds / 60);
+    }
+    return acc + (curr.durationMinutes || 0);
+  }, 0);
+  const weeklyGoalPercent = Math.min(100, Math.round((weekFocusedMins / weeklyGoalMins) * 100));
 
   return (
-    <div className="space-y-6" id="progress-view-root">
-      
+    <div className="space-y-6 text-[#1D1B20]" id="progress-view-root">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-[#131d31] border border-slate-800/80 rounded-2xl">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-[#131d31] border border-slate-800/80 rounded-3xl">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-xl">
+          <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-2xl">
             <BookOpen className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-white tracking-wide uppercase">Performance & Progress</h2>
-            <p className="text-[10px] font-mono text-slate-400 mt-1 uppercase">Analyze study milestones & academic pacing</p>
+            <h2 className="text-sm font-bold text-white tracking-wide uppercase">
+              Performance &amp; Focus Progress
+            </h2>
+            <p className="text-[10px] font-mono text-slate-400 mt-1 uppercase">
+              Analyze study milestones, focus sessions &amp; academic pacing
+            </p>
           </div>
         </div>
       </div>
 
       {/* History Limit Warning Banner */}
       {!isPremium && (
-        <div className="p-4 bg-amber-500/10 border border-amber-500/20 text-amber-200 rounded-2xl flex items-center justify-between gap-4" id="progress-history-limit-banner">
+        <div
+          className="p-4 bg-amber-500/10 border border-amber-500/20 text-amber-200 rounded-3xl flex items-center justify-between gap-4"
+          id="progress-history-limit-banner"
+        >
           <div className="flex items-center gap-2.5">
             <Star className="w-4 h-4 text-amber-400 shrink-0" />
             <div className="text-left">
               <p className="text-xs font-bold text-amber-200">Free Plan History Limit</p>
-              <p className="text-[10px] text-amber-300/80 mt-0.5">You are currently viewing academic statistics from only the last 7 days. Upgrade to Study Planner Premium to access lifetime history analytics.</p>
+              <p className="text-[10px] text-amber-300/80 mt-0.5">
+                Viewing statistics from the last 7 days. Upgrade to Premium for lifetime history analytics.
+              </p>
             </div>
           </div>
           <button
@@ -126,33 +217,178 @@ export default function ProgressView({ courses, timetable, assignments, exams, s
         </div>
       )}
 
-      {/* Grid: Overview Bento Stats */}
+      {/* TODAY'S STUDY & GOALS CARD */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4" id="todays-study-progress-card">
+        {/* Today's Study Card */}
+        <div className="p-5 bg-white border border-[#E1E3E1] rounded-3xl space-y-4 shadow-xs">
+          <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
+            <span className="text-xs font-black text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
+              <Flame className="w-4 h-4 text-[#6750A4]" />
+              <span>Today's Study</span>
+            </span>
+            <span className="text-xs font-extrabold text-[#6750A4]">
+              {todaySessions.length} {todaySessions.length === 1 ? 'Session' : 'Sessions'}
+            </span>
+          </div>
+
+          <div className="flex items-baseline justify-between">
+            <div>
+              <div className="text-xs font-bold text-[#79747E] uppercase">Total Focused Time</div>
+              <div className="text-3xl font-black text-[#1D1B20] tracking-tight">{todayHoursStr}</div>
+            </div>
+
+            <div className="text-right">
+              <div className="text-xs font-bold text-[#79747E] uppercase">Daily Goal</div>
+              <div className="text-base font-extrabold text-[#6750A4]">
+                {Math.floor(todayFocusedMins / 60)}h / 3h ({dailyGoalPercent}%)
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full bg-[#F3EDF7] h-3 rounded-full overflow-hidden border border-[#E1E3E1]">
+            <div
+              className="bg-[#6750A4] h-full rounded-full transition-all duration-500"
+              style={{ width: `${dailyGoalPercent}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Weekly Goal Card */}
+        <div className="p-5 bg-white border border-[#E1E3E1] rounded-3xl space-y-4 shadow-xs">
+          <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
+            <span className="text-xs font-black text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
+              <Target className="w-4 h-4 text-emerald-600" />
+              <span>Weekly Goal Progress</span>
+            </span>
+            <span className="text-xs font-extrabold text-emerald-700">
+              {weeklyGoalPercent}%
+            </span>
+          </div>
+
+          <div className="flex items-baseline justify-between">
+            <div>
+              <div className="text-xs font-bold text-[#79747E] uppercase">This Week Focused</div>
+              <div className="text-3xl font-black text-[#1D1B20] tracking-tight">
+                {Math.floor(weekFocusedMins / 60)}h {weekFocusedMins % 60}m
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="text-xs font-bold text-[#79747E] uppercase">Weekly Target</div>
+              <div className="text-base font-extrabold text-emerald-700">15 Hours</div>
+            </div>
+          </div>
+
+          <div className="w-full bg-[#F3EDF7] h-3 rounded-full overflow-hidden border border-[#E1E3E1]">
+            <div
+              className="bg-emerald-600 h-full rounded-full transition-all duration-500"
+              style={{ width: `${weeklyGoalPercent}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* SUBJECT PROGRESS TRACKING */}
+      <div className="p-6 bg-white border border-[#E1E3E1] rounded-3xl space-y-5 shadow-xs" id="subject-progress-section">
+        <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
+          <h3 className="text-base font-black text-[#1D1B20] flex items-center gap-2">
+            <Award className="w-5 h-5 text-[#6750A4]" />
+            <span>Subject Progress &amp; Statistics</span>
+          </h3>
+          <span className="text-xs font-extrabold text-[#79747E]">
+            {courses.length} Subjects
+          </span>
+        </div>
+
+        {subjectStatsMap.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="subject-stats-grid">
+            {subjectStatsMap.map((subj) => (
+              <div
+                key={subj.courseId}
+                className="p-4 bg-[#F3EDF7]/40 border border-[#E1E3E1] rounded-2xl space-y-3 hover:bg-[#F3EDF7] transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: subj.color }}
+                    />
+                    <h4 className="text-sm font-black text-[#1D1B20] truncate">
+                      {subj.courseName}
+                    </h4>
+                  </div>
+                  <span className="text-xs font-black text-[#6750A4] bg-white px-2.5 py-1 rounded-lg border border-[#E1E3E1]">
+                    {subj.formattedTotal}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-[#E1E3E1]/60">
+                  <div>
+                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">Sessions</span>
+                    <span className="font-extrabold text-[#1D1B20]">{subj.sessionCount} sessions</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">Avg Duration</span>
+                    <span className="font-extrabold text-[#1D1B20]">{subj.avgMins} mins</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">Today</span>
+                    <span className="font-extrabold text-[#1D1B20]">{subj.todayMins} mins</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">This Week</span>
+                    <span className="font-extrabold text-[#1D1B20]">
+                      {subj.weekMins >= 60 ? `${(subj.weekMins / 60).toFixed(1)}h` : `${subj.weekMins}m`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-xs text-[#79747E] font-medium">
+            No subjects added yet. Add subjects in the Study Timer or Settings to track focus statistics!
+          </div>
+        )}
+      </div>
+
+      {/* OTHER PERFORMANCE METRICS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4" id="progress-stats-bento">
         {/* Metric 1: Assignment Completion */}
-        <div className="p-5 bg-[#131d31] border border-slate-800/80 rounded-2xl space-y-4">
+        <div className="p-5 bg-[#131d31] border border-slate-800/80 rounded-3xl space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Assignment Completion</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Assignment Completion
+            </span>
             <CheckSquare className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-black text-white">{taskCompletionRate}%</span>
-            <span className="text-[10px] font-semibold text-slate-400">{completedTasks}/{totalTasks} Completed</span>
+            <span className="text-[10px] font-semibold text-slate-400">
+              {completedTasks}/{totalTasks} Completed
+            </span>
           </div>
-          {/* Progress bar */}
           <div className="w-full bg-slate-850 h-2 rounded-full overflow-hidden">
-            <div className="bg-emerald-500 h-full rounded-full transition-all" style={{ width: `${taskCompletionRate}%` }} />
+            <div
+              className="bg-emerald-500 h-full rounded-full transition-all"
+              style={{ width: `${taskCompletionRate}%` }}
+            />
           </div>
         </div>
 
-        {/* Metric 2: Revision Study Hours */}
-        <div className="p-5 bg-[#131d31] border border-slate-800/80 rounded-2xl space-y-4">
+        {/* Metric 2: Revision Focus Hours */}
+        <div className="p-5 bg-[#131d31] border border-slate-800/80 rounded-3xl space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Revision Focus Hours</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Total Revision Focus
+            </span>
             <Clock className="w-4 h-4 text-blue-400" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-black text-white">{studyHrs} hrs</span>
-            <span className="text-[10px] font-semibold text-slate-400">{displaySessions.length} Focus Sessions</span>
+            <span className="text-[10px] font-semibold text-slate-400">
+              {displaySessions.length} Focus Sessions
+            </span>
           </div>
           <div className="text-[10px] text-slate-400 leading-relaxed font-medium">
             Accumulated revision blocks tracked server-side inside your Pomodoro database.
@@ -160,99 +396,26 @@ export default function ProgressView({ courses, timetable, assignments, exams, s
         </div>
 
         {/* Metric 3: Exams Pacing */}
-        <div className="p-5 bg-[#131d31] border border-slate-800/80 rounded-2xl space-y-4">
+        <div className="p-5 bg-[#131d31] border border-slate-800/80 rounded-3xl space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Exams Status Pacing</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Exams Status Pacing
+            </span>
             <GraduationCap className="w-4 h-4 text-purple-400" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-white">{completedExams + upcomingExams} total</span>
-            <span className="text-[10px] font-semibold text-slate-400">{upcomingExams} Upcoming Alerts</span>
+            <span className="text-2xl font-black text-white">
+              {completedExams + upcomingExams} total
+            </span>
+            <span className="text-[10px] font-semibold text-slate-400">
+              {upcomingExams} Upcoming Alerts
+            </span>
           </div>
           <div className="text-[10px] text-slate-400 leading-relaxed font-medium">
-            Make sure to schedule exam dates in the Calendar to trigger automatic alarms.
+            Schedule exam dates in the Calendar to trigger automatic alarms.
           </div>
         </div>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5" id="progress-charts-section">
-        
-        {/* Workload per Course (Workload Distribution) */}
-        <div className="lg:col-span-6 p-5 bg-[#131d31] border border-slate-800/80 rounded-2xl space-y-4">
-          <h3 className="text-xs font-extrabold text-white uppercase tracking-wider border-b border-slate-800 pb-2">
-            Workload Distribution per Subject
-          </h3>
-
-          <div className="space-y-4" id="course-workload-progress-list">
-            {courseDistribution.map((course, index) => (
-              <div key={index} className="space-y-1.5 p-3.5 bg-[#1e293b]/25 rounded-xl border border-slate-800/40">
-                <div className="flex justify-between items-center text-xs">
-                  <div className="flex items-center gap-2 font-bold text-slate-200">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: course.color }} />
-                    <span>{course.courseName}</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-slate-400 font-bold">
-                    {course.completed}/{course.total} Tasks ({course.rate}%)
-                  </span>
-                </div>
-                <div className="w-full bg-slate-850 h-2 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${course.rate}%`,
-                      backgroundColor: course.color
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Timetable schedule weight per day */}
-        <div className="lg:col-span-6 p-5 bg-[#131d31] border border-slate-800/80 rounded-2xl space-y-4">
-          <h3 className="text-xs font-extrabold text-white uppercase tracking-wider border-b border-slate-800 pb-2">
-            Weekly Class Workload hours (Lecture block weight)
-          </h3>
-
-          <div className="flex items-end justify-between h-48 gap-2 pt-4 px-2" id="day-workload-bars-chart">
-            {dayWorkload.map((workload, index) => {
-              // Convert hours to percentage of a max day weight (e.g. max 8 hours)
-              const hrsNum = parseFloat(workload.hours);
-              const percent = Math.min(100, Math.round((hrsNum / 8) * 100));
-
-              return (
-                <div key={index} className="flex-1 flex flex-col items-center h-full justify-end group">
-                  {/* Tooltip */}
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 border border-slate-800 text-[9px] font-bold text-slate-200 rounded px-1.5 py-0.5 absolute translate-y-[-165px] z-10">
-                    {workload.hours} hrs ({workload.count} slots)
-                  </div>
-
-                  {/* Visual Bar */}
-                  <div
-                    className="w-full bg-blue-600/35 hover:bg-blue-500 rounded-t-lg transition-all"
-                    style={{ height: `${Math.max(6, percent)}%` }}
-                  />
-
-                  {/* Day label */}
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2 block">
-                    {workload.day.substring(0, 3)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="p-3 bg-blue-950/20 border border-blue-900/35 rounded-xl flex items-center gap-2 mt-4">
-            <TrendingUp className="w-4 h-4 text-blue-400 shrink-0" />
-            <p className="text-[9px] text-slate-300 leading-relaxed font-medium">
-              Daily timetables are analyzed to compute class workload density weights, allowing you to visually pinpoint heavy lecture days!
-            </p>
-          </div>
-        </div>
-
-      </div>
-
     </div>
   );
 }

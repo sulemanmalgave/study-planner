@@ -78,6 +78,27 @@ export interface StudySession {
   durationMinutes: number;
   type: 'pomodoro' | 'custom' | 'break';
   date: string; // ISO date YYYY-MM-DD
+  // Focus Mode & Subject Tracking fields (additive & backward-compatible):
+  sessionId?: string;
+  userId?: string;
+  courseId?: string;
+  subjectName?: string;
+  startTime?: string;
+  endTime?: string;
+  plannedDurationMinutes?: number;
+  actualFocusedDurationSeconds?: number;
+  pausedDurationSeconds?: number;
+  status?: 'completed' | 'cancelled' | 'interrupted';
+  completed?: boolean;
+  createdAt?: string;
+}
+
+export interface DistractionApp {
+  id: string;
+  name: string;
+  category: string;
+  iconName?: string;
+  selected: boolean;
 }
 
 export interface AudioLecture {

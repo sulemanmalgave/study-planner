@@ -598,9 +598,19 @@ app.get('/api/state', (req, res) => {
       const db = readDB();
       const newSession = {
         id: 's_' + crypto.randomUUID().slice(0, 8),
-        durationMinutes: parseInt(req.body.durationMinutes) || 25,
+        durationMinutes: parseInt(req.body.durationMinutes) || Math.max(1, Math.round((req.body.actualFocusedDurationSeconds || 1500) / 60)),
         type: req.body.type || 'pomodoro',
         date: req.body.date || new Date().toISOString().split('T')[0],
+        courseId: req.body.courseId,
+        subjectName: req.body.subjectName,
+        startTime: req.body.startTime,
+        endTime: req.body.endTime,
+        plannedDurationMinutes: req.body.plannedDurationMinutes,
+        actualFocusedDurationSeconds: req.body.actualFocusedDurationSeconds,
+        pausedDurationSeconds: req.body.pausedDurationSeconds,
+        status: req.body.status || 'completed',
+        completed: req.body.completed !== undefined ? req.body.completed : true,
+        createdAt: req.body.createdAt || new Date().toISOString(),
       };
       db.studySessions.push(newSession);
       writeDB(db);
