@@ -80,6 +80,22 @@ export interface StudySession {
   date: string; // ISO date YYYY-MM-DD
 }
 
+export interface AudioLecture {
+  id: string;
+  userId?: string;
+  courseId?: string;
+  subjectName: string;
+  section?: string; // Section / Chapter
+  title: string; // Topic / Lecture Title
+  audioDataUrl?: string; // Base64 or IndexedDB audio storage reference
+  originalFileName: string;
+  fileSize?: number; // bytes
+  fileType?: string; // e.g., "audio/mp3", "audio/m4a"
+  duration: number; // duration in seconds
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+}
+
 export interface DatabaseSchema {
   profile: UserProfile;
   courses: Course[];
@@ -88,6 +104,7 @@ export interface DatabaseSchema {
   exams: Exam[];
   notes: Note[];
   studySessions: StudySession[];
+  audioLectures?: AudioLecture[];
 }
 
 export interface PlanLimits {

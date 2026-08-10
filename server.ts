@@ -199,6 +199,7 @@ const getInitialDatabaseState = (): DatabaseSchema => {
     exams: [],
     notes: [],
     studySessions: [],
+    audioLectures: [],
   };
 };
 
@@ -225,11 +226,18 @@ const readDB = (): DatabaseSchema => {
       return defaultState;
     }
     const data = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(data) as DatabaseSchema;
+    const parsed = JSON.parse(data) as DatabaseSchema;
+    if (!parsed.audioLectures) {
+      parsed.audioLectures = [];
+    }
+    return parsed;
   } catch (err) {
     console.error('Error reading database file, using fallback state:', err);
     if (!inMemoryDb) {
       inMemoryDb = getInitialDatabaseState();
+    }
+    if (!inMemoryDb.audioLectures) {
+      inMemoryDb.audioLectures = [];
     }
     return inMemoryDb;
   }
@@ -599,6 +607,73 @@ app.get('/api/state', (req, res) => {
       res.json(newSession);
     } catch (error) {
       res.status(500).json({ error: 'Failed to save study session' });
+    }
+  });
+
+  // 8a. Audio Lectures CRUD
+  app.get('/api/audio-lectures', (req, res) => {
+    try {
+      const db = readDB();
+      res.json(db.audioLectures || []);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch audio lectures' });
+    }
+  });
+
+  app.post('/api/audio-lectures', (req, res) => {
+    try {
+      const db = readDB();
+      if (!db.audioLectures) db.audioLectures = [];
+      const newLecture = {
+        id: 'al_' + crypto.randomUUID().slice(0, 8),
+        userId: req.body.userId || 'default',
+        courseId: req.body.courseId || '',
+        subjectName: req.body.subjectName || 'General',
+        section: req.body.section || '',
+        title: req.body.title || 'Untitled Lecture',
+        audioDataUrl: req.body.audioDataUrl || '',
+        originalFileName: req.body.originalFileName || 'recording.mp3',
+        fileSize: req.body.fileSize || 0,
+        fileType: req.body.fileType || 'audio/mpeg',
+        duration: req.body.duration || 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      db.audioLectures.push(newLecture);
+      writeDB(db);
+      res.json(newLecture);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create audio lecture' });
+    }
+  });
+
+  app.put('/api/audio-lectures/:id', (req, res) => {
+    try {
+      const db = readDB();
+      if (!db.audioLectures) db.audioLectures = [];
+      const index = db.audioLectures.findIndex((al) => al.id === req.params.id);
+      if (index === -1) return res.status(404).json({ error: 'Audio lecture not found' });
+      db.audioLectures[index] = {
+        ...db.audioLectures[index],
+        ...req.body,
+        updatedAt: new Date().toISOString(),
+      };
+      writeDB(db);
+      res.json(db.audioLectures[index]);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update audio lecture' });
+    }
+  });
+
+  app.delete('/api/audio-lectures/:id', (req, res) => {
+    try {
+      const db = readDB();
+      if (!db.audioLectures) db.audioLectures = [];
+      db.audioLectures = db.audioLectures.filter((al) => al.id !== req.params.id);
+      writeDB(db);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete audio lecture' });
     }
   });
 

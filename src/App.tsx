@@ -23,6 +23,7 @@ import AssignmentsView from './components/AssignmentsView';
 import ExamsView from './components/ExamsView';
 import NotesView from './components/NotesView';
 import StudyTimerView from './components/StudyTimerView';
+import AudioLecturesView from './components/AudioLecturesView';
 import ProgressView from './components/ProgressView';
 import SettingsView from './components/SettingsView';
 import PrivacyPolicyView from './components/PrivacyPolicyView';
@@ -43,6 +44,7 @@ import {
   Exam, 
   Note, 
   StudySession, 
+  AudioLecture,
   Subscription,
   FREE_PLAN_LIMITS
 } from './types';
@@ -228,6 +230,7 @@ export default function App() {
   }
 
   const { profile, courses, timetable, assignments, exams, notes, studySessions } = dbState;
+  const audioLectures = dbState.audioLectures || [];
   
   // Calculate if subscription is active and valid
   const isSubscriptionValid = () => {
@@ -575,6 +578,96 @@ export default function App() {
     }
   };
 
+  const handleAddAudioLecture = async (lectureData: Omit<AudioLecture, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const response = await fetch('/api/audio-lectures', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(lectureData),
+      }).catch(() => null);
+
+      let data: AudioLecture;
+      if (response && response.ok) {
+        data = await response.json();
+      } else {
+        const now = new Date().toISOString();
+        data = {
+          ...lectureData,
+          id: 'al_' + crypto.randomUUID().slice(0, 8),
+          createdAt: now,
+          updatedAt: now,
+        };
+      }
+
+      setDbState(prev => {
+        if (!prev) return null;
+        const current = prev.audioLectures || [];
+        const nextState = { ...prev, audioLectures: [...current, data] };
+        persistState(nextState);
+        return nextState;
+      });
+
+      return data;
+    } catch (e) {
+      console.error('Error adding audio lecture:', e);
+      const now = new Date().toISOString();
+      const fallbackData: AudioLecture = {
+        ...lectureData,
+        id: 'al_' + crypto.randomUUID().slice(0, 8),
+        createdAt: now,
+        updatedAt: now,
+      };
+      setDbState(prev => {
+        if (!prev) return null;
+        const current = prev.audioLectures || [];
+        const nextState = { ...prev, audioLectures: [...current, fallbackData] };
+        persistState(nextState);
+        return nextState;
+      });
+      return fallbackData;
+    }
+  };
+
+  const handleUpdateAudioLecture = async (id: string, updates: Partial<AudioLecture>) => {
+    try {
+      await fetch(`/api/audio-lectures/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      }).catch(() => null);
+
+      setDbState(prev => {
+        if (!prev) return null;
+        const current = prev.audioLectures || [];
+        const nextLectures = current.map(al =>
+          al.id === id ? { ...al, ...updates, updatedAt: new Date().toISOString() } : al
+        );
+        const nextState = { ...prev, audioLectures: nextLectures };
+        persistState(nextState);
+        return nextState;
+      });
+    } catch (e) {
+      console.error('Error updating audio lecture:', e);
+    }
+  };
+
+  const handleDeleteAudioLecture = async (id: string) => {
+    try {
+      await fetch(`/api/audio-lectures/${id}`, { method: 'DELETE' }).catch(() => null);
+
+      setDbState(prev => {
+        if (!prev) return null;
+        const current = prev.audioLectures || [];
+        const nextLectures = current.filter(al => al.id !== id);
+        const nextState = { ...prev, audioLectures: nextLectures };
+        persistState(nextState);
+        return nextState;
+      });
+    } catch (e) {
+      console.error('Error deleting audio lecture:', e);
+    }
+  };
+
   const handleResetDatabase = async () => {
     try {
       const response = await fetch('/api/reset', { method: 'POST' }).catch(() => null);
@@ -828,6 +921,19 @@ export default function App() {
             <StudyTimerView 
               studySessions={studySessions}
               onLogSession={handleLogStudySession}
+            />
+          )}
+
+          {activeTab === 'audio-lectures' && (
+            <AudioLecturesView 
+              courses={courses}
+              audioLectures={audioLectures}
+              isPremium={isPremium}
+              onUpgradeClick={() => setIsUpgradeOpen(true)}
+              onAddLecture={handleAddAudioLecture}
+              onUpdateLecture={handleUpdateAudioLecture}
+              onDeleteLecture={handleDeleteAudioLecture}
+              onAddCourse={handleAddCourse}
             />
           )}
 

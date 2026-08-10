@@ -12,6 +12,7 @@ import {
   Settings, 
   Sparkles,
   Smartphone,
+  Mic,
   X
 } from 'lucide-react';
 import { UserProfile } from '../types';
@@ -36,6 +37,7 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
     { id: 'assignments', label: 'Assignments', icon: CheckSquare },
     { id: 'exams', label: 'Exams', icon: GraduationCap },
     { id: 'study-timer', label: 'Study Sessions', icon: Clock },
+    { id: 'audio-lectures', label: 'Audio Lectures', icon: Mic, isPremiumFeature: true },
     { id: 'notes', label: 'Notes', icon: FileText },
     { id: 'progress', label: 'Progress', icon: BarChart3 },
     { id: 'mobile-companion', label: 'Mobile Companion', icon: Smartphone, isPremiumFeature: true },
