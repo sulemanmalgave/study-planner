@@ -102,7 +102,9 @@ export default function StudyTimerView({
   };
   const [isAppConfigOpen, setIsAppConfigOpen] = useState(false);
   const [isWindowsNoticeOpen, setIsWindowsNoticeOpen] = useState(false);
-  const [winPermissionState, setWinPermissionState] = useState<'granted' | 'denied' | 'prompt' | 'unsupported'>('prompt');
+  const [winPermissionState, setWinPermissionState] = useState<
+    'allowed' | 'denied' | 'unsupported' | 'unknown' | 'granted' | 'prompt'
+  >('prompt');
 
   // Modals
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
@@ -119,14 +121,28 @@ export default function StudyTimerView({
 
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Check Windows Notification Permission State
-  useEffect(() => {
-    const checkWinPermission = async () => {
-      const state = await windowsNotificationService.getPermissionState();
-      setWinPermissionState(state);
-    };
-    checkWinPermission();
+  // Single Source of Truth: Check Windows Notification Permission State
+  const checkWinPermission = useCallback(async () => {
+    const status = await windowsNotificationService.checkNotificationAccess();
+    setWinPermissionState(status);
+    return status;
   }, []);
+
+  useEffect(() => {
+    checkWinPermission();
+
+    const handleFocusOrVisibility = () => {
+      checkWinPermission();
+    };
+
+    window.addEventListener('focus', handleFocusOrVisibility);
+    document.addEventListener('visibilitychange', handleFocusOrVisibility);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrVisibility);
+      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
+    };
+  }, [checkWinPermission]);
 
   // Set default selected subject
   useEffect(() => {
@@ -727,27 +743,44 @@ export default function StudyTimerView({
             {/* WINDOWS PERMISSION STATUS INDICATOR */}
             <div className="p-3 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-2 bg-[#F3EDF7]/60 border-[#E1E3E1]">
               <div className="flex items-center gap-2">
-                {winPermissionState === 'granted' ? (
+                {winPermissionState === 'allowed' || winPermissionState === 'granted' ? (
                   <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : winPermissionState === 'unsupported' ? (
+                  <Info className="w-4 h-4 text-slate-500 shrink-0" />
                 ) : (
                   <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
                 )}
-                <span className={winPermissionState === 'granted' ? 'text-emerald-800 font-extrabold' : 'text-amber-900 font-bold'}>
-                  {winPermissionState === 'granted'
+                <span
+                  className={
+                    winPermissionState === 'allowed' || winPermissionState === 'granted'
+                      ? 'text-emerald-800 font-extrabold'
+                      : winPermissionState === 'unsupported'
+                      ? 'text-slate-700 font-bold'
+                      : 'text-amber-900 font-bold'
+                  }
+                >
+                  {winPermissionState === 'allowed' || winPermissionState === 'granted'
                     ? 'Windows notification access enabled'
+                    : winPermissionState === 'unsupported'
+                    ? 'Windows notification control is available only in the packaged Windows version of Study Planner.'
                     : '⚠ Notification access required'}
                 </span>
               </div>
 
-              {winPermissionState !== 'granted' && (
-                <button
-                  onClick={() => setIsWindowsNoticeOpen(true)}
-                  className="px-2.5 py-1 bg-[#6750A4] hover:bg-[#503E84] text-white text-[11px] font-extrabold rounded-lg shrink-0 cursor-pointer transition-colors shadow-2xs"
-                  id="enable-win-access-btn"
-                >
-                  Enable Access
-                </button>
-              )}
+              {winPermissionState !== 'allowed' &&
+                winPermissionState !== 'granted' &&
+                winPermissionState !== 'unsupported' && (
+                  <button
+                    onClick={() => {
+                      checkWinPermission();
+                      setIsWindowsNoticeOpen(true);
+                    }}
+                    className="px-2.5 py-1 bg-[#6750A4] hover:bg-[#503E84] text-white text-[11px] font-extrabold rounded-lg shrink-0 cursor-pointer transition-colors shadow-2xs"
+                    id="enable-win-access-btn"
+                  >
+                    Enable Access
+                  </button>
+                )}
             </div>
 
             <div className="flex items-center justify-between pt-1">
@@ -1019,11 +1052,11 @@ export default function StudyTimerView({
 
             <div className="space-y-3 text-xs text-[#49454F] font-medium leading-relaxed">
               <p className="text-sm font-semibold text-[#1D1B20]">
-                Study Planner needs notification access to silence notifications from the distracting apps you select while Focus Mode is active.
+                Study Planner needs notification access to manage notifications during Focus Mode.
               </p>
               {winPermissionState === 'unsupported' && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 font-semibold text-[11px] space-y-1">
-                  <div>Windows notification control is unavailable in standard web browser runtime without packaged Windows app permissions.</div>
+                  <div>Windows notification control is available only in the packaged Windows version of Study Planner.</div>
                   <div className="text-[10px] text-amber-800 font-normal">
                     When installed as a packaged Windows app (MSIX/App SDK with UserNotificationListener capability), Windows notification suppression triggers automatically.
                   </div>
@@ -1035,26 +1068,26 @@ export default function StudyTimerView({
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-[#E1E3E1]">
-              <button
-                onClick={async () => {
-                  const granted = await windowsNotificationService.requestAccess();
-                  if (granted) {
-                    setWinPermissionState('granted');
-                  } else {
-                    const status = await windowsNotificationService.getPermissionState();
-                    setWinPermissionState(status);
-                  }
-                  setIsWindowsNoticeOpen(false);
-                }}
-                className="flex-1 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-extrabold rounded-full cursor-pointer shadow-xs transition-colors"
-              >
-                Allow Notification Access
-              </button>
+              {winPermissionState !== 'unsupported' && (
+                <button
+                  onClick={async () => {
+                    await windowsNotificationService.requestNotificationAccess();
+                    const latestStatus = await checkWinPermission();
+                    if (latestStatus === 'allowed' || latestStatus === 'granted') {
+                      setIsWindowsNoticeOpen(false);
+                    }
+                  }}
+                  className="flex-1 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-extrabold rounded-full cursor-pointer shadow-xs transition-colors"
+                  id="allow-notification-access-btn"
+                >
+                  Allow Notification Access
+                </button>
+              )}
               <button
                 onClick={() => setIsWindowsNoticeOpen(false)}
                 className="py-2.5 px-5 bg-slate-100 hover:bg-slate-200 text-[#1D1B20] text-xs font-extrabold rounded-full cursor-pointer transition-colors"
               >
-                Not Now
+                {winPermissionState === 'unsupported' ? 'Close' : 'Not Now'}
               </button>
             </div>
           </div>
