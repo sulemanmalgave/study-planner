@@ -23,6 +23,7 @@ import AssignmentsView from './components/AssignmentsView';
 import ExamsView from './components/ExamsView';
 import NotesView from './components/NotesView';
 import StudyTimerView from './components/StudyTimerView';
+import { StudyErrorBoundary } from './components/StudyErrorBoundary';
 import AudioLecturesView from './components/AudioLecturesView';
 import ProgressView from './components/ProgressView';
 import SettingsView from './components/SettingsView';
@@ -918,13 +919,15 @@ export default function App() {
           )}
 
           {activeTab === 'study-timer' && (
-            <StudyTimerView 
-              courses={courses}
-              studySessions={studySessions}
-              onLogSession={handleLogStudySession}
-              onAddCourse={handleAddCourse}
-              onNavigateToTab={(tab) => setActiveTab(tab)}
-            />
+            <StudyErrorBoundary>
+              <StudyTimerView 
+                courses={courses}
+                studySessions={studySessions}
+                onLogSession={handleLogStudySession}
+                onAddCourse={handleAddCourse}
+                onNavigateToTab={(tab) => setActiveTab(tab)}
+              />
+            </StudyErrorBoundary>
           )}
 
           {activeTab === 'audio-lectures' && (
