@@ -20,12 +20,21 @@ export interface MobileDevice {
   deviceToken: string;
 }
 
+export interface AiUsage {
+  operationsCount: number;
+  maxMonthlyOperations: number;
+  minutesTranscribed: number;
+  maxMonthlyMinutes: number;
+  periodStart: string;
+}
+
 export interface UserProfile {
   name: string;
   email: string;
   initials: string;
   subscription: Subscription;
   mobileDevice?: MobileDevice | null;
+  aiUsage?: AiUsage;
 }
 
 export interface Course {
@@ -107,6 +116,43 @@ export interface AudioLecture {
   duration: number; // duration in seconds
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
+
+  // AI-generated fields (stored separately from original audio)
+  transcript?: string;
+  transcriptGeneratedAt?: string;
+  studyNotes?: string;
+  studyNotesGeneratedAt?: string;
+  summary?: string;
+  summaryGeneratedAt?: string;
+  keyPoints?: string;
+  keyPointsGeneratedAt?: string;
+}
+
+export interface StudyMaterial {
+  id: string;
+  userId?: string;
+  subjectId?: string; // Course ID
+  subjectName: string;
+  topic?: string; // Chapter / Module / Unit
+  name: string; // Document title / display name
+  originalFileName: string;
+  fileType: 'pdf' | 'doc' | 'docx' | string;
+  mimeType: string;
+  fileSize: number; // In bytes
+  storagePath: string; // Cloud storage URL or relative API path
+  fileDataUrl?: string; // Offline/local preview cache
+  uploadedAt: string; // ISO string
+  createdAt: string; // ISO string
+  updatedAt: string; // ISO string
+
+  // Optional AI metadata - only generated upon explicit user button click
+  summary?: string;
+  summaryGeneratedAt?: string;
+  studyNotes?: string;
+  studyNotesGeneratedAt?: string;
+  keyPoints?: string;
+  keyPointsGeneratedAt?: string;
+  extractedText?: string;
 }
 
 export interface DatabaseSchema {
@@ -118,6 +164,7 @@ export interface DatabaseSchema {
   notes: Note[];
   studySessions: StudySession[];
   audioLectures?: AudioLecture[];
+  studyMaterials?: StudyMaterial[];
 }
 
 export interface PlanLimits {
@@ -128,6 +175,8 @@ export interface PlanLimits {
   notes: number; // Maximum 10 notes
   exams: number; // Maximum 5 exams
   statsDays: number; // 7 days history limit for free plan
+  studyMaterials: number; // Free allowance for study materials
+  audioLectures: number; // Maximum 2 audio lectures for free plan
 }
 
 export const FREE_PLAN_LIMITS: PlanLimits = {
@@ -138,4 +187,6 @@ export const FREE_PLAN_LIMITS: PlanLimits = {
   notes: 10,
   exams: 5,
   statsDays: 7,
+  studyMaterials: 5,
+  audioLectures: 2,
 };

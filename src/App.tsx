@@ -46,6 +46,7 @@ import {
   Note, 
   StudySession, 
   AudioLecture,
+  StudyMaterial,
   Subscription,
   FREE_PLAN_LIMITS
 } from './types';
@@ -120,7 +121,7 @@ export default function App() {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [quickAddDefaultType, setQuickAddDefaultType] = useState<'task' | 'class' | 'note' | 'exam'>('task');
   const [isLimitDialogOpen, setIsLimitDialogOpen] = useState<boolean>(false);
-  const [limitType, setLimitType] = useState<'assignments' | 'exams' | 'notes' | 'courses' | 'timetables'>('assignments');
+  const [limitType, setLimitType] = useState<'assignments' | 'exams' | 'notes' | 'courses' | 'timetables' | 'audioLectures' | 'studyMaterials'>('assignments');
 
   // Helper to persist state to LocalStorage and Firestore
   const persistState = async (newState: DatabaseSchema) => {
@@ -232,15 +233,21 @@ export default function App() {
 
   const { profile, courses, timetable, assignments, exams, notes, studySessions } = dbState;
   const audioLectures = dbState.audioLectures || [];
+  const studyMaterials = dbState.studyMaterials || [];
   
   // Calculate if subscription is active and valid
   const isSubscriptionValid = () => {
-    const sub = profile.subscription;
+    const sub = profile?.subscription;
     if (!sub) return false;
-    const isStatusPremium = sub.subscriptionStatus === 'premium' || sub.plan === 'premium';
+    const isStatusPremium =
+      sub.subscriptionStatus === 'premium' ||
+      sub.plan === 'premium' ||
+      sub.plan === 'monthly' ||
+      sub.plan === 'yearly' ||
+      sub.plan === 'quarterly';
     if (!isStatusPremium) return false;
     if (sub.expiryDate) {
-      return new Date(sub.expiryDate) > new Date();
+      return new Date(sub.expiryDate).getTime() > Date.now();
     }
     return true;
   };
@@ -580,25 +587,28 @@ export default function App() {
   };
 
   const handleAddAudioLecture = async (lectureData: Omit<AudioLecture, 'id' | 'createdAt' | 'updatedAt'>) => {
+    if (!isPremium && (audioLectures || []).length >= FREE_PLAN_LIMITS.audioLectures) {
+      setLimitType('audioLectures');
+      setIsLimitDialogOpen(true);
+      throw new Error("You've reached the Free plan limit of 2 Audio Lectures. Upgrade to Pro to add more.");
+    }
     try {
       const response = await fetch('/api/audio-lectures', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(lectureData),
-      }).catch(() => null);
+      });
 
-      let data: AudioLecture;
-      if (response && response.ok) {
-        data = await response.json();
-      } else {
-        const now = new Date().toISOString();
-        data = {
-          ...lectureData,
-          id: 'al_' + crypto.randomUUID().slice(0, 8),
-          createdAt: now,
-          updatedAt: now,
-        };
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        if (errJson.error === 'LIMIT_REACHED' || errJson.error === 'PREMIUM_REQUIRED') {
+          setLimitType('audioLectures');
+          setIsLimitDialogOpen(true);
+        }
+        throw new Error(errJson.message || 'Failed to add audio lecture');
       }
+
+      const data: AudioLecture = await response.json();
 
       setDbState(prev => {
         if (!prev) return null;
@@ -609,23 +619,9 @@ export default function App() {
       });
 
       return data;
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error adding audio lecture:', e);
-      const now = new Date().toISOString();
-      const fallbackData: AudioLecture = {
-        ...lectureData,
-        id: 'al_' + crypto.randomUUID().slice(0, 8),
-        createdAt: now,
-        updatedAt: now,
-      };
-      setDbState(prev => {
-        if (!prev) return null;
-        const current = prev.audioLectures || [];
-        const nextState = { ...prev, audioLectures: [...current, fallbackData] };
-        persistState(nextState);
-        return nextState;
-      });
-      return fallbackData;
+      throw e;
     }
   };
 
@@ -666,6 +662,57 @@ export default function App() {
       });
     } catch (e) {
       console.error('Error deleting audio lecture:', e);
+    }
+  };
+
+  const handleUploadStudyMaterial = (material: StudyMaterial) => {
+    setDbState(prev => {
+      if (!prev) return null;
+      const current = prev.studyMaterials || [];
+      const nextMaterials = [material, ...current.filter(m => m.id !== material.id)];
+      const nextState = { ...prev, studyMaterials: nextMaterials };
+      persistState(nextState);
+      return nextState;
+    });
+  };
+
+  const handleUpdateStudyMaterial = async (id: string, updates: Partial<StudyMaterial>) => {
+    try {
+      await fetch(`/api/study-materials/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      }).catch(() => null);
+
+      setDbState(prev => {
+        if (!prev) return null;
+        const current = prev.studyMaterials || [];
+        const nextMaterials = current.map(m =>
+          m.id === id ? { ...m, ...updates, updatedAt: new Date().toISOString() } : m
+        );
+        const nextState = { ...prev, studyMaterials: nextMaterials };
+        persistState(nextState);
+        return nextState;
+      });
+    } catch (e) {
+      console.error('Error updating study material:', e);
+    }
+  };
+
+  const handleDeleteStudyMaterial = async (id: string) => {
+    try {
+      await fetch(`/api/study-materials/${id}`, { method: 'DELETE' }).catch(() => null);
+
+      setDbState(prev => {
+        if (!prev) return null;
+        const current = prev.studyMaterials || [];
+        const nextMaterials = current.filter(m => m.id !== id);
+        const nextState = { ...prev, studyMaterials: nextMaterials };
+        persistState(nextState);
+        return nextState;
+      });
+    } catch (e) {
+      console.error('Error deleting study material:', e);
     }
   };
 
@@ -947,12 +994,16 @@ export default function App() {
             <NotesView 
               courses={courses}
               notes={notes}
+              studyMaterials={studyMaterials}
               isPremium={isPremium}
               onAddCourse={handleAddCourse}
               onAddNote={handleAddNote}
               onUpdateNote={handleUpdateNote}
               onDeleteNote={handleDeleteNote}
               onTriggerUpgrade={() => setIsUpgradeOpen(true)}
+              onUploadStudyMaterial={handleUploadStudyMaterial}
+              onUpdateStudyMaterial={handleUpdateStudyMaterial}
+              onDeleteStudyMaterial={handleDeleteStudyMaterial}
             />
           )}
 
@@ -988,6 +1039,7 @@ export default function App() {
               onUpdateProfile={handleUpdateProfile}
               onResetDatabase={handleResetDatabase}
               onTriggerUpgrade={() => setIsUpgradeOpen(true)}
+              onRefreshState={fetchState}
             />
           )}
 

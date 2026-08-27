@@ -11,15 +11,43 @@
         "assignments": { "type": "array" },
         "exams": { "type": "array" },
         "notes": { "type": "array" },
-        "studySessions": { "type": "array" }
+        "studySessions": { "type": "array" },
+        "audioLectures": { "type": "array" },
+        "studyMaterials": { "type": "array" }
       },
       "required": ["profile", "courses", "timetable", "assignments", "exams", "notes", "studySessions"]
+    },
+    "StudyMaterial": {
+      "title": "Study Material Document",
+      "description": "Student uploaded study materials (PDF, DOC, DOCX) metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "topic": { "type": "string" },
+        "name": { "type": "string" },
+        "originalFileName": { "type": "string" },
+        "fileType": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "fileSize": { "type": "number" },
+        "storagePath": { "type": "string" },
+        "uploadedAt": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "subjectName", "name", "originalFileName", "fileType", "mimeType", "fileSize", "storagePath", "uploadedAt"]
     }
   },
   "firestore": {
     "/workspaces/{userId}": {
       "schema": "UserWorkspace",
       "description": "User specific workspace database document"
+    },
+    "/workspaces/{userId}/studyMaterials/{materialId}": {
+      "schema": "StudyMaterial",
+      "description": "Individual study material files metadata for user"
     }
   }
 }

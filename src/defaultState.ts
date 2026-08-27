@@ -25,6 +25,7 @@ export const getInitialClientState = (): DatabaseSchema => {
     notes: [],
     studySessions: [],
     audioLectures: [],
+    studyMaterials: [],
   };
 };
 

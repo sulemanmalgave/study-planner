@@ -10,6 +10,10 @@ service cloud.firestore {
     // User workspaces collection
     match /workspaces/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /studyMaterials/{materialId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
   }
 }

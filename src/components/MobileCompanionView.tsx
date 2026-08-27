@@ -31,7 +31,10 @@ export default function MobileCompanionView({
   dbState,
   onRefreshState,
 }: MobileCompanionViewProps) {
-  const isPremium = profile.subscription.subscriptionStatus === 'premium' || profile.subscription.plan === 'premium';
+  const isPremium = (
+    (profile.subscription.subscriptionStatus === 'premium' || profile.subscription.plan === 'premium' || profile.subscription.plan === 'monthly' || profile.subscription.plan === 'yearly' || profile.subscription.plan === 'quarterly') &&
+    (!profile.subscription.expiryDate || new Date(profile.subscription.expiryDate).getTime() > Date.now())
+  );
   const mobileDevice = profile.mobileDevice;
   const isConnected = mobileDevice?.status === 'connected';
 
@@ -207,8 +210,8 @@ export default function MobileCompanionView({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // FREE PLAN SCREEN
-  if (!isPremium) {
+  // FREE PLAN SCREEN (Only when no device was previously paired)
+  if (!isPremium && !mobileDevice) {
     return (
       <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-8 animate-fade-in" id="mobile-companion-free-view">
         {/* Header */}
@@ -331,48 +334,90 @@ export default function MobileCompanionView({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-extrabold text-[#1D1B20]">Mobile Companion</h2>
-              <span className="px-2 py-0.5 text-[9px] font-extrabold bg-emerald-100 text-emerald-800 rounded-md uppercase tracking-wider">
-                Premium Active
-              </span>
+              {isPremium ? (
+                <span className="px-2 py-0.5 text-[9px] font-extrabold bg-emerald-100 text-emerald-800 rounded-md uppercase tracking-wider">
+                  Premium Active
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 text-[9px] font-bold bg-purple-100 text-[#6750A4] rounded-md uppercase tracking-wider">
+                  Preserved Device
+                </span>
+              )}
             </div>
             <p className="text-xs text-[#49454F] mt-0.5">
-              Connect your smartphone for seamless cross-device academic tracking.
+              {isPremium
+                ? 'Connect your smartphone for seamless cross-device academic tracking.'
+                : 'Your paired mobile device configuration remains safely preserved.'}
             </p>
           </div>
         </div>
 
-        {isConnected ? (
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleManualSync}
-              disabled={isSyncing}
-              className="py-2 px-4 bg-slate-100 hover:bg-slate-200 text-[#1D1B20] text-xs font-bold rounded-full transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              id="manual-sync-btn"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-[#6750A4]' : 'text-slate-600'}`} />
-              <span>{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
-            </button>
+        {isPremium ? (
+          isConnected ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                className="py-2 px-4 bg-slate-100 hover:bg-slate-200 text-[#1D1B20] text-xs font-bold rounded-full transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                id="manual-sync-btn"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-[#6750A4]' : 'text-slate-600'}`} />
+                <span>{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
+              </button>
 
+              <button
+                onClick={handleStartPairing}
+                className="py-2 px-4 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-bold rounded-full transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                id="add-device-btn"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>Show QR Code</span>
+              </button>
+            </div>
+          ) : (
             <button
               onClick={handleStartPairing}
-              className="py-2 px-4 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-bold rounded-full transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-              id="add-device-btn"
+              className="py-3 px-6 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-extrabold rounded-full shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+              id="connect-phone-btn"
             >
-              <QrCode className="w-3.5 h-3.5" />
-              <span>Show QR Code</span>
+              <QrCode className="w-4 h-4" />
+              <span>Connect Phone</span>
             </button>
-          </div>
+          )
         ) : (
           <button
-            onClick={handleStartPairing}
-            className="py-3 px-6 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-extrabold rounded-full shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
-            id="connect-phone-btn"
+            onClick={onUpgradeClick}
+            className="py-2.5 px-5 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-bold rounded-full shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+            id="mobile-renew-pro-btn"
           >
-            <QrCode className="w-4 h-4" />
-            <span>Connect Phone</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Renew Pro for Live Sync</span>
           </button>
         )}
       </div>
+
+      {!isPremium && (
+        <div className="p-4 bg-purple-50/80 border border-[#D0BCFF]/70 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[#21005D] shadow-2xs" id="mobile-companion-preserved-banner">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-[#EADDFF] text-[#6750A4] rounded-xl shrink-0">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-[#1D1B20]">Pro Access Inactive — Device Settings Preserved</h4>
+              <p className="text-[11px] text-[#49454F] mt-0.5">
+                Your linked device details and academic history remain safely stored. Upgrade to Pro to resume real-time cross-device syncing.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onUpgradeClick}
+            className="px-4 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-xs rounded-full shadow-xs shrink-0 cursor-pointer transition-colors self-start sm:self-auto"
+            id="mobile-banner-upgrade-btn"
+          >
+            Upgrade to Pro
+          </button>
+        </div>
+      )}
 
       {syncMessage && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 font-bold flex items-center gap-2 animate-slide-down">

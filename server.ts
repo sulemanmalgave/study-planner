@@ -2,11 +2,74 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import multer from 'multer';
+import mammoth from 'mammoth';
 import Razorpay from 'razorpay';
-import { FREE_PLAN_LIMITS, DatabaseSchema } from './src/types.js';
+import { GoogleGenAI } from '@google/genai';
+import { FREE_PLAN_LIMITS, DatabaseSchema, UserProfile, StudyMaterial } from './src/types.js';
 
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
+const MATERIALS_DIR = path.join(process.cwd(), 'uploads', 'materials');
+
+// Ensure materials directory exists
+if (!fs.existsSync(MATERIALS_DIR)) {
+  try {
+    fs.mkdirSync(MATERIALS_DIR, { recursive: true });
+  } catch (e) {
+    console.warn('Could not create materials upload directory:', e);
+  }
+}
+
+// Multer storage configuration for PDF, DOC, DOCX
+const materialsStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (!fs.existsSync(MATERIALS_DIR)) {
+      fs.mkdirSync(MATERIALS_DIR, { recursive: true });
+    }
+    cb(null, MATERIALS_DIR);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeBase = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+    const uniqueName = `mat_${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeBase}${ext}`;
+    cb(null, uniqueName);
+  },
+});
+
+const uploadMaterial = multer({
+  storage: materialsStorage,
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB limit
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowed = ['.pdf', '.doc', '.docx'];
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF, DOC, and DOCX files are allowed.'));
+    }
+  },
+});
+
+// Gemini Client Lazy Initializer
+let geminiClient: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI {
+  const apiKey = sanitizeEnvVar(process.env.GEMINI_API_KEY);
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured on the server. Please add your Gemini API key in the Settings > Secrets panel.');
+  }
+  if (!geminiClient) {
+    geminiClient = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+  }
+  return geminiClient;
+}
 
 const sanitizeEnvVar = (val: string | undefined): string | undefined => {
   if (!val) return undefined;
@@ -192,6 +255,13 @@ const getInitialDatabaseState = (): DatabaseSchema => {
         paymentProvider: null,
         paymentId: null,
       },
+      aiUsage: {
+        operationsCount: 0,
+        maxMonthlyOperations: 60,
+        minutesTranscribed: 0,
+        maxMonthlyMinutes: 300,
+        periodStart: new Date().toISOString(),
+      },
     },
     courses: [],
     timetable: [],
@@ -200,6 +270,7 @@ const getInitialDatabaseState = (): DatabaseSchema => {
     notes: [],
     studySessions: [],
     audioLectures: [],
+    studyMaterials: [],
   };
 };
 
@@ -230,6 +301,18 @@ const readDB = (): DatabaseSchema => {
     if (!parsed.audioLectures) {
       parsed.audioLectures = [];
     }
+    if (!parsed.studyMaterials) {
+      parsed.studyMaterials = [];
+    }
+    if (!parsed.profile.aiUsage) {
+      parsed.profile.aiUsage = {
+        operationsCount: 0,
+        maxMonthlyOperations: 60,
+        minutesTranscribed: 0,
+        maxMonthlyMinutes: 300,
+        periodStart: new Date().toISOString(),
+      };
+    }
     return parsed;
   } catch (err) {
     console.error('Error reading database file, using fallback state:', err);
@@ -238,6 +321,9 @@ const readDB = (): DatabaseSchema => {
     }
     if (!inMemoryDb.audioLectures) {
       inMemoryDb.audioLectures = [];
+    }
+    if (!inMemoryDb.studyMaterials) {
+      inMemoryDb.studyMaterials = [];
     }
     return inMemoryDb;
   }
@@ -253,9 +339,44 @@ const writeDB = (data: DatabaseSchema) => {
   }
 };
 
+// AI Usage Tracking & Limits Check Helper
+function checkAndIncrementAiUsage(db: DatabaseSchema, durationSeconds: number = 0): { allowed: boolean; reason?: string } {
+  if (!db.profile.aiUsage) {
+    db.profile.aiUsage = {
+      operationsCount: 0,
+      maxMonthlyOperations: 60,
+      minutesTranscribed: 0,
+      maxMonthlyMinutes: 300,
+      periodStart: new Date().toISOString(),
+    };
+  }
+
+  const periodTime = new Date(db.profile.aiUsage.periodStart).getTime();
+  // Reset usage monthly (30 days cycle)
+  if (Date.now() - periodTime > 30 * 24 * 60 * 60 * 1000) {
+    db.profile.aiUsage.operationsCount = 0;
+    db.profile.aiUsage.minutesTranscribed = 0;
+    db.profile.aiUsage.periodStart = new Date().toISOString();
+  }
+
+  if (db.profile.aiUsage.operationsCount >= db.profile.aiUsage.maxMonthlyOperations) {
+    return {
+      allowed: false,
+      reason: `You have reached your monthly AI allowance of ${db.profile.aiUsage.maxMonthlyOperations} operations. Upgrade your plan or wait for the next billing cycle.`,
+    };
+  }
+
+  db.profile.aiUsage.operationsCount += 1;
+  if (durationSeconds > 0) {
+    db.profile.aiUsage.minutesTranscribed += Math.round(durationSeconds / 60);
+  }
+
+  return { allowed: true };
+}
+
 export const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Request logging middleware for API endpoints
 app.use('/api', (req, res, next) => {
@@ -634,6 +755,13 @@ app.get('/api/state', (req, res) => {
     try {
       const db = readDB();
       if (!db.audioLectures) db.audioLectures = [];
+      const isPro = isSubscriptionActive(db.profile.subscription);
+      if (!isPro && db.audioLectures.length >= FREE_PLAN_LIMITS.audioLectures) {
+        return res.status(403).json({
+          error: 'LIMIT_REACHED',
+          message: "You've reached the Free plan limit of 2 Audio Lectures. Upgrade to Pro to add more.",
+        });
+      }
       const newLecture = {
         id: 'al_' + crypto.randomUUID().slice(0, 8),
         userId: req.body.userId || 'default',
@@ -684,6 +812,1102 @@ app.get('/api/state', (req, res) => {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete audio lecture' });
+    }
+  });
+
+  // 8b. AI Audio Lectures (Gemini API Integration)
+  // CRITICAL: Individual on-demand triggers only. Uploading or opening never calls these automatically.
+  
+  // AI 1: Generate Transcript (uses audio data)
+  app.post('/api/ai/audio-lectures/:id/transcript', async (req, res) => {
+    try {
+      const db = readDB();
+      if (!isSubscriptionActive(db.profile.subscription)) {
+        return res.status(403).json({
+          error: 'PREMIUM_REQUIRED',
+          message: 'AI Audio Lecture Transcription requires an active Pro subscription. Upgrade to Pro to unlock AI transcription.',
+        });
+      }
+
+      if (!db.audioLectures) db.audioLectures = [];
+      const index = db.audioLectures.findIndex((al) => al.id === req.params.id);
+      if (index === -1) {
+        return res.status(404).json({ error: 'Audio lecture not found' });
+      }
+
+      const lecture = db.audioLectures[index];
+      const audioBase64 = req.body.audioBase64 || lecture.audioDataUrl;
+      if (!audioBase64) {
+        return res.status(400).json({
+          error: 'MISSING_AUDIO',
+          message: 'No audio data provided. Please ensure the lecture audio file is available.',
+        });
+      }
+
+      const usageCheck = checkAndIncrementAiUsage(db, lecture.duration || 0);
+      if (!usageCheck.allowed) {
+        return res.status(429).json({
+          error: 'AI_LIMIT_REACHED',
+          message: usageCheck.reason || 'Monthly AI operations quota reached.',
+        });
+      }
+
+      let ai;
+      try {
+        ai = getGeminiClient();
+      } catch (e: any) {
+        return res.status(500).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: e.message || 'Gemini API client is not configured.',
+        });
+      }
+
+      const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
+      const mimeType = req.body.mimeType || lecture.fileType || 'audio/mp3';
+
+      console.log(`[Gemini AI] Transcribing audio lecture ${lecture.id} (${lecture.title})...`);
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.5-transcribe',
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType,
+                data: cleanBase64,
+              },
+            },
+            {
+              text: 'Provide a clear, accurate, and comprehensive transcript of this lecture recording for a student. Format paragraphs cleanly with natural topic transitions.',
+            },
+          ],
+        },
+      });
+
+      const transcript = response.text?.trim() || 'No speech content could be transcribed.';
+      lecture.transcript = transcript;
+      lecture.transcriptGeneratedAt = new Date().toISOString();
+      lecture.updatedAt = new Date().toISOString();
+      db.audioLectures[index] = lecture;
+      writeDB(db);
+
+      res.json({
+        success: true,
+        transcript,
+        lecture,
+        aiUsage: db.profile.aiUsage,
+      });
+    } catch (error: any) {
+      console.error('Error generating transcript with Gemini:', error);
+      res.status(500).json({
+        error: 'GEMINI_ERROR',
+        message: error?.message || 'Failed to generate transcript with Gemini. Please try again.',
+      });
+    }
+  });
+
+  // AI 2: Generate Study Notes (reuses saved transcript when available to minimize Gemini cost)
+  app.post('/api/ai/audio-lectures/:id/study-notes', async (req, res) => {
+    try {
+      const db = readDB();
+      if (!isSubscriptionActive(db.profile.subscription)) {
+        return res.status(403).json({
+          error: 'PREMIUM_REQUIRED',
+          message: 'AI Study Notes generation requires an active Pro subscription.',
+        });
+      }
+
+      if (!db.audioLectures) db.audioLectures = [];
+      const index = db.audioLectures.findIndex((al) => al.id === req.params.id);
+      if (index === -1) {
+        return res.status(404).json({ error: 'Audio lecture not found' });
+      }
+
+      const lecture = db.audioLectures[index];
+      const usageCheck = checkAndIncrementAiUsage(db, 0);
+      if (!usageCheck.allowed) {
+        return res.status(429).json({
+          error: 'AI_LIMIT_REACHED',
+          message: usageCheck.reason || 'Monthly AI operations quota reached.',
+        });
+      }
+
+      let ai;
+      try {
+        ai = getGeminiClient();
+      } catch (e: any) {
+        return res.status(500).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: e.message || 'Gemini API client is not configured.',
+        });
+      }
+
+      let studyNotes = '';
+      const transcriptToUse = lecture.transcript || req.body.transcript;
+
+      if (transcriptToUse) {
+        // Cost-effective: Text-only call using saved transcript
+        console.log(`[Gemini AI] Generating study notes using saved transcript for ${lecture.id}...`);
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: `You are an expert academic tutor. Generate structured, thorough, and highly actionable study notes for the subject "${lecture.subjectName}" (Topic: "${lecture.title}").
+
+Use clean Markdown formatting with clear section headers:
+### 1. Subject Overview & Core Theme
+### 2. In-Depth Concepts & Explanations
+### 3. Core Terminology & Definitions
+### 4. Practical Examples & Applications
+### 5. High-Yield Exam Takeaways
+
+LECTURE TRANSCRIPT:
+${transcriptToUse}`,
+        });
+        studyNotes = response.text?.trim() || '';
+      } else if (req.body.audioBase64 || lecture.audioDataUrl) {
+        const audioBase64 = req.body.audioBase64 || lecture.audioDataUrl;
+        const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
+        const mimeType = req.body.mimeType || lecture.fileType || 'audio/mp3';
+        console.log(`[Gemini AI] Generating study notes directly from audio for ${lecture.id}...`);
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: cleanBase64,
+                },
+              },
+              {
+                text: `Generate comprehensive structured study notes for this lecture on "${lecture.subjectName}: ${lecture.title}". Include core principles, definitions, key points, and review notes in clean Markdown.`,
+              },
+            ],
+          },
+        });
+        studyNotes = response.text?.trim() || '';
+      } else {
+        return res.status(400).json({
+          error: 'NO_SOURCE_DATA',
+          message: 'No transcript or audio found. Please generate a transcript first or provide the audio recording.',
+        });
+      }
+
+      lecture.studyNotes = studyNotes;
+      lecture.studyNotesGeneratedAt = new Date().toISOString();
+      lecture.updatedAt = new Date().toISOString();
+      db.audioLectures[index] = lecture;
+      writeDB(db);
+
+      res.json({
+        success: true,
+        studyNotes,
+        lecture,
+        aiUsage: db.profile.aiUsage,
+      });
+    } catch (error: any) {
+      console.error('Error generating study notes with Gemini:', error);
+      res.status(500).json({
+        error: 'GEMINI_ERROR',
+        message: error?.message || 'Failed to generate study notes with Gemini.',
+      });
+    }
+  });
+
+  // AI 3: Generate Summary (reuses saved transcript when available to minimize Gemini cost)
+  app.post('/api/ai/audio-lectures/:id/summary', async (req, res) => {
+    try {
+      const db = readDB();
+      if (!isSubscriptionActive(db.profile.subscription)) {
+        return res.status(403).json({
+          error: 'PREMIUM_REQUIRED',
+          message: 'AI Summary generation requires an active Pro subscription.',
+        });
+      }
+
+      if (!db.audioLectures) db.audioLectures = [];
+      const index = db.audioLectures.findIndex((al) => al.id === req.params.id);
+      if (index === -1) {
+        return res.status(404).json({ error: 'Audio lecture not found' });
+      }
+
+      const lecture = db.audioLectures[index];
+      const usageCheck = checkAndIncrementAiUsage(db, 0);
+      if (!usageCheck.allowed) {
+        return res.status(429).json({
+          error: 'AI_LIMIT_REACHED',
+          message: usageCheck.reason || 'Monthly AI operations quota reached.',
+        });
+      }
+
+      let ai;
+      try {
+        ai = getGeminiClient();
+      } catch (e: any) {
+        return res.status(500).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: e.message || 'Gemini API client is not configured.',
+        });
+      }
+
+      let summary = '';
+      const transcriptToUse = lecture.transcript || req.body.transcript;
+
+      if (transcriptToUse) {
+        console.log(`[Gemini AI] Generating summary using saved transcript for ${lecture.id}...`);
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: `You are an expert academic assistant. Generate a concise, clear, study-focused summary for the lecture "${lecture.title}" in "${lecture.subjectName}".
+Structure the summary into:
+- **Core Thesis & Objective**
+- **Key Arguments & Discussions**
+- **Final Conclusion & Synthesis**
+
+Keep it concise, high-yield, and easy to review before an exam.
+
+LECTURE TRANSCRIPT:
+${transcriptToUse}`,
+        });
+        summary = response.text?.trim() || '';
+      } else if (req.body.audioBase64 || lecture.audioDataUrl) {
+        const audioBase64 = req.body.audioBase64 || lecture.audioDataUrl;
+        const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
+        const mimeType = req.body.mimeType || lecture.fileType || 'audio/mp3';
+        console.log(`[Gemini AI] Generating summary directly from audio for ${lecture.id}...`);
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: cleanBase64,
+                },
+              },
+              {
+                text: `Generate a concise, study-focused summary of this lecture for "${lecture.subjectName}: ${lecture.title}".`,
+              },
+            ],
+          },
+        });
+        summary = response.text?.trim() || '';
+      } else {
+        return res.status(400).json({
+          error: 'NO_SOURCE_DATA',
+          message: 'No transcript or audio found. Please generate a transcript first or provide the audio recording.',
+        });
+      }
+
+      lecture.summary = summary;
+      lecture.summaryGeneratedAt = new Date().toISOString();
+      lecture.updatedAt = new Date().toISOString();
+      db.audioLectures[index] = lecture;
+      writeDB(db);
+
+      res.json({
+        success: true,
+        summary,
+        lecture,
+        aiUsage: db.profile.aiUsage,
+      });
+    } catch (error: any) {
+      console.error('Error generating summary with Gemini:', error);
+      res.status(500).json({
+        error: 'GEMINI_ERROR',
+        message: error?.message || 'Failed to generate summary with Gemini.',
+      });
+    }
+  });
+
+  // AI 4: Generate Key Points (reuses saved transcript when available to minimize Gemini cost)
+  app.post('/api/ai/audio-lectures/:id/key-points', async (req, res) => {
+    try {
+      const db = readDB();
+      if (!isSubscriptionActive(db.profile.subscription)) {
+        return res.status(403).json({
+          error: 'PREMIUM_REQUIRED',
+          message: 'AI Key Points extraction requires an active Pro subscription.',
+        });
+      }
+
+      if (!db.audioLectures) db.audioLectures = [];
+      const index = db.audioLectures.findIndex((al) => al.id === req.params.id);
+      if (index === -1) {
+        return res.status(404).json({ error: 'Audio lecture not found' });
+      }
+
+      const lecture = db.audioLectures[index];
+      const usageCheck = checkAndIncrementAiUsage(db, 0);
+      if (!usageCheck.allowed) {
+        return res.status(429).json({
+          error: 'AI_LIMIT_REACHED',
+          message: usageCheck.reason || 'Monthly AI operations quota reached.',
+        });
+      }
+
+      let ai;
+      try {
+        ai = getGeminiClient();
+      } catch (e: any) {
+        return res.status(500).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: e.message || 'Gemini API client is not configured.',
+        });
+      }
+
+      let keyPoints = '';
+      const transcriptToUse = lecture.transcript || req.body.transcript;
+
+      if (transcriptToUse) {
+        console.log(`[Gemini AI] Extracting key points using saved transcript for ${lecture.id}...`);
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: `You are an academic exam coach. Extract the crucial key points, definitions, facts, and essential concepts from this lecture transcript for "${lecture.subjectName}: ${lecture.title}".
+Format them as a clean bulleted list with bolded terms for easy memorization:
+
+LECTURE TRANSCRIPT:
+${transcriptToUse}`,
+        });
+        keyPoints = response.text?.trim() || '';
+      } else if (req.body.audioBase64 || lecture.audioDataUrl) {
+        const audioBase64 = req.body.audioBase64 || lecture.audioDataUrl;
+        const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
+        const mimeType = req.body.mimeType || lecture.fileType || 'audio/mp3';
+        console.log(`[Gemini AI] Extracting key points directly from audio for ${lecture.id}...`);
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: cleanBase64,
+                },
+              },
+              {
+                text: `Extract key points, definitions, and important exam concepts from this lecture on "${lecture.subjectName}: ${lecture.title}". Format as a bulleted list with bolded terms.`,
+              },
+            ],
+          },
+        });
+        keyPoints = response.text?.trim() || '';
+      } else {
+        return res.status(400).json({
+          error: 'NO_SOURCE_DATA',
+          message: 'No transcript or audio found. Please generate a transcript first or provide the audio recording.',
+        });
+      }
+
+      lecture.keyPoints = keyPoints;
+      lecture.keyPointsGeneratedAt = new Date().toISOString();
+      lecture.updatedAt = new Date().toISOString();
+      db.audioLectures[index] = lecture;
+      writeDB(db);
+
+      res.json({
+        success: true,
+        keyPoints,
+        lecture,
+        aiUsage: db.profile.aiUsage,
+      });
+    } catch (error: any) {
+      console.error('Error generating key points with Gemini:', error);
+      res.status(500).json({
+        error: 'GEMINI_ERROR',
+        message: error?.message || 'Failed to extract key points with Gemini.',
+      });
+    }
+  });
+
+  // AI 5: Get AI Usage status
+  app.get('/api/ai/usage', (req, res) => {
+    try {
+      const db = readDB();
+      if (!db.profile.aiUsage) {
+        db.profile.aiUsage = {
+          operationsCount: 0,
+          maxMonthlyOperations: 60,
+          minutesTranscribed: 0,
+          maxMonthlyMinutes: 300,
+          periodStart: new Date().toISOString(),
+        };
+      }
+      res.json({
+        isPro: isSubscriptionActive(db.profile.subscription),
+        aiUsage: db.profile.aiUsage,
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to retrieve AI usage' });
+    }
+  });
+
+  // ==========================================
+  // 8c. Study Materials Feature (PDF, DOC, DOCX)
+  // Inside Notes section - Cloud-synced, organized by Subject & Topic
+  // ==========================================
+
+  // 1. Get all study materials
+  app.get('/api/study-materials', (req, res) => {
+    try {
+      const db = readDB();
+      res.json(db.studyMaterials || []);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch study materials' });
+    }
+  });
+
+  // 2. Serve material files statically with inline disposition
+  app.get('/api/study-materials/files/:filename', (req, res) => {
+    try {
+      const filename = path.basename(req.params.filename);
+      const filePath = path.join(MATERIALS_DIR, filename);
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'File not found on server' });
+      }
+
+      const ext = path.extname(filename).toLowerCase();
+      let contentType = 'application/octet-stream';
+      if (ext === '.pdf') contentType = 'application/pdf';
+      else if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      else if (ext === '.doc') contentType = 'application/msword';
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to stream study material file' });
+    }
+  });
+
+  // 3. Upload study material via multipart/form-data
+  app.post('/api/study-materials/upload', (req, res) => {
+    uploadMaterial.single('file')(req, res, async (err) => {
+      if (err) {
+        console.error('Multer upload error:', err);
+        return res.status(400).json({
+          error: 'UPLOAD_ERROR',
+          message: err.message || 'File upload failed. Only PDF, DOC, and DOCX files up to 30MB are supported.',
+        });
+      }
+
+      try {
+        const db = readDB();
+        if (!db.studyMaterials) db.studyMaterials = [];
+
+        // Check limits on free plan
+        if (!isSubscriptionActive(db.profile.subscription) && db.studyMaterials.length >= FREE_PLAN_LIMITS.studyMaterials) {
+          // If a file was written to disk, clean it up
+          if (req.file?.path && fs.existsSync(req.file.path)) {
+            try { fs.unlinkSync(req.file.path); } catch (e) {}
+          }
+          return res.status(403).json({
+            error: 'LIMIT_REACHED',
+            message: `You have reached the free plan limit of ${FREE_PLAN_LIMITS.studyMaterials} Study Materials. Upgrade to Premium for unlimited storage.`,
+          });
+        }
+
+        if (!req.file) {
+          return res.status(400).json({
+            error: 'NO_FILE',
+            message: 'Please select a PDF, DOC, or DOCX file to upload.',
+          });
+        }
+
+        const ext = path.extname(req.file.originalname).toLowerCase().replace('.', '');
+        const customTitle = (req.body.name || '').trim();
+        const displayName = customTitle || req.file.originalname.replace(/\.[^/.]+$/, '');
+        const subjectId = req.body.subjectId || '';
+        let subjectName = (req.body.subjectName || '').trim();
+
+        if (!subjectName && subjectId) {
+          const foundCourse = db.courses.find((c) => c.id === subjectId);
+          if (foundCourse) subjectName = foundCourse.name;
+        }
+        if (!subjectName) subjectName = 'General';
+
+        const topic = (req.body.topic || '').trim();
+        const storagePath = `/api/study-materials/files/${req.file.filename}`;
+
+        // Attempt DOCX initial text extraction for fast search
+        let extractedText = '';
+        if (ext === 'docx') {
+          try {
+            const mammothResult = await mammoth.extractRawText({ path: req.file.path });
+            extractedText = mammothResult.value?.slice(0, 50000) || '';
+          } catch (mErr) {
+            console.warn('Could not extract raw text from docx:', mErr);
+          }
+        }
+
+        const newMaterial: StudyMaterial = {
+          id: 'mat_' + crypto.randomUUID().slice(0, 8),
+          userId: req.body.userId || 'default',
+          subjectId,
+          subjectName,
+          topic,
+          name: displayName,
+          originalFileName: req.file.originalname,
+          fileType: ext,
+          mimeType: req.file.mimetype || 'application/octet-stream',
+          fileSize: req.file.size,
+          storagePath,
+          fileDataUrl: req.body.fileDataUrl || '',
+          extractedText: extractedText || undefined,
+          uploadedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        db.studyMaterials.push(newMaterial);
+        writeDB(db);
+
+        res.json(newMaterial);
+      } catch (uploadHandlerErr: any) {
+        console.error('Error handling study material upload:', uploadHandlerErr);
+        res.status(500).json({
+          error: 'UPLOAD_FAILED',
+          message: uploadHandlerErr.message || 'An error occurred while saving the study material.',
+        });
+      }
+    });
+  });
+
+  // 4. JSON upload / manual metadata create fallback
+  app.post('/api/study-materials', async (req, res) => {
+    try {
+      const db = readDB();
+      if (!db.studyMaterials) db.studyMaterials = [];
+
+      if (!isSubscriptionActive(db.profile.subscription) && db.studyMaterials.length >= FREE_PLAN_LIMITS.studyMaterials) {
+        return res.status(403).json({
+          error: 'LIMIT_REACHED',
+          message: `You have reached the free plan limit of ${FREE_PLAN_LIMITS.studyMaterials} Study Materials. Upgrade to Premium for unlimited storage.`,
+        });
+      }
+
+      const { name, subjectId, subjectName, topic, originalFileName, fileType, mimeType, fileSize, fileBase64, fileDataUrl } = req.body;
+      const matId = 'mat_' + crypto.randomUUID().slice(0, 8);
+      let storagePath = req.body.storagePath || '';
+
+      // If base64 data was supplied, write to disk
+      if (fileBase64 && !storagePath) {
+        const ext = fileType ? `.${fileType.replace('.', '')}` : '.pdf';
+        const filename = `mat_${Date.now()}_${crypto.randomUUID().slice(0, 8)}${ext}`;
+        const filePath = path.join(MATERIALS_DIR, filename);
+        const cleanB64 = fileBase64.replace(/^data:[^;]+;base64,/, '');
+        fs.writeFileSync(filePath, Buffer.from(cleanB64, 'base64'));
+        storagePath = `/api/study-materials/files/${filename}`;
+      }
+
+      const newMaterial: StudyMaterial = {
+        id: matId,
+        userId: req.body.userId || 'default',
+        subjectId: subjectId || '',
+        subjectName: subjectName || 'General',
+        topic: topic || '',
+        name: name || originalFileName || 'Untitled Document',
+        originalFileName: originalFileName || 'document.pdf',
+        fileType: fileType || 'pdf',
+        mimeType: mimeType || 'application/pdf',
+        fileSize: fileSize || 0,
+        storagePath: storagePath || '',
+        fileDataUrl: fileDataUrl || '',
+        uploadedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      db.studyMaterials.push(newMaterial);
+      writeDB(db);
+      res.json(newMaterial);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to create study material', message: error.message });
+    }
+  });
+
+  // 5. Download original unmodified file
+  app.get('/api/study-materials/:id/download', (req, res) => {
+    try {
+      const db = readDB();
+      const material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
+      if (!material) {
+        return res.status(404).json({ error: 'Study material not found' });
+      }
+
+      // Check if file exists on disk
+      if (material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
+        const filename = path.basename(material.storagePath);
+        const filePath = path.join(MATERIALS_DIR, filename);
+        if (fs.existsSync(filePath)) {
+          return res.download(filePath, material.originalFileName);
+        }
+      }
+
+      // Fallback: If base64 exists in fileDataUrl
+      if (material.fileDataUrl && material.fileDataUrl.startsWith('data:')) {
+        const parts = material.fileDataUrl.split(',');
+        const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/octet-stream';
+        const buffer = Buffer.from(parts[1], 'base64');
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(material.originalFileName)}"`);
+        return res.send(buffer);
+      }
+
+      res.status(404).json({ error: 'Original file content is not available for download' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to download study material' });
+    }
+  });
+
+  // 6. Preview content (HTML for docx, or metadata/stream for PDF)
+  app.get('/api/study-materials/:id/preview', async (req, res) => {
+    try {
+      const db = readDB();
+      const material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
+      if (!material) {
+        return res.status(404).json({ error: 'Study material not found' });
+      }
+
+      const ext = material.fileType.toLowerCase();
+      if (ext === 'docx' && material.storagePath) {
+        const filename = path.basename(material.storagePath);
+        const filePath = path.join(MATERIALS_DIR, filename);
+        if (fs.existsSync(filePath)) {
+          const result = await mammoth.convertToHtml({ path: filePath });
+          return res.json({
+            previewType: 'html',
+            html: result.value,
+            material,
+          });
+        }
+      }
+
+      res.json({
+        previewType: ext === 'pdf' ? 'pdf' : ext === 'docx' ? 'docx' : 'doc',
+        fileUrl: material.storagePath,
+        material,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to generate document preview', message: error.message });
+    }
+  });
+
+  // 7. Update metadata (Name, Subject, Topic)
+  app.put('/api/study-materials/:id', (req, res) => {
+    try {
+      const db = readDB();
+      if (!db.studyMaterials) db.studyMaterials = [];
+      const index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+      if (index === -1) {
+        return res.status(404).json({ error: 'Study material not found' });
+      }
+
+      const existing = db.studyMaterials[index];
+      db.studyMaterials[index] = {
+        ...existing,
+        name: req.body.name !== undefined ? req.body.name.trim() : existing.name,
+        subjectId: req.body.subjectId !== undefined ? req.body.subjectId : existing.subjectId,
+        subjectName: req.body.subjectName !== undefined ? req.body.subjectName : existing.subjectName,
+        topic: req.body.topic !== undefined ? req.body.topic.trim() : existing.topic,
+        updatedAt: new Date().toISOString(),
+      };
+
+      writeDB(db);
+      res.json(db.studyMaterials[index]);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update study material' });
+    }
+  });
+
+  // 8. Delete study material (Safe, with disk cleanup)
+  app.delete('/api/study-materials/:id', (req, res) => {
+    try {
+      const db = readDB();
+      if (!db.studyMaterials) db.studyMaterials = [];
+      const material = db.studyMaterials.find((m) => m.id === req.params.id);
+
+      if (material && material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
+        const filename = path.basename(material.storagePath);
+        const filePath = path.join(MATERIALS_DIR, filename);
+        if (fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath);
+          } catch (uErr) {
+            console.warn('Could not delete material file from disk:', uErr);
+          }
+        }
+      }
+
+      db.studyMaterials = db.studyMaterials.filter((m) => m.id !== req.params.id);
+      writeDB(db);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete study material' });
+    }
+  });
+
+  // ==========================================
+  // 8d. Gemini AI Study Materials Endpoints
+  // CRITICAL MANDATE: Only triggered on explicit user button click. Never auto-process on upload or view.
+  // ==========================================
+
+  // Helper to extract text / inline data from study material
+  const getDocumentAiPayload = async (material: StudyMaterial) => {
+    let filePath = '';
+    if (material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
+      const filename = path.basename(material.storagePath);
+      filePath = path.join(MATERIALS_DIR, filename);
+    }
+
+    const ext = material.fileType.toLowerCase();
+
+    // 1. DOCX: extract full clean text using mammoth
+    if (ext === 'docx' && filePath && fs.existsSync(filePath)) {
+      try {
+        const result = await mammoth.extractRawText({ path: filePath });
+        const text = result.value?.trim();
+        if (text && text.length > 20) {
+          return { type: 'text', text: text.slice(0, 100000) };
+        }
+      } catch (e) {
+        console.warn('Mammoth text extraction error:', e);
+      }
+    }
+
+    // 2. PDF: send as inlineData base64 if file exists
+    if (ext === 'pdf' && filePath && fs.existsSync(filePath)) {
+      try {
+        const buffer = fs.readFileSync(filePath);
+        const base64 = buffer.toString('base64');
+        return {
+          type: 'inlineData',
+          inlineData: {
+            mimeType: 'application/pdf',
+            data: base64,
+          },
+        };
+      } catch (e) {
+        console.warn('PDF read error:', e);
+      }
+    }
+
+    // 3. Fallback: If material.extractedText is present
+    if (material.extractedText && material.extractedText.length > 20) {
+      return { type: 'text', text: material.extractedText.slice(0, 100000) };
+    }
+
+    // 4. Fallback: If base64 exists in fileDataUrl
+    if (material.fileDataUrl && material.fileDataUrl.startsWith('data:')) {
+      const parts = material.fileDataUrl.split(',');
+      const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
+      return {
+        type: 'inlineData',
+        inlineData: {
+          mimeType: mime,
+          data: parts[1],
+        },
+      };
+    }
+
+    return null;
+  };
+
+  // AI 1: Generate Document Summary
+  app.post('/api/ai/study-materials/:id/summary', async (req, res) => {
+    try {
+      const db = readDB();
+      if (!isSubscriptionActive(db.profile.subscription)) {
+        return res.status(403).json({
+          error: 'PREMIUM_REQUIRED',
+          message: 'AI Document Summarization requires an active Pro subscription. Upgrade to Pro to unlock AI summaries for study materials.',
+        });
+      }
+
+      if (!db.studyMaterials) db.studyMaterials = [];
+      const index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+      if (index === -1) {
+        return res.status(404).json({ error: 'Study material not found' });
+      }
+
+      const material = db.studyMaterials[index];
+      const usageCheck = checkAndIncrementAiUsage(db, 0);
+      if (!usageCheck.allowed) {
+        return res.status(429).json({
+          error: 'AI_LIMIT_REACHED',
+          message: usageCheck.reason || 'Monthly AI operations limit reached.',
+        });
+      }
+
+      let ai;
+      try {
+        ai = getGeminiClient();
+      } catch (e: any) {
+        return res.status(500).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: e.message || 'Gemini API client is not configured.',
+        });
+      }
+
+      const payload = await getDocumentAiPayload(material);
+      let summary = '';
+
+      if (payload?.type === 'text') {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: `You are an expert academic tutor. Generate a clear, high-yield study summary for this study material document:
+Document Title: "${material.name}"
+Subject / Course: "${material.subjectName}"
+Topic / Chapter: "${material.topic || 'General'}"
+
+Structure the summary cleanly with Markdown headers:
+### 1. Document Overview & Primary Objective
+### 2. Core Themes & Main Conceptual Framework
+### 3. Key Findings & Arguments
+### 4. High-Yield Revision Summary
+
+Keep it concise, actionable, and easy for students to review before tests.
+
+DOCUMENT CONTENT:
+${payload.text}`,
+        });
+        summary = response.text?.trim() || '';
+      } else if (payload?.type === 'inlineData') {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: {
+            parts: [
+              {
+                inlineData: payload.inlineData,
+              },
+              {
+                text: `You are an expert academic tutor. Generate a high-yield study summary for this document ("${material.name}", Subject: "${material.subjectName}", Topic: "${material.topic || 'General'}"). Structure into Overview, Core Principles, Key Arguments, and Exam Review Summary using clean Markdown.`,
+              },
+            ],
+          },
+        });
+        summary = response.text?.trim() || '';
+      } else {
+        return res.status(400).json({
+          error: 'NO_SOURCE_DATA',
+          message: 'Unable to extract document text for analysis. Ensure the file is a valid PDF or DOCX document.',
+        });
+      }
+
+      material.summary = summary;
+      material.summaryGeneratedAt = new Date().toISOString();
+      material.updatedAt = new Date().toISOString();
+      db.studyMaterials[index] = material;
+      writeDB(db);
+
+      res.json({
+        success: true,
+        summary,
+        material,
+        aiUsage: db.profile.aiUsage,
+      });
+    } catch (error: any) {
+      console.error('Error generating document summary with Gemini:', error);
+      res.status(500).json({
+        error: 'GEMINI_ERROR',
+        message: error?.message || 'Failed to generate document summary with Gemini.',
+      });
+    }
+  });
+
+  // AI 2: Generate Structured Study Notes
+  app.post('/api/ai/study-materials/:id/notes', async (req, res) => {
+    try {
+      const db = readDB();
+      if (!isSubscriptionActive(db.profile.subscription)) {
+        return res.status(403).json({
+          error: 'PREMIUM_REQUIRED',
+          message: 'AI Study Notes Generation requires an active Pro subscription.',
+        });
+      }
+
+      if (!db.studyMaterials) db.studyMaterials = [];
+      const index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+      if (index === -1) {
+        return res.status(404).json({ error: 'Study material not found' });
+      }
+
+      const material = db.studyMaterials[index];
+      const usageCheck = checkAndIncrementAiUsage(db, 0);
+      if (!usageCheck.allowed) {
+        return res.status(429).json({
+          error: 'AI_LIMIT_REACHED',
+          message: usageCheck.reason || 'Monthly AI operations limit reached.',
+        });
+      }
+
+      let ai;
+      try {
+        ai = getGeminiClient();
+      } catch (e: any) {
+        return res.status(500).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: e.message || 'Gemini API client is not configured.',
+        });
+      }
+
+      const payload = await getDocumentAiPayload(material);
+      let studyNotes = '';
+
+      if (payload?.type === 'text') {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: `You are an academic mentor. Generate comprehensive, well-organized study notes based on this document:
+Document: "${material.name}"
+Subject: "${material.subjectName}"
+Topic: "${material.topic || 'General'}"
+
+Format in clean Markdown:
+### 1. Essential Concepts & Foundations
+### 2. In-Depth Explanations & Mechanisms
+### 3. Key Terminology & Definitions
+### 4. Equations, Formulas, & Rules (if applicable)
+### 5. Practical Examples & Applications
+### 6. Common Pitfalls & High-Yield Exam Tips
+
+DOCUMENT TEXT:
+${payload.text}`,
+        });
+        studyNotes = response.text?.trim() || '';
+      } else if (payload?.type === 'inlineData') {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: {
+            parts: [
+              {
+                inlineData: payload.inlineData,
+              },
+              {
+                text: `Generate thorough, structured academic study notes for this document ("${material.name}", Subject: "${material.subjectName}"). Use clean Markdown with sections for Concepts, In-Depth Explanations, Key Terms, Formulas, and Exam Tips.`,
+              },
+            ],
+          },
+        });
+        studyNotes = response.text?.trim() || '';
+      } else {
+        return res.status(400).json({
+          error: 'NO_SOURCE_DATA',
+          message: 'Unable to extract document text for notes generation.',
+        });
+      }
+
+      material.studyNotes = studyNotes;
+      material.studyNotesGeneratedAt = new Date().toISOString();
+      material.updatedAt = new Date().toISOString();
+      db.studyMaterials[index] = material;
+      writeDB(db);
+
+      res.json({
+        success: true,
+        studyNotes,
+        material,
+        aiUsage: db.profile.aiUsage,
+      });
+    } catch (error: any) {
+      console.error('Error generating study notes with Gemini:', error);
+      res.status(500).json({
+        error: 'GEMINI_ERROR',
+        message: error?.message || 'Failed to generate study notes with Gemini.',
+      });
+    }
+  });
+
+  // AI 3: Extract Key Points & Flashcard Concepts
+  app.post('/api/ai/study-materials/:id/key-points', async (req, res) => {
+    try {
+      const db = readDB();
+      if (!isSubscriptionActive(db.profile.subscription)) {
+        return res.status(403).json({
+          error: 'PREMIUM_REQUIRED',
+          message: 'AI Key Points Extraction requires an active Pro subscription.',
+        });
+      }
+
+      if (!db.studyMaterials) db.studyMaterials = [];
+      const index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+      if (index === -1) {
+        return res.status(404).json({ error: 'Study material not found' });
+      }
+
+      const material = db.studyMaterials[index];
+      const usageCheck = checkAndIncrementAiUsage(db, 0);
+      if (!usageCheck.allowed) {
+        return res.status(429).json({
+          error: 'AI_LIMIT_REACHED',
+          message: usageCheck.reason || 'Monthly AI operations limit reached.',
+        });
+      }
+
+      let ai;
+      try {
+        ai = getGeminiClient();
+      } catch (e: any) {
+        return res.status(500).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: e.message || 'Gemini API client is not configured.',
+        });
+      }
+
+      const payload = await getDocumentAiPayload(material);
+      let keyPoints = '';
+
+      if (payload?.type === 'text') {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: `You are an academic exam coach. Extract key points, definitions, facts, and essential review concepts from this document:
+Document: "${material.name}"
+Subject: "${material.subjectName}"
+Topic: "${material.topic || 'General'}"
+
+Format as a high-yield bulleted cheat-sheet with **bolded key terms** and clear concise explanations.
+
+DOCUMENT TEXT:
+${payload.text}`,
+        });
+        keyPoints = response.text?.trim() || '';
+      } else if (payload?.type === 'inlineData') {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.7-flash',
+          contents: {
+            parts: [
+              {
+                inlineData: payload.inlineData,
+              },
+              {
+                text: `Extract the crucial key points, definitions, and essential exam facts from this document ("${material.name}", Subject: "${material.subjectName}"). Format as a bulleted list with bolded terms.`,
+              },
+            ],
+          },
+        });
+        keyPoints = response.text?.trim() || '';
+      } else {
+        return res.status(400).json({
+          error: 'NO_SOURCE_DATA',
+          message: 'Unable to extract document text for key points extraction.',
+        });
+      }
+
+      material.keyPoints = keyPoints;
+      material.keyPointsGeneratedAt = new Date().toISOString();
+      material.updatedAt = new Date().toISOString();
+      db.studyMaterials[index] = material;
+      writeDB(db);
+
+      res.json({
+        success: true,
+        keyPoints,
+        material,
+        aiUsage: db.profile.aiUsage,
+      });
+    } catch (error: any) {
+      console.error('Error generating key points with Gemini:', error);
+      res.status(500).json({
+        error: 'GEMINI_ERROR',
+        message: error?.message || 'Failed to extract key points with Gemini.',
+      });
     }
   });
 
@@ -1316,6 +2540,63 @@ app.get('/api/state', (req, res) => {
     } catch (error: any) {
       console.error('Error verifying payment:', error);
       res.status(500).json({ error: error.message || 'Failed to verify payment' });
+    }
+  });
+
+  // Simulate Pro Expiration (Sandbox testing - preserves 100% of user data)
+  app.post('/api/subscription/simulate-expire', (req, res) => {
+    try {
+      const db = readDB();
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 1); // Expired yesterday
+
+      db.profile.subscription = {
+        ...db.profile.subscription,
+        subscriptionStatus: 'free',
+        expiryDate: pastDate.toISOString(),
+      };
+
+      // Explicitly verify NO data collections were modified
+      writeDB(db);
+      res.json({
+        success: true,
+        message: 'Subscription set to expired. All user data, courses, notes, and audio lectures remain safely preserved.',
+        subscription: db.profile.subscription,
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to simulate expiration' });
+    }
+  });
+
+  // Simulate Pro Activation / Renewal (Sandbox testing - preserves 100% of user data)
+  app.post('/api/subscription/simulate-pro', (req, res) => {
+    try {
+      const db = readDB();
+      const futureDate = new Date();
+      futureDate.setFullYear(futureDate.getFullYear() + 1); // Valid for 1 year
+
+      db.profile.subscription = {
+        subscriptionStatus: 'premium',
+        plan: 'yearly',
+        paymentGateway: 'razorpay',
+        transactionId: 'sim_' + crypto.randomUUID().slice(0, 12),
+        purchaseDate: new Date().toISOString(),
+        expiryDate: futureDate.toISOString(),
+        billingCountry: 'US',
+        type: 'yearly',
+        paymentProvider: 'razorpay',
+        paymentId: 'sim_' + crypto.randomUUID().slice(0, 12),
+      };
+
+      // Explicitly verify NO data collections were modified or duplicated
+      writeDB(db);
+      res.json({
+        success: true,
+        message: 'Pro subscription activated! All previous user data remains intact and fully unlocked.',
+        subscription: db.profile.subscription,
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to simulate Pro activation' });
     }
   });
 

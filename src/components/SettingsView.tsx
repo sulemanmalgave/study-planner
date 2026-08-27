@@ -12,6 +12,7 @@ interface SettingsViewProps {
   onUpdateProfile: (profile: Partial<UserProfile>) => Promise<void>;
   onResetDatabase: () => Promise<void>;
   onTriggerUpgrade: () => void;
+  onRefreshState?: () => void;
 }
 
 export default function SettingsView({
@@ -23,15 +24,57 @@ export default function SettingsView({
   examsCount,
   onUpdateProfile,
   onResetDatabase,
-  onTriggerUpgrade
+  onTriggerUpgrade,
+  onRefreshState,
 }: SettingsViewProps) {
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
 
-  const isPremium = profile.subscription.subscriptionStatus === 'premium' || profile.subscription.plan === 'premium';
+  const isPremium = (
+    (profile.subscription.subscriptionStatus === 'premium' || profile.subscription.plan === 'premium' || profile.subscription.plan === 'monthly' || profile.subscription.plan === 'yearly' || profile.subscription.plan === 'quarterly') &&
+    (!profile.subscription.expiryDate || new Date(profile.subscription.expiryDate).getTime() > Date.now())
+  );
+
+  const hasExpiredSubscription = Boolean(
+    !isPremium &&
+    (profile.subscription.expiryDate || profile.subscription.transactionId || profile.subscription.plan)
+  );
+
+  const handleSimulateExpire = async () => {
+    setIsSimulating(true);
+    try {
+      const res = await fetch('/api/subscription/simulate-expire', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setUpdateMessage('Subscription expired simulated. All your courses, notes, timetable, and audio lectures remain 100% safely preserved!');
+        if (onRefreshState) onRefreshState();
+      }
+    } catch (e) {
+      setUpdateMessage('Failed to simulate subscription expiration.');
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  const handleSimulatePro = async () => {
+    setIsSimulating(true);
+    try {
+      const res = await fetch('/api/subscription/simulate-pro', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setUpdateMessage('Pro subscription activated! All previously created data is immediately available and unlocked.');
+        if (onRefreshState) onRefreshState();
+      }
+    } catch (e) {
+      setUpdateMessage('Failed to simulate Pro activation.');
+    } finally {
+      setIsSimulating(false);
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -211,17 +254,47 @@ export default function SettingsView({
                   </div>
                 </div>
               </div>
+            ) : hasExpiredSubscription ? (
+              <div className="space-y-3" id="settings-expired-details">
+                <div className="text-xs font-bold text-amber-700 uppercase flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                  <span>Pro Subscription Expired</span>
+                </div>
+                <div className="p-2.5 bg-amber-50/70 border border-amber-200/60 rounded-xl text-[10px] text-amber-900 leading-relaxed">
+                  <strong>Data Safe &amp; Preserved:</strong> All your previously created courses, notes, audio lectures, and study records remain completely intact. Upgrade to Pro to resume unlimited creation and live features.
+                </div>
+                <div className="text-[10px] text-[#49454F] space-y-1 font-mono">
+                  <div className="flex justify-between">
+                    <span>Previous Plan:</span>
+                    <span className="text-[#1D1B20] font-bold capitalize">{profile.subscription.plan || 'Pro'}</span>
+                  </div>
+                  {profile.subscription.expiryDate && (
+                    <div className="flex justify-between">
+                      <span>Expired On:</span>
+                      <span className="text-amber-700 font-bold">{new Date(profile.subscription.expiryDate).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={onTriggerUpgrade}
+                  className="w-full py-2 bg-gradient-to-r from-amber-500 to-yellow-600 text-white font-extrabold text-xs rounded-xl shadow hover:brightness-110 transition-all cursor-pointer"
+                  id="settings-renew-pro-button"
+                >
+                  Renew Pro Subscription
+                </button>
+              </div>
             ) : (
               <div className="space-y-3" id="settings-free-details">
                 <div className="text-xs font-bold text-[#49454F] uppercase">
                   Standard Free Account
                 </div>
                 <p className="text-[10px] text-[#49454F] leading-relaxed">
-                  You are currently restricted to basic database bounds. Upgrade to Master Syllabus to remove limits.
+                  You are currently on the basic free plan. Upgrade to Study Planner Pro to unlock unlimited courses, notes, audio lectures, and companion sync.
                 </p>
                 <button
                   onClick={onTriggerUpgrade}
-                  className="w-full py-2 bg-gradient-to-r from-amber-500 to-yellow-600 text-white font-extrabold text-xs rounded-xl shadow hover:brightness-110 transition-all"
+                  className="w-full py-2 bg-gradient-to-r from-amber-500 to-yellow-600 text-white font-extrabold text-xs rounded-xl shadow hover:brightness-110 transition-all cursor-pointer"
+                  id="settings-upgrade-pro-button"
                 >
                   Upgrade Premium
                 </button>
@@ -263,17 +336,42 @@ export default function SettingsView({
               Developer Sandbox Control
             </h4>
             <p className="text-[10px] text-[#49454F] leading-relaxed">
-              Reset database to purge all current entries, seed default screenshot examples, and restore the Free Account state.
+              Test subscription lifecycle and data preservation without losing any custom items.
             </p>
-            <button
-              onClick={handleReset}
-              disabled={isResetting}
-              className="w-full py-2 bg-[#FDECEB] text-[#B3261E] hover:bg-[#FDECEB]/80 border border-[#F9DEDC] font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
-              id="settings-sandbox-reset"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
-              <span>Restore Factory Sandbox</span>
-            </button>
+
+            <div className="space-y-2">
+              {isPremium ? (
+                <button
+                  onClick={handleSimulateExpire}
+                  disabled={isSimulating}
+                  className="w-full py-2 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                  id="settings-simulate-expire-btn"
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Simulate Pro Expiration (Safe)</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleSimulatePro}
+                  disabled={isSimulating}
+                  className="w-full py-2 bg-purple-50 text-[#6750A4] hover:bg-purple-100 border border-purple-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                  id="settings-simulate-pro-btn"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
+                  <span>Simulate Pro Activation (Safe)</span>
+                </button>
+              )}
+
+              <button
+                onClick={handleReset}
+                disabled={isResetting}
+                className="w-full py-2 bg-[#FDECEB] text-[#B3261E] hover:bg-[#FDECEB]/80 border border-[#F9DEDC] font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                id="settings-sandbox-reset"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
+                <span>Restore Factory Sandbox</span>
+              </button>
+            </div>
           </div>
 
         </div>
