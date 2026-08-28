@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { pageVariants, listItemVariants, modalVariants } from '../lib/animations';
 import { GraduationCap, Plus, Trash2, Edit2, Trophy, Clock, Loader2, AlertCircle } from 'lucide-react';
 import { Course, Exam } from '../types';
 import SubjectSelect from './SubjectSelect';
@@ -133,7 +135,14 @@ export default function ExamsView({
   };
 
   return (
-    <div className="space-y-6 text-[#1D1B20]" id="exams-view-root">
+    <motion.div 
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="space-y-6 text-[#1D1B20]" 
+      id="exams-view-root"
+    >
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-white border border-[#E1E3E1] rounded-2xl">
@@ -149,7 +158,7 @@ export default function ExamsView({
 
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full transition-all active:scale-[0.98]"
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full transition-all btn-press cursor-pointer"
           id="add-exam-button"
         >
           <Plus className="w-4 h-4" />
@@ -158,160 +167,176 @@ export default function ExamsView({
       </div>
 
       {/* Form Dialog Panel */}
-      {isFormOpen && (
-        <div className="p-5 bg-white border border-[#E1E3E1] rounded-2xl space-y-4 animate-fade-in shadow-sm" id="exam-form-panel">
-          <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-2">
-            <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
-              {editingExam ? 'Modify Exam Entry' : 'Create New Exam Board'}
-            </h3>
-            <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium">Cancel</button>
-          </div>
-
-          {errorMessage && (
-            <div className="p-3 text-xs text-[#410E0B] bg-[#FDECEB] border border-[#F9DEDC] rounded-xl flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMessage}</span>
+      <AnimatePresence>
+        {isFormOpen && (
+          <motion.div 
+            variants={modalVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="p-5 bg-white border border-[#E1E3E1] rounded-2xl space-y-4 shadow-sm" 
+            id="exam-form-panel"
+          >
+            <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-2">
+              <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
+                {editingExam ? 'Modify Exam Entry' : 'Create New Exam Board'}
+              </h3>
+              <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium btn-press cursor-pointer">Cancel</button>
             </div>
-          )}
 
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Title */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#49454F] uppercase block">Exam Title</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Linear Algebra Finals"
-                className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
+            {errorMessage && (
+              <div className="p-3 text-xs text-[#410E0B] bg-[#FDECEB] border border-[#F9DEDC] rounded-xl flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Title */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Exam Title</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Linear Algebra Finals"
+                  className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
+                />
+              </div>
+
+              {/* Course Link */}
+              <SubjectSelect
+                courses={courses}
+                value={courseId}
+                onChange={setCourseId}
+                onAddCourse={onAddCourse}
+                label="Related Subject"
+                id="exam-course-select"
               />
-            </div>
 
-            {/* Course Link */}
-            <SubjectSelect
-              courses={courses}
-              value={courseId}
-              onChange={setCourseId}
-              onAddCourse={onAddCourse}
-              label="Related Subject"
-              id="exam-course-select"
-            />
+              {/* Date */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Exam Date & Time</label>
+                <input
+                  type="datetime-local"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
+                />
+              </div>
 
-            {/* Date */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#49454F] uppercase block">Exam Date & Time</label>
-              <input
-                type="datetime-local"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
-              />
-            </div>
+              {/* Description */}
+              <div className="space-y-1 md:col-span-2">
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Revision Topics & Study Instructions</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  placeholder="Formulas to remember, locations, required stationary..."
+                  className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none resize-none"
+                />
+              </div>
 
-            {/* Description */}
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-[10px] font-bold text-[#49454F] uppercase block">Revision Topics & Study Instructions</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                placeholder="Formulas to remember, locations, required stationary..."
-                className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none resize-none"
-              />
-            </div>
-
-            <div className="md:col-span-2 pt-2 flex justify-end">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-6 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full flex items-center justify-center gap-1.5 transition-colors shadow-sm"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <span>{editingExam ? 'Save Changes' : 'Schedule Exam'}</span>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+              <div className="md:col-span-2 pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full flex items-center justify-center gap-1.5 transition-colors shadow-sm btn-press cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <span>{editingExam ? 'Save Changes' : 'Schedule Exam'}</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Grid of Scheduled Exams */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="exams-grid-list">
         {exams.length > 0 ? (
-          exams.map((exam) => {
-            const isCompleted = exam.status === 'completed';
-            const color = getCourseColor(exam.courseId);
-            const countdown = getCountdownString(exam.date);
+          <AnimatePresence mode="popLayout">
+            {exams.map((exam) => {
+              const isCompleted = exam.status === 'completed';
+              const color = getCourseColor(exam.courseId);
+              const countdown = getCountdownString(exam.date);
 
-            return (
-              <div
-                key={exam.id}
-                className={`p-5 bg-white border rounded-2xl flex flex-col justify-between gap-4 transition-all hover:shadow-sm ${
-                  isCompleted ? 'border-[#E1E3E1]/70 opacity-70' : 'border-[#E1E3E1]'
-                }`}
-                id={`exam-card-${exam.id}`}
-              >
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h4 className={`text-xs font-bold leading-snug truncate ${isCompleted ? 'line-through text-[#79747E]' : 'text-[#1D1B20]'}`}>
-                        {exam.name}
-                      </h4>
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full mt-1.5 inline-block" style={{ backgroundColor: color + '15', color }}>
-                        {courses.find(c => c.id === exam.courseId)?.name || 'Subject'}
-                      </span>
+              return (
+                <motion.div
+                  key={exam.id}
+                  layout
+                  variants={listItemVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  className={`p-5 bg-white border rounded-2xl flex flex-col justify-between gap-4 transition-all card-interactive hover:shadow-sm ${
+                    isCompleted ? 'border-[#E1E3E1]/70 opacity-70' : 'border-[#E1E3E1]'
+                  }`}
+                  id={`exam-card-${exam.id}`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h4 className={`text-xs font-bold leading-snug truncate ${isCompleted ? 'line-through text-[#79747E]' : 'text-[#1D1B20]'}`}>
+                          {exam.name}
+                        </h4>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full mt-1.5 inline-block" style={{ backgroundColor: color + '15', color }}>
+                          {courses.find(c => c.id === exam.courseId)?.name || 'Subject'}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => handleToggleStatus(exam)}
+                        className={`px-2 py-1 text-[8px] font-black tracking-wider uppercase rounded-lg border transition-colors btn-press cursor-pointer ${
+                          isCompleted
+                            ? 'bg-[#EADDFF] border-[#D0BCFF] text-[#21005D] hover:bg-[#EADDFF]/80'
+                            : 'bg-[#FFF4E5] border-[#FFE2CC] text-[#D05C00] hover:bg-[#FFF4E5]/80'
+                        }`}
+                      >
+                        {isCompleted ? 'Completed' : 'Upcoming'}
+                      </button>
                     </div>
 
+                    {exam.description && (
+                      <p className="text-[10px] text-[#49454F] line-clamp-2 leading-relaxed">{exam.description}</p>
+                    )}
+                  </div>
+
+                  <div className="border-t border-[#E1E3E1] pt-3 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[10px] text-[#49454F] font-mono font-medium">
+                      <Clock className="w-3.5 h-3.5 text-[#79747E]" />
+                      <span>{new Date(exam.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    </div>
+
+                    {!isCompleted && (
+                      <span className="text-[10px] font-black text-[#D05C00] uppercase tracking-wider animate-pulse flex items-center gap-1">
+                        <Trophy className="w-3 h-3 text-[#D05C00]" />
+                        {countdown}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 justify-end border-t border-[#E1E3E1] mt-2 pt-2">
                     <button
-                      onClick={() => handleToggleStatus(exam)}
-                      className={`px-2 py-1 text-[8px] font-black tracking-wider uppercase rounded-lg border transition-colors ${
-                        isCompleted
-                          ? 'bg-[#EADDFF] border-[#D0BCFF] text-[#21005D] hover:bg-[#EADDFF]/80'
-                          : 'bg-[#FFF4E5] border-[#FFE2CC] text-[#D05C00] hover:bg-[#FFF4E5]/80'
-                      }`}
+                      onClick={() => handleOpenEdit(exam)}
+                      className="p-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-lg border border-[#E1E3E1] transition-colors btn-press cursor-pointer"
                     >
-                      {isCompleted ? 'Completed' : 'Upcoming'}
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => onDeleteExam(exam.id)}
+                      className="p-1.5 bg-[#FDECEB] hover:bg-[#F9DEDC] text-[#B3261E] rounded-lg border border-[#F9DEDC] transition-colors btn-press cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-
-                  {exam.description && (
-                    <p className="text-[10px] text-[#49454F] line-clamp-2 leading-relaxed">{exam.description}</p>
-                  )}
-                </div>
-
-                <div className="border-t border-[#E1E3E1] pt-3 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-[10px] text-[#49454F] font-mono font-medium">
-                    <Clock className="w-3.5 h-3.5 text-[#79747E]" />
-                    <span>{new Date(exam.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
-                  </div>
-
-                  {!isCompleted && (
-                    <span className="text-[10px] font-black text-[#D05C00] uppercase tracking-wider animate-pulse flex items-center gap-1">
-                      <Trophy className="w-3 h-3 text-[#D05C00]" />
-                      {countdown}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 justify-end border-t border-[#E1E3E1] mt-2 pt-2">
-                  <button
-                    onClick={() => handleOpenEdit(exam)}
-                    className="p-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-lg border border-[#E1E3E1] transition-colors"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => onDeleteExam(exam.id)}
-                    className="p-1.5 bg-[#FDECEB] hover:bg-[#F9DEDC] text-[#B3261E] rounded-lg border border-[#F9DEDC] transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            );
-          })
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         ) : (
           <div className="p-8 bg-white border border-[#E1E3E1] rounded-2xl text-center space-y-3 col-span-full" id="exams-empty-state">
             <GraduationCap className="w-10 h-10 text-[#79747E] mx-auto" />
@@ -321,6 +346,6 @@ export default function ExamsView({
         )}
       </div>
 
-    </div>
+    </motion.div>
   );
 }

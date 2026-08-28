@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   FileText, 
   Plus, 
@@ -15,6 +16,7 @@ import {
 import { Course, Note, StudyMaterial } from '../types';
 import SubjectSelect from './SubjectSelect';
 import StudyMaterialsSection from './StudyMaterialsSection';
+import { pageVariants, listItemVariants } from '../lib/animations';
 
 interface NotesViewProps {
   courses: Course[];
@@ -152,7 +154,14 @@ export default function NotesView({
   });
 
   return (
-    <div className="space-y-6 text-[#1D1B20]" id="notes-view-root">
+    <motion.div 
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="space-y-6 text-[#1D1B20]" 
+      id="notes-view-root"
+    >
       
       {/* Header & Sub-Navigation inside Notes */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-white border border-[#E1E3E1] rounded-3xl shadow-xs">
@@ -171,31 +180,59 @@ export default function NotesView({
         </div>
 
         {/* Section Switcher: Notebook Pages vs Study Materials */}
-        <div className="flex items-center gap-1.5 p-1 bg-[#F3EDF7] border border-[#E1E3E1] rounded-2xl">
+        <div className="flex items-center gap-1.5 p-1 bg-[#F3EDF7] border border-[#E1E3E1] rounded-2xl relative">
           <button
             onClick={() => setActiveSection('notebook')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+            className={`relative flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl transition-colors btn-press cursor-pointer z-10 ${
               activeSection === 'notebook'
-                ? 'bg-white text-[#21005D] shadow-xs'
+                ? 'text-[#21005D]'
                 : 'text-[#49454F] hover:text-[#1D1B20]'
             }`}
             id="tab-notebook-pages"
           >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>Notebook Pages ({notes.length})</span>
+            {activeSection === 'notebook' && (
+              <motion.div
+                layoutId="notesActiveSectionPill"
+                className="absolute inset-0 bg-white rounded-xl shadow-xs z-0"
+                transition={{
+                  type: 'spring',
+                  stiffness: 420,
+                  damping: 32,
+                  mass: 0.8
+                }}
+              />
+            )}
+            <span className="relative z-10 flex items-center gap-1.5">
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Notebook Pages ({notes.length})</span>
+            </span>
           </button>
 
           <button
             onClick={() => setActiveSection('materials')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+            className={`relative flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl transition-colors btn-press cursor-pointer z-10 ${
               activeSection === 'materials'
-                ? 'bg-white text-[#21005D] shadow-xs'
+                ? 'text-[#21005D]'
                 : 'text-[#49454F] hover:text-[#1D1B20]'
             }`}
             id="tab-study-materials"
           >
-            <FolderOpen className="w-3.5 h-3.5 text-[#6750A4]" />
-            <span>Study Materials ({studyMaterials.length})</span>
+            {activeSection === 'materials' && (
+              <motion.div
+                layoutId="notesActiveSectionPill"
+                className="absolute inset-0 bg-white rounded-xl shadow-xs z-0"
+                transition={{
+                  type: 'spring',
+                  stiffness: 420,
+                  damping: 32,
+                  mass: 0.8
+                }}
+              />
+            )}
+            <span className="relative z-10 flex items-center gap-1.5">
+              <FolderOpen className="w-3.5 h-3.5 text-[#6750A4]" />
+              <span>Study Materials ({studyMaterials.length})</span>
+            </span>
           </button>
         </div>
 
@@ -203,7 +240,7 @@ export default function NotesView({
         {activeSection === 'notebook' && (
           <button
             onClick={handleOpenCreate}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-2xl shadow-xs transition-all active:scale-[0.98] cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-2xl shadow-xs transition-all btn-press cursor-pointer"
             id="add-note-button"
           >
             <Plus className="w-4 h-4" />
@@ -232,162 +269,199 @@ export default function NotesView({
 
             {/* Directory lists */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-1" id="notes-directory-list">
-              {filteredNotes.length > 0 ? (
-                filteredNotes.map(note => {
-                  const isCurrent = selectedNote?.id === note.id;
-                  const courseColor = getCourseColor(note.courseId);
+              <AnimatePresence mode="popLayout">
+                {filteredNotes.length > 0 ? (
+                  filteredNotes.map(note => {
+                    const isCurrent = selectedNote?.id === note.id;
+                    const courseColor = getCourseColor(note.courseId);
 
-                  return (
-                    <div
-                      key={note.id}
-                      onClick={() => handleOpenView(note)}
-                      className={`p-3.5 border rounded-2xl cursor-pointer transition-all ${
-                        isCurrent
-                          ? 'bg-[#EADDFF] border-[#6750A4]/30 text-[#1D1B20]'
-                          : 'bg-[#F3EDF7]/40 border-[#E1E3E1] text-[#49454F] hover:border-[#E1E3E1]/80 hover:bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <h4 className="text-xs font-bold truncate">{note.title}</h4>
-                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: courseColor }} />
-                      </div>
-                      <p className="text-[10px] text-[#49454F] line-clamp-2 mt-1.5 leading-relaxed">{note.content || 'Empty note content...'}</p>
-                      <div className="flex items-center gap-1.5 text-[9px] text-[#79747E] mt-2.5 font-medium font-mono">
-                        <Clock className="w-3 h-3 text-[#79747E]" />
-                        <span>{new Date(note.updatedAt).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="text-center py-10 text-[#79747E] text-[11px] italic">
-                  No notebooks matched your query
-                </div>
-              )}
+                    return (
+                      <motion.div
+                        key={note.id}
+                        layout
+                        variants={listItemVariants}
+                        initial="initial"
+                        animate="animate"
+                        exit="exit"
+                        onClick={() => handleOpenView(note)}
+                        className={`p-3.5 border rounded-2xl cursor-pointer transition-all card-interactive ${
+                          isCurrent
+                            ? 'bg-[#EADDFF] border-[#6750A4]/30 text-[#1D1B20]'
+                            : 'bg-[#F3EDF7]/40 border-[#E1E3E1] text-[#49454F] hover:border-[#E1E3E1]/80 hover:bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-xs font-bold truncate">{note.title}</h4>
+                          <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: courseColor }} />
+                        </div>
+                        <p className="text-[10px] text-[#49454F] line-clamp-2 mt-1.5 leading-relaxed">{note.content || 'Empty note content...'}</p>
+                        <div className="flex items-center gap-1.5 text-[9px] text-[#79747E] mt-2.5 font-medium font-mono">
+                          <Clock className="w-3 h-3 text-[#79747E]" />
+                          <span>{new Date(note.updatedAt).toLocaleDateString()}</span>
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                ) : (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-center py-10 text-[#79747E] text-[11px] italic"
+                  >
+                    No notebooks matched your query
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 
           {/* Right Side: Active Note Viewer or Editor */}
           <div className="lg:col-span-8 bg-white border border-[#E1E3E1] rounded-3xl p-5 flex flex-col justify-between min-h-[50vh]">
-            {isEditing ? (
-              /* Note Editor Form */
-              <form onSubmit={handleSubmit} className="flex-1 flex flex-col gap-4" id="note-form-panel">
-                {errorMessage && (
-                  <div className="p-3 text-xs text-[#B3261E] bg-[#FDECEB] border border-[#F9DEDC] rounded-xl flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>{errorMessage}</span>
-                  </div>
-                )}
+            <AnimatePresence mode="wait">
+              {isEditing ? (
+                /* Note Editor Form */
+                <motion.form 
+                  key="note-editor-form"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.18 }}
+                  onSubmit={handleSubmit} 
+                  className="flex-1 flex flex-col gap-4" 
+                  id="note-form-panel"
+                >
+                  {errorMessage && (
+                    <div className="p-3 text-xs text-[#B3261E] bg-[#FDECEB] border border-[#F9DEDC] rounded-xl flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{errorMessage}</span>
+                    </div>
+                  )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-3 border-b border-[#E1E3E1]">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-[#49454F] uppercase">Notebook Title</label>
-                    <input
-                      type="text"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="e.g. Calculus Derivatives"
-                      className="w-full bg-white border border-[#E1E3E1] text-xs font-bold text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-3 border-b border-[#E1E3E1]">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-[#49454F] uppercase">Notebook Title</label>
+                      <input
+                        type="text"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="e.g. Calculus Derivatives"
+                        className="w-full bg-white border border-[#E1E3E1] text-xs font-bold text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
+                      />
+                    </div>
+                    <SubjectSelect
+                      courses={courses}
+                      value={courseId}
+                      onChange={setCourseId}
+                      onAddCourse={onAddCourse}
+                      label="Class Category"
+                      id="note-course-select"
                     />
                   </div>
-                  <SubjectSelect
-                    courses={courses}
-                    value={courseId}
-                    onChange={setCourseId}
-                    onAddCourse={onAddCourse}
-                    label="Class Category"
-                    id="note-course-select"
-                  />
-                </div>
 
-                <div className="flex-1 space-y-1">
-                  <label className="text-[9px] font-bold text-[#49454F] uppercase">Note Content (Plain text / Notes)</label>
-                  <textarea
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    rows={14}
-                    placeholder="Record core formulas, key terms, definitions, textbook pages, summary guides..."
-                    className="w-full h-[320px] bg-white border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-4 py-3 focus:ring-1 focus:ring-[#6750A4] outline-none resize-none font-mono leading-relaxed"
-                  />
-                </div>
+                  <div className="flex-1 space-y-1">
+                    <label className="text-[9px] font-bold text-[#49454F] uppercase">Note Content (Plain text / Notes)</label>
+                    <textarea
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      rows={14}
+                      placeholder="Record core formulas, key terms, definitions, textbook pages, summary guides..."
+                      className="w-full h-[320px] bg-white border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-4 py-3 focus:ring-1 focus:ring-[#6750A4] outline-none resize-none font-mono leading-relaxed"
+                    />
+                  </div>
 
-                <div className="flex justify-end gap-2 pt-4 border-t border-[#E1E3E1]">
-                  <button
-                    type="button"
-                    onClick={() => selectedNote ? setIsEditing(false) : setSelectedNote(null)}
-                    className="px-4 py-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#1D1B20] rounded-xl border border-[#E1E3E1]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="px-6 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-xl shadow-sm flex items-center gap-1.5"
-                  >
-                    {isSubmitting ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <span>Save Page</span>
-                    )}
-                  </button>
-                </div>
-              </form>
-            ) : selectedNote ? (
-              /* Note Viewer Mode */
-              <div className="flex-1 flex flex-col justify-between" id="note-reader-panel">
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between border-b border-[#E1E3E1] pb-3">
-                    <div>
-                      <h3 className="text-sm font-black text-[#1D1B20]">{selectedNote.title}</h3>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-[9px] font-bold px-2.5 py-0.5 rounded-full border" style={{
-                          backgroundColor: getCourseColor(selectedNote.courseId) + '12',
-                          borderColor: getCourseColor(selectedNote.courseId) + '25',
-                          color: getCourseColor(selectedNote.courseId),
-                        }}>
-                          {courses.find(c => c.id === selectedNote.courseId)?.name || 'General Notes'}
-                        </span>
-                        <span className="text-[9px] text-[#79747E] font-mono font-medium">
-                          Updated {new Date(selectedNote.updatedAt).toLocaleString()}
-                        </span>
+                  <div className="flex justify-end gap-2 pt-4 border-t border-[#E1E3E1]">
+                    <button
+                      type="button"
+                      onClick={() => selectedNote ? setIsEditing(false) : setSelectedNote(null)}
+                      className="px-4 py-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#1D1B20] rounded-xl border border-[#E1E3E1] btn-press cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-6 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-xl shadow-sm flex items-center gap-1.5 btn-press cursor-pointer"
+                    >
+                      {isSubmitting ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <span>Save Page</span>
+                      )}
+                    </button>
+                  </div>
+                </motion.form>
+              ) : selectedNote ? (
+                /* Note Viewer Mode */
+                <motion.div 
+                  key={`note-viewer-${selectedNote.id}`}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18 }}
+                  className="flex-1 flex flex-col justify-between" 
+                  id="note-reader-panel"
+                >
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between border-b border-[#E1E3E1] pb-3">
+                      <div>
+                        <h3 className="text-sm font-black text-[#1D1B20]">{selectedNote.title}</h3>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-[9px] font-bold px-2.5 py-0.5 rounded-full border" style={{
+                            backgroundColor: getCourseColor(selectedNote.courseId) + '12',
+                            borderColor: getCourseColor(selectedNote.courseId) + '25',
+                            color: getCourseColor(selectedNote.courseId),
+                          }}>
+                            {courses.find(c => c.id === selectedNote.courseId)?.name || 'General Notes'}
+                          </span>
+                          <span className="text-[9px] text-[#79747E] font-mono font-medium">
+                            Updated {new Date(selectedNote.updatedAt).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleOpenEdit(selectedNote)}
+                          className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] border border-[#E1E3E1] rounded-lg transition-colors btn-press cursor-pointer"
+                          title="Edit Note"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(selectedNote.id)}
+                          className="p-2 bg-[#FDECEB] hover:bg-[#F9DEDC] text-[#B3261E] border border-[#F9DEDC] rounded-lg transition-colors btn-press cursor-pointer"
+                          title="Delete Note"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleOpenEdit(selectedNote)}
-                        className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] border border-[#E1E3E1] rounded-lg transition-colors cursor-pointer"
-                        title="Edit Note"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(selectedNote.id)}
-                        className="p-2 bg-[#FDECEB] hover:bg-[#F9DEDC] text-[#B3261E] border border-[#F9DEDC] rounded-lg transition-colors cursor-pointer"
-                        title="Delete Note"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="p-4 bg-[#F3EDF7]/30 rounded-2xl border border-[#E1E3E1] min-h-[300px]">
+                      <p className="text-xs text-[#49454F] font-mono whitespace-pre-wrap leading-relaxed">
+                        {selectedNote.content || 'Empty note contents. Click the pencil edit icon above to add text.'}
+                      </p>
                     </div>
                   </div>
-
-                  <div className="p-4 bg-[#F3EDF7]/30 rounded-2xl border border-[#E1E3E1] min-h-[300px]">
-                    <p className="text-xs text-[#49454F] font-mono whitespace-pre-wrap leading-relaxed">
-                      {selectedNote.content || 'Empty note contents. Click the pencil edit icon above to add text.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* Editor Empty Screen */
-              <div className="flex-1 flex flex-col items-center justify-center py-10 space-y-3" id="notes-unselected-viewer">
-                <FileText className="w-12 h-12 text-[#79747E]" />
-                <h4 className="text-xs font-bold text-[#1D1B20]">No notebook page selected</h4>
-                <p className="text-[10px] text-[#49454F] max-w-sm mx-auto text-center">
-                  Select a notebook page from the left list directory, or click "New Note Page" to start writing class logs.
-                </p>
-              </div>
-            )}
+                </motion.div>
+              ) : (
+                /* Editor Empty Screen */
+                <motion.div 
+                  key="note-empty-screen"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex-1 flex flex-col items-center justify-center py-10 space-y-3" 
+                  id="notes-unselected-viewer"
+                >
+                  <FileText className="w-12 h-12 text-[#79747E]" />
+                  <h4 className="text-xs font-bold text-[#1D1B20]">No notebook page selected</h4>
+                  <p className="text-[10px] text-[#49454F] max-w-sm mx-auto text-center">
+                    Select a notebook page from the left list directory, or click "New Note Page" to start writing class logs.
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
         </div>
@@ -414,6 +488,6 @@ export default function NotesView({
         />
       )}
 
-    </div>
+    </motion.div>
   );
 }

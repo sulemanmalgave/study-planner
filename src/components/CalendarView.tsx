@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
+import { pageVariants } from '../lib/animations';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckSquare, GraduationCap, CalendarDays } from 'lucide-react';
 import { Course, TimetablePeriod, Assignment, Exam } from '../types';
 
@@ -97,7 +99,14 @@ export default function CalendarView({ courses, timetable, assignments, exams }:
   };
 
   return (
-    <div className="space-y-6 text-[#1D1B20]" id="calendar-view-root">
+    <motion.div 
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="space-y-6 text-[#1D1B20]" 
+      id="calendar-view-root"
+    >
       
       {/* Calendar Header */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-white border border-[#E1E3E1] rounded-2xl">
@@ -114,7 +123,7 @@ export default function CalendarView({ courses, timetable, assignments, exams }:
         <div className="flex items-center gap-4">
           <button
             onClick={handlePrevMonth}
-            className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-full transition-colors border border-[#E1E3E1]"
+            className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-full transition-colors border border-[#E1E3E1] btn-press cursor-pointer"
             id="prev-month-button"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -124,7 +133,7 @@ export default function CalendarView({ courses, timetable, assignments, exams }:
           </span>
           <button
             onClick={handleNextMonth}
-            className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-full transition-colors border border-[#E1E3E1]"
+            className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-full transition-colors border border-[#E1E3E1] btn-press cursor-pointer"
             id="next-month-button"
           >
             <ChevronRight className="w-4 h-4" />
@@ -220,6 +229,6 @@ export default function CalendarView({ courses, timetable, assignments, exams }:
           })}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

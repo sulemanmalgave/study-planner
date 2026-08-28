@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { X, Check, Sparkles, ShieldCheck, Zap, CreditCard, ArrowRight, Loader2, AlertCircle, Globe } from 'lucide-react';
 import { Subscription } from '../types';
 import { 
@@ -7,6 +8,7 @@ import {
   detectUserCountry, 
   PlanOption 
 } from '../lib/paymentConfig';
+import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
 
 interface UpgradeModalProps {
   isOpen: boolean;
@@ -94,8 +96,6 @@ export default function UpgradeModal({
       });
     }
   }, [isOpen]);
-
-  if (!isOpen) return null;
 
   // Derive current country config and gateway config dynamically
   const countryConfig = getCountryConfig(billingCountry);
@@ -282,223 +282,242 @@ export default function UpgradeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fade-in" id="upgrade-modal-backdrop">
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden text-slate-800" id="upgrade-modal-card">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/70 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <img 
-              src={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/logo.png`}
-              alt="Study Planner Logo" 
-              className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/80 shrink-0" 
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                const target = e.currentTarget;
-                const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-                if (!target.dataset.triedFallback) {
-                  target.dataset.triedFallback = '1';
-                  target.src = `${base}/logo.jpg`;
-                } else if (target.dataset.triedFallback === '1') {
-                  target.dataset.triedFallback = '2';
-                  target.src = `${base}/icon-512.png`;
-                }
-              }}
-            />
-            <div>
-              <h3 className="text-base font-bold text-[#1D1B20] tracking-tight flex items-center gap-1.5">
-                <span>Study Planner Premium</span>
-                <Sparkles className="w-4 h-4 text-[#6750A4]" />
-              </h3>
-              <p className="text-[11px] text-[#49454F]">Unlock unlimited academic potential</p>
-            </div>
-          </div>
-          <button 
-            onClick={onClose} 
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
-            id="close-upgrade-modal-btn"
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" id="upgrade-modal-backdrop">
+          <motion.div
+            variants={modalBackdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="fixed inset-0 bg-slate-900/80 backdrop-blur-md"
+            onClick={onClose}
+          />
+          <motion.div 
+            variants={modalPanelVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden text-slate-800 z-10" 
+            id="upgrade-modal-card"
           >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 text-left">
-          
-          {/* Limit Notice if triggered by feature cap */}
-          {limitReason && (
-            <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-start gap-3 text-amber-900 animate-slide-down">
-              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <div className="space-y-0.5 text-xs">
-                <span className="font-bold">Free Plan Limit Reached</span>
-                <p className="text-[#49454F] leading-relaxed">{limitReason}</p>
+            
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/70 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <img 
+                  src={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/logo.png`}
+                  alt="Study Planner Logo" 
+                  className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/80 shrink-0" 
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+                    if (!target.dataset.triedFallback) {
+                      target.dataset.triedFallback = '1';
+                      target.src = `${base}/logo.jpg`;
+                    } else if (target.dataset.triedFallback === '1') {
+                      target.dataset.triedFallback = '2';
+                      target.src = `${base}/icon-512.png`;
+                    }
+                  }}
+                />
+                <div>
+                  <h3 className="text-base font-bold text-[#1D1B20] tracking-tight flex items-center gap-1.5">
+                    <span>Study Planner Premium</span>
+                    <Sparkles className="w-4 h-4 text-[#6750A4]" />
+                  </h3>
+                  <p className="text-[11px] text-[#49454F]">Unlock unlimited academic potential</p>
+                </div>
               </div>
+              <button 
+                onClick={onClose} 
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors btn-press cursor-pointer"
+                id="close-upgrade-modal-btn"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          )}
 
-          {/* Billing Region Information (Non-interactive) */}
-          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1 text-xs" id="billing-region-info">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 font-bold text-[#1D1B20]">
-                <Globe className="w-4 h-4 text-[#6750A4]" />
-                <span>Billing Region:</span>
-              </div>
-              <span className="font-extrabold text-[#1D1B20] bg-white px-2.5 py-1 rounded-lg border border-slate-200/60 shadow-2xs">
-                {isIndia ? '🇮🇳 India (₹ INR)' : '🌎 International ($ USD)'}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Prices are automatically determined based on your location.
-            </p>
-          </div>
-
-          {/* Plan Duration Cards */}
-          <div className="space-y-2.5">
-            <label className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">Choose Subscription Plan</label>
-            <div className="grid grid-cols-2 gap-3" id="plan-selection-cards">
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5 text-left">
               
-              {plans.map((plan: PlanOption) => {
-                const isSelected = selectedPlanId === plan.id;
-                return (
-                  <div
-                    key={plan.id}
-                    onClick={() => setSelectedPlanId(plan.id)}
-                    className={`p-4 rounded-2xl border cursor-pointer transition-all relative space-y-2 ${
-                      isSelected
-                        ? 'border-[#6750A4] bg-[#F3EDF7]/80 ring-2 ring-[#6750A4]/20 shadow-sm'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                    id={`select-plan-${plan.id}-card`}
-                  >
-                    {plan.badge && (
-                      <span className="absolute -top-2.5 right-3 px-2 py-0.5 text-[9px] font-black bg-[#6750A4] text-white rounded-full uppercase shadow-sm tracking-wider">
-                        {plan.badge} • {plan.savingsText}
-                      </span>
-                    )}
-
-                    <div className="flex justify-between items-start">
-                      <span className="text-xs font-bold text-[#1D1B20]">{plan.title}</span>
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                        isSelected ? 'border-[#6750A4] bg-[#6750A4]' : 'border-slate-300'
-                      }`}>
-                        {isSelected && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-lg font-black text-[#1D1B20]">{plan.formattedPrice}</div>
-                      <div className="text-[10px] text-[#49454F] font-medium">{plan.billingText}</div>
-                      {plan.monthlyEquivalent && (
-                        <div className="text-[10px] text-[#0f5132] font-semibold mt-0.5">
-                          {plan.monthlyEquivalent} equivalent
-                        </div>
-                      )}
-                    </div>
+              {/* Limit Notice if triggered by feature cap */}
+              {limitReason && (
+                <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-start gap-3 text-amber-900 animate-slide-down">
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5 text-xs">
+                    <span className="font-bold">Free Plan Limit Reached</span>
+                    <p className="text-[#49454F] leading-relaxed">{limitReason}</p>
                   </div>
-                );
-              })}
+                </div>
+              )}
+
+              {/* Billing Region Information (Non-interactive) */}
+              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1 text-xs" id="billing-region-info">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-bold text-[#1D1B20]">
+                    <Globe className="w-4 h-4 text-[#6750A4]" />
+                    <span>Billing Region:</span>
+                  </div>
+                  <span className="font-extrabold text-[#1D1B20] bg-white px-2.5 py-1 rounded-lg border border-slate-200/60 shadow-2xs">
+                    {isIndia ? '🇮🇳 India (₹ INR)' : '🌎 International ($ USD)'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Prices are automatically determined based on your location.
+                </p>
+              </div>
+
+              {/* Plan Duration Cards */}
+              <div className="space-y-2.5">
+                <label className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">Choose Subscription Plan</label>
+                <div className="grid grid-cols-2 gap-3" id="plan-selection-cards">
+                  
+                  {plans.map((plan: PlanOption) => {
+                    const isSelected = selectedPlanId === plan.id;
+                    return (
+                      <div
+                        key={plan.id}
+                        onClick={() => setSelectedPlanId(plan.id)}
+                        className={`p-4 rounded-2xl border cursor-pointer transition-all relative space-y-2 card-interactive ${
+                          isSelected
+                            ? 'border-[#6750A4] bg-[#F3EDF7]/80 ring-2 ring-[#6750A4]/20 shadow-sm'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                        id={`select-plan-${plan.id}-card`}
+                      >
+                        {plan.badge && (
+                          <span className="absolute -top-2.5 right-3 px-2 py-0.5 text-[9px] font-black bg-[#6750A4] text-white rounded-full uppercase shadow-sm tracking-wider">
+                            {plan.badge} • {plan.savingsText}
+                          </span>
+                        )}
+
+                        <div className="flex justify-between items-start">
+                          <span className="text-xs font-bold text-[#1D1B20]">{plan.title}</span>
+                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${
+                            isSelected ? 'border-[#6750A4] bg-[#6750A4]' : 'border-slate-300'
+                          }`}>
+                            {isSelected && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-lg font-black text-[#1D1B20]">{plan.formattedPrice}</div>
+                          <div className="text-[10px] text-[#49454F] font-medium">{plan.billingText}</div>
+                          {plan.monthlyEquivalent && (
+                            <div className="text-[10px] text-[#0f5132] font-semibold mt-0.5">
+                              {plan.monthlyEquivalent} equivalent
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                </div>
+              </div>
+
+              {/* Premium Features Included */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
+                  <Zap className="w-4 h-4 text-[#6750A4]" />
+                  <span>Everything Included in Premium:</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-[#1D1B20] font-medium">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Unlimited Active Tasks</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Unlimited Timetables</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Unlimited Assignments</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Unlimited Notes & Pages</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Unlimited Exams</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Full Lifetime Analytics</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dedicated PayPal Button Mount Container for International Checkout */}
+              {!isIndia && (
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center justify-between">
+                    <span>PayPal Express Checkout Container</span>
+                    <span className="text-[10px] text-slate-400 font-medium">Official PayPal Smart Buttons</span>
+                  </div>
+                  <div 
+                    id="paypal-button-container" 
+                    className="w-full min-h-[45px] empty:hidden transition-all"
+                  />
+                </div>
+              )}
+
+              {/* Error Message */}
+              {error && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {paymentSuccessMessage && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-bold flex items-center gap-2 animate-bounce">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <span>{paymentSuccessMessage}</span>
+                </div>
+              )}
 
             </div>
-          </div>
 
-          {/* Premium Features Included */}
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
-              <Zap className="w-4 h-4 text-[#6750A4]" />
-              <span>Everything Included in Premium:</span>
+            {/* Footer Checkout Action */}
+            <div className="p-5 border-t border-slate-100 bg-slate-50/70 shrink-0 space-y-2">
+              <button
+                onClick={handleCheckout}
+                disabled={isLoading || !!paymentSuccessMessage}
+                className="w-full py-3.5 px-4 text-xs font-bold text-white bg-[#6750A4] hover:bg-[#503E84] rounded-2xl shadow-lg shadow-[#6750A4]/20 flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer btn-press"
+                id="pay-now-btn"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Securing Payment Connection...</span>
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="w-4 h-4" />
+                    <span>
+                      Pay {activePlan.formattedPrice} with {activeGateway.name}
+                    </span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center justify-center gap-2 text-[10px] text-[#49454F]">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>256-bit SSL Encrypted • Verified Backend Processing • Cancel Anytime</span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs text-[#1D1B20] font-medium">
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Unlimited Active Tasks</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Unlimited Timetables</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Unlimited Assignments</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Unlimited Notes & Pages</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Unlimited Exams</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Full Lifetime Analytics</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Dedicated PayPal Button Mount Container for International Checkout */}
-          {!isIndia && (
-            <div className="space-y-1.5">
-              <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center justify-between">
-                <span>PayPal Express Checkout Container</span>
-                <span className="text-[10px] text-slate-400 font-medium">Official PayPal Smart Buttons</span>
-              </div>
-              <div 
-                id="paypal-button-container" 
-                className="w-full min-h-[45px] empty:hidden transition-all"
-              />
-            </div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Success Message */}
-          {paymentSuccessMessage && (
-            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-bold flex items-center gap-2 animate-bounce">
-              <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>{paymentSuccessMessage}</span>
-            </div>
-          )}
-
+          </motion.div>
         </div>
-
-        {/* Footer Checkout Action */}
-        <div className="p-5 border-t border-slate-100 bg-slate-50/70 shrink-0 space-y-2">
-          <button
-            onClick={handleCheckout}
-            disabled={isLoading || !!paymentSuccessMessage}
-            className="w-full py-3.5 px-4 text-xs font-bold text-white bg-[#6750A4] hover:bg-[#503E84] rounded-2xl shadow-lg shadow-[#6750A4]/20 flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-            id="pay-now-btn"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Securing Payment Connection...</span>
-              </>
-            ) : (
-              <>
-                <CreditCard className="w-4 h-4" />
-                <span>
-                  Pay {activePlan.formattedPrice} with {activeGateway.name}
-                </span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-
-          <div className="flex items-center justify-center gap-2 text-[10px] text-[#49454F]">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>256-bit SSL Encrypted • Verified Backend Processing • Cancel Anytime</span>
-          </div>
-        </div>
-
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   );
 }

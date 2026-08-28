@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { pageVariants, listItemVariants, modalVariants } from '../lib/animations';
 import { CalendarDays, Plus, Trash2, Edit2, Clock, MapPin, Loader2, Sparkles, AlertCircle, Lock } from 'lucide-react';
 import { Course, TimetablePeriod, DayOfWeek } from '../types';
 import SubjectSelect from './SubjectSelect';
@@ -99,9 +101,16 @@ export default function TimetableView({
   };
 
   return (
-    <div className="space-y-6 text-[#1D1B20]" id="timetable-view-root">
+    <motion.div 
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="space-y-6 text-[#1D1B20]" 
+      id="timetable-view-root"
+    >
       
-      {/* View Header */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-white border border-[#E1E3E1] rounded-2xl">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-[#EADDFF] text-[#21005D] rounded-xl border border-[#D0BCFF]">
@@ -115,7 +124,7 @@ export default function TimetableView({
 
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full transition-all active:scale-[0.98]"
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full transition-all btn-press cursor-pointer"
           id="add-class-period-button"
         >
           <Plus className="w-4 h-4" />
@@ -124,99 +133,108 @@ export default function TimetableView({
       </div>
 
       {/* Form Dialog Panel */}
-      {isFormOpen && (
-        <div className="p-5 bg-white border border-[#E1E3E1] rounded-2xl space-y-4 animate-fade-in shadow-sm" id="timetable-class-form-panel">
-          <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-2">
-            <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
-              {editingPeriod ? 'Modify Lecture Slot' : 'Schedule New Lecture'}
-            </h3>
-            <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium">Cancel</button>
-          </div>
-
-          {errorMessage && (
-            <div className="p-3 text-xs text-[#410E0B] bg-[#FDECEB] border border-[#F9DEDC] rounded-xl flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMessage}</span>
+      <AnimatePresence>
+        {isFormOpen && (
+          <motion.div 
+            variants={modalVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="p-5 bg-white border border-[#E1E3E1] rounded-2xl space-y-4 shadow-sm" 
+            id="timetable-class-form-panel"
+          >
+            <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-2">
+              <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
+                {editingPeriod ? 'Modify Lecture Slot' : 'Schedule New Lecture'}
+              </h3>
+              <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium btn-press cursor-pointer">Cancel</button>
             </div>
-          )}
 
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-            {/* Subject */}
-            <div className="space-y-1 md:col-span-1">
-              <label className="text-[10px] font-bold text-[#49454F] uppercase">Class Name</label>
-              <input
-                type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="e.g. Adv Algebra"
-                className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3 py-2 focus:ring-1 focus:ring-[#6750A4] outline-none"
+            {errorMessage && (
+              <div className="p-3 text-xs text-[#410E0B] bg-[#FDECEB] border border-[#F9DEDC] rounded-xl flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+              {/* Subject */}
+              <div className="space-y-1 md:col-span-1">
+                <label className="text-[10px] font-bold text-[#49454F] uppercase">Class Name</label>
+                <input
+                  type="text"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="e.g. Adv Algebra"
+                  className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3 py-2 focus:ring-1 focus:ring-[#6750A4] outline-none"
+                />
+              </div>
+
+              {/* Course Link */}
+              <SubjectSelect
+                courses={courses}
+                value={courseId}
+                onChange={setCourseId}
+                onAddCourse={onAddCourse}
+                label="Related Course"
+                className="md:col-span-1"
+                id="timetable-course-select"
               />
-            </div>
 
-            {/* Course Link */}
-            <SubjectSelect
-              courses={courses}
-              value={courseId}
-              onChange={setCourseId}
-              onAddCourse={onAddCourse}
-              label="Related Course"
-              className="md:col-span-1"
-              id="timetable-course-select"
-            />
-
-            {/* Day */}
-            <div className="space-y-1 md:col-span-1">
-              <label className="text-[10px] font-bold text-[#49454F] uppercase">Day</label>
-              <select
-                value={day}
-                onChange={(e) => setDay(e.target.value as DayOfWeek)}
-                className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-2 py-2 focus:ring-1 focus:ring-[#6750A4] outline-none"
-              >
-                {daysOfWeek.map(d => (
-                  <option key={d} value={d} className="text-slate-900 bg-white">{d}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Times */}
-            <div className="grid grid-cols-2 gap-2 md:col-span-1">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-[#49454F] uppercase">Start</label>
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
+              {/* Day */}
+              <div className="space-y-1 md:col-span-1">
+                <label className="text-[10px] font-bold text-[#49454F] uppercase">Day</label>
+                <select
+                  value={day}
+                  onChange={(e) => setDay(e.target.value as DayOfWeek)}
                   className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-2 py-2 focus:ring-1 focus:ring-[#6750A4] outline-none"
-                />
+                >
+                  {daysOfWeek.map(d => (
+                    <option key={d} value={d} className="text-slate-900 bg-white">{d}</option>
+                  ))}
+                </select>
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-[#49454F] uppercase">End</label>
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-2 py-2 focus:ring-1 focus:ring-[#6750A4] outline-none"
-                />
-              </div>
-            </div>
 
-            {/* Submit */}
-            <div className="md:col-span-1">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full flex items-center justify-center gap-1.5 transition-colors"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <span>{editingPeriod ? 'Save Changes' : 'Schedule Class'}</span>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+              {/* Times */}
+              <div className="grid grid-cols-2 gap-2 md:col-span-1">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#49454F] uppercase">Start</label>
+                  <input
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-2 py-2 focus:ring-1 focus:ring-[#6750A4] outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#49454F] uppercase">End</label>
+                  <input
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-2 py-2 focus:ring-1 focus:ring-[#6750A4] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Submit */}
+              <div className="md:col-span-1">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full flex items-center justify-center gap-1.5 transition-colors btn-press cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <span>{editingPeriod ? 'Save Changes' : 'Schedule Class'}</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Week Grid */}
       <div className="grid grid-cols-1 gap-4" id="timetable-weekly-schedule-grid">
@@ -238,7 +256,14 @@ export default function TimetableView({
           const isDayLocked = !isPremium && !allowedDays.includes(dayName);
 
           return (
-            <div key={dayName} className="p-5 bg-white border border-[#E1E3E1] rounded-2xl space-y-4 hover:shadow-sm transition-all relative overflow-hidden">
+            <motion.div 
+              key={dayName}
+              layout
+              variants={listItemVariants}
+              initial="initial"
+              animate="animate"
+              className="p-5 bg-white border border-[#E1E3E1] rounded-2xl space-y-4 hover:shadow-sm transition-all relative overflow-hidden card-interactive"
+            >
               {isDayLocked && (
                 <div className="absolute inset-0 bg-slate-50/80 backdrop-blur-[4px] z-20 flex flex-col items-center justify-center p-4 text-center" id={`locked-day-overlay-${dayName}`}>
                   <div className="p-2 bg-[#EADDFF] text-[#21005D] rounded-full mb-1 border border-[#D0BCFF]">
@@ -250,7 +275,7 @@ export default function TimetableView({
                   </p>
                   <button
                     onClick={onTriggerUpgrade}
-                    className="mt-2.5 px-3 py-1 bg-[#6750A4] hover:bg-[#503E84] text-[9px] font-bold text-white rounded-full transition-all uppercase tracking-wider cursor-pointer"
+                    className="mt-2.5 px-3 py-1 bg-[#6750A4] hover:bg-[#503E84] text-[9px] font-bold text-white rounded-full transition-all uppercase tracking-wider btn-press cursor-pointer"
                   >
                     Upgrade to Premium
                   </button>
@@ -289,13 +314,13 @@ export default function TimetableView({
                           <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                             <button
                               onClick={() => handleOpenEdit(period)}
-                              className="p-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-lg border border-[#E1E3E1] transition-colors"
+                              className="p-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-lg border border-[#E1E3E1] transition-colors btn-press cursor-pointer"
                             >
                               <Edit2 className="w-3 h-3" />
                             </button>
                             <button
                               onClick={() => onDeletePeriod(period.id)}
-                              className="p-1.5 bg-[#FDECEB] hover:bg-[#F9DEDC] text-[#B3261E] border border-[#F9DEDC] rounded-lg transition-colors"
+                              className="p-1.5 bg-[#FDECEB] hover:bg-[#F9DEDC] text-[#B3261E] border border-[#F9DEDC] rounded-lg transition-colors btn-press cursor-pointer"
                             >
                               <Trash2 className="w-3 h-3" />
                             </button>
@@ -308,10 +333,10 @@ export default function TimetableView({
                   <p className="text-[10px] text-slate-400 italic py-1 font-medium mt-3">No classes scheduled for {dayName}</p>
                 )}
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
-    </div>
+    </motion.div>
   );
 }

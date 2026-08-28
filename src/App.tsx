@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { 
   Search, 
   Plus, 
@@ -1096,74 +1097,51 @@ export default function App() {
         limitType={limitType}
       />
 
-      {/* 4. Mobile Bottom Navigation Bar (< 768px) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#E1E3E1] z-40 px-1 py-1 flex items-center justify-around shadow-lg" id="mobile-bottom-nav">
-        <button
-          onClick={() => setActiveTab('dashboard')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer min-w-[52px] ${
-            activeTab === 'dashboard' ? 'text-[#21005D] font-bold' : 'text-[#49454F] hover:text-[#1D1B20]'
-          }`}
-          id="bottom-nav-home"
-        >
-          <div className={`p-1 rounded-full ${activeTab === 'dashboard' ? 'bg-[#EADDFF]' : ''}`}>
-            <LayoutDashboard className="w-5 h-5" />
-          </div>
-          <span className="text-[10px] tracking-tight font-medium mt-0.5">Home</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('calendar')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer min-w-[52px] ${
-            activeTab === 'calendar' ? 'text-[#21005D] font-bold' : 'text-[#49454F] hover:text-[#1D1B20]'
-          }`}
-          id="bottom-nav-calendar"
-        >
-          <div className={`p-1 rounded-full ${activeTab === 'calendar' ? 'bg-[#EADDFF]' : ''}`}>
-            <Calendar className="w-5 h-5" />
-          </div>
-          <span className="text-[10px] tracking-tight font-medium mt-0.5">Calendar</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('assignments')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer min-w-[52px] ${
-            activeTab === 'assignments' ? 'text-[#21005D] font-bold' : 'text-[#49454F] hover:text-[#1D1B20]'
-          }`}
-          id="bottom-nav-tasks"
-        >
-          <div className={`p-1 rounded-full ${activeTab === 'assignments' ? 'bg-[#EADDFF]' : ''}`}>
-            <CheckSquare className="w-5 h-5" />
-          </div>
-          <span className="text-[10px] tracking-tight font-medium mt-0.5">Tasks</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('study-timer')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer min-w-[52px] ${
-            activeTab === 'study-timer' ? 'text-[#21005D] font-bold' : 'text-[#49454F] hover:text-[#1D1B20]'
-          }`}
-          id="bottom-nav-timer"
-        >
-          <div className={`p-1 rounded-full ${activeTab === 'study-timer' ? 'bg-[#EADDFF]' : ''}`}>
-            <Clock className="w-5 h-5" />
-          </div>
-          <span className="text-[10px] tracking-tight font-medium mt-0.5">Timer</span>
-        </button>
-
-        <button
-          onClick={() => setIsMobileMenuOpen(true)}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors cursor-pointer min-w-[52px] ${
-            ['subjects', 'timetable', 'exams', 'notes', 'progress', 'mobile-companion', 'settings'].includes(activeTab)
-              ? 'text-[#21005D] font-bold'
-              : 'text-[#49454F] hover:text-[#1D1B20]'
-          }`}
-          id="bottom-nav-more"
-        >
-          <div className={`p-1 rounded-full ${['subjects', 'timetable', 'exams', 'notes', 'progress', 'mobile-companion', 'settings'].includes(activeTab) ? 'bg-[#EADDFF]' : ''}`}>
-            <Menu className="w-5 h-5" />
-          </div>
-          <span className="text-[10px] tracking-tight font-medium mt-0.5">More</span>
-        </button>
+      {/* 4. Mobile Bottom Navigation Bar (< 768px) with Smooth Sliding Active Indicator */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#E1E3E1] z-40 px-2 py-1 flex items-center justify-around shadow-lg" id="mobile-bottom-nav">
+        {[
+          { id: 'dashboard', label: 'Home', icon: LayoutDashboard, onClick: () => setActiveTab('dashboard'), isActive: activeTab === 'dashboard', elementId: 'bottom-nav-home' },
+          { id: 'calendar', label: 'Calendar', icon: Calendar, onClick: () => setActiveTab('calendar'), isActive: activeTab === 'calendar', elementId: 'bottom-nav-calendar' },
+          { id: 'assignments', label: 'Tasks', icon: CheckSquare, onClick: () => setActiveTab('assignments'), isActive: activeTab === 'assignments', elementId: 'bottom-nav-tasks' },
+          { id: 'study-timer', label: 'Timer', icon: Clock, onClick: () => setActiveTab('study-timer'), isActive: activeTab === 'study-timer', elementId: 'bottom-nav-timer' },
+          { 
+            id: 'more', 
+            label: 'More', 
+            icon: Menu, 
+            onClick: () => setIsMobileMenuOpen(true), 
+            isActive: ['subjects', 'timetable', 'exams', 'notes', 'progress', 'mobile-companion', 'settings'].includes(activeTab), 
+            elementId: 'bottom-nav-more' 
+          },
+        ].map((item) => (
+          <button
+            key={item.id}
+            onClick={item.onClick}
+            className={`relative flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-colors cursor-pointer flex-1 max-w-[68px] z-10 btn-press ${
+              item.isActive ? 'text-[#21005D] font-bold' : 'text-[#49454F] hover:text-[#1D1B20]'
+            }`}
+            id={item.elementId}
+          >
+            {item.isActive && (
+              <motion.div
+                layoutId="bottomNavActiveIndicator"
+                className="absolute inset-0 bg-[#EADDFF] rounded-2xl z-0 shadow-2xs"
+                transition={{
+                  type: 'spring',
+                  stiffness: 420,
+                  damping: 32,
+                  mass: 0.8
+                }}
+              >
+                {/* Top sliding indicator accent bar */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-[#6750A4] rounded-full" />
+              </motion.div>
+            )}
+            <div className="relative z-10 flex flex-col items-center">
+              <item.icon className={`w-5 h-5 transition-transform duration-200 ${item.isActive ? 'scale-105 text-[#21005D]' : 'text-[#49454F]'}`} />
+              <span className="text-[10px] tracking-tight font-medium mt-0.5">{item.label}</span>
+            </div>
+          </button>
+        ))}
       </nav>
 
     </div>

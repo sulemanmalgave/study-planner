@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import { 
   CheckSquare, 
   GraduationCap, 
@@ -12,6 +13,7 @@ import {
   Trophy 
 } from 'lucide-react';
 import { Course, TimetablePeriod, Assignment, Exam, StudySession } from '../types';
+import { staggerContainer, cardEntranceVariants } from '../lib/animations';
 
 interface DashboardViewProps {
   courses: Course[];
@@ -57,7 +59,6 @@ export default function DashboardView({
   const todayTasks = assignments.filter(a => a.dueDate === todayStr && a.status === 'pending');
 
   // 3. Weekly Overview Days mapping (MON to SUN)
-  // We will map timetable classes to each day
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const dayAbbreviations: Record<string, { label: string; offset: number }> = {
     'Monday': { label: 'MON 13', offset: 0 },
@@ -76,97 +77,127 @@ export default function DashboardView({
   };
 
   return (
-    <div className="space-y-4 text-[#1D1B20]" id="dashboard-view-container">
+    <motion.div 
+      variants={staggerContainer}
+      initial="initial"
+      animate="animate"
+      className="space-y-4 text-[#1D1B20]" 
+      id="dashboard-view-container"
+    >
       
       {/* 4 Bento Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4" id="dashboard-stats-bento">
         {/* Pending Tasks */}
-        <div className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 hover:shadow-sm transition-all cursor-pointer min-w-0" onClick={() => onNavigateToTab('assignments')}>
-          <div className="p-2 sm:p-2.5 bg-amber-50 text-amber-700 border border-amber-200/60 rounded-xl shrink-0">
+        <motion.div 
+          variants={cardEntranceVariants}
+          className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 card-interactive cursor-pointer min-w-0" 
+          onClick={() => onNavigateToTab('assignments')}
+        >
+          <div className="p-2 sm:p-2.5 bg-amber-50 text-amber-700 border border-amber-200/60 rounded-xl shrink-0 transition-transform duration-200 group-hover:scale-105">
             <CheckSquare className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
           <div className="min-w-0">
             <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Pending Tasks</span>
             <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{pendingTasks} Tasks</span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Upcoming Exams */}
-        <div className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 hover:shadow-sm transition-all cursor-pointer min-w-0" onClick={() => onNavigateToTab('exams')}>
-          <div className="p-2 sm:p-2.5 bg-purple-50 text-purple-700 border border-purple-200/60 rounded-xl shrink-0">
+        <motion.div 
+          variants={cardEntranceVariants}
+          className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 card-interactive cursor-pointer min-w-0" 
+          onClick={() => onNavigateToTab('exams')}
+        >
+          <div className="p-2 sm:p-2.5 bg-purple-50 text-purple-700 border border-purple-200/60 rounded-xl shrink-0 transition-transform duration-200 group-hover:scale-105">
             <GraduationCap className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
           <div className="min-w-0">
             <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Upcoming Exams</span>
             <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{upcomingExamsCount} Exams</span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Study Hours */}
-        <div className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 hover:shadow-sm transition-all cursor-pointer min-w-0" onClick={() => onNavigateToTab('study-timer')}>
-          <div className="p-2 sm:p-2.5 bg-teal-50 text-teal-700 border border-teal-200/60 rounded-xl shrink-0">
+        <motion.div 
+          variants={cardEntranceVariants}
+          className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 card-interactive cursor-pointer min-w-0" 
+          onClick={() => onNavigateToTab('study-timer')}
+        >
+          <div className="p-2 sm:p-2.5 bg-teal-50 text-teal-700 border border-teal-200/60 rounded-xl shrink-0 transition-transform duration-200 group-hover:scale-105">
             <Clock className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
           <div className="min-w-0">
             <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Study Hours</span>
             <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{studyHours} hrs</span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Completion Rate */}
-        <div className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 hover:shadow-sm transition-all cursor-pointer min-w-0" onClick={() => onNavigateToTab('assignments')}>
-          <div className="p-2 sm:p-2.5 bg-blue-50 text-blue-700 border border-blue-200/60 rounded-xl shrink-0">
+        <motion.div 
+          variants={cardEntranceVariants}
+          className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex items-center gap-2 sm:gap-3.5 card-interactive cursor-pointer min-w-0" 
+          onClick={() => onNavigateToTab('assignments')}
+        >
+          <div className="p-2 sm:p-2.5 bg-blue-50 text-blue-700 border border-blue-200/60 rounded-xl shrink-0 transition-transform duration-200 group-hover:scale-105">
             <Star className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
           <div className="min-w-0">
             <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Completion Rate</span>
             <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{completionRate}%</span>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Quick Controls Section (Exactly matches layout & color) */}
-      <div className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-4" id="dashboard-quick-controls">
+      <motion.div 
+        variants={cardEntranceVariants}
+        className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-4 shadow-2xs" 
+        id="dashboard-quick-controls"
+      >
         <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2 w-full sm:w-auto">
           <span className="text-amber-500">⚡</span> Quick Student Workspace Controls
         </h3>
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
           <button
             onClick={() => onQuickAddClick('task')}
-            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer btn-press"
           >
             <Plus className="w-3.5 h-3.5 text-[#6750A4] shrink-0" />
             <span className="truncate">Add Task</span>
           </button>
           <button
             onClick={() => onQuickAddClick('class')}
-            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer btn-press"
           >
             <Plus className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
             <span className="truncate">Schedule Class</span>
           </button>
           <button
             onClick={() => onQuickAddClick('note')}
-            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer btn-press"
           >
             <FileText className="w-3.5 h-3.5 text-purple-600 shrink-0" />
             <span className="truncate">Write Note</span>
           </button>
           <button
             onClick={onFocusNowClick}
-            className="flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full transition-colors shadow-sm cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full transition-colors shadow-sm cursor-pointer btn-press"
           >
             <Timer className="w-3.5 h-3.5 text-white shrink-0" />
             <span className="truncate">Focus Now</span>
           </button>
         </div>
-      </div>
+      </motion.div>
 
       {/* Main Bottom Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5" id="dashboard-bottom-grid">
         
         {/* Column 1: Today's Tasks */}
-        <div className="lg:col-span-3 flex flex-col bg-white border border-[#E1E3E1] rounded-2xl p-3.5 sm:p-4" id="today-tasks-container">
+        <motion.div 
+          variants={cardEntranceVariants}
+          className="lg:col-span-3 flex flex-col bg-white border border-[#E1E3E1] rounded-2xl p-3.5 sm:p-4 shadow-2xs" 
+          id="today-tasks-container"
+        >
           <div className="flex items-center justify-between mb-3 border-b border-[#E1E3E1] pb-2">
             <h4 className="text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
               <CheckSquare className="w-4 h-4 text-[#6750A4]" /> TODAY'S TASKS
@@ -180,7 +211,7 @@ export default function DashboardView({
             {todayTasks.length > 0 ? (
               <div className="space-y-2 w-full">
                 {todayTasks.map(task => (
-                  <div key={task.id} className="p-2.5 bg-[#F7F9FC] border border-[#E1E3E1] rounded-xl flex items-center justify-between gap-2 hover:border-[#6750A4]/30 transition-colors">
+                  <div key={task.id} className="p-2.5 bg-[#F7F9FC] border border-[#E1E3E1] rounded-xl flex items-center justify-between gap-2 hover:border-[#6750A4]/30 hover:bg-slate-50/80 transition-all card-interactive">
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-[#1D1B20] truncate">{task.title}</p>
                       <span className="text-[9px] font-mono mt-0.5 inline-block" style={{ color: getCourseColor(task.courseId) }}>
@@ -208,17 +239,21 @@ export default function DashboardView({
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
 
         {/* Column 2: Weekly Overview */}
-        <div className="lg:col-span-6 bg-white border border-[#E1E3E1] rounded-2xl p-3.5 sm:p-4" id="weekly-overview-container">
+        <motion.div 
+          variants={cardEntranceVariants}
+          className="lg:col-span-6 bg-white border border-[#E1E3E1] rounded-2xl p-3.5 sm:p-4 shadow-2xs" 
+          id="weekly-overview-container"
+        >
           <div className="flex items-center justify-between mb-3 border-b border-[#E1E3E1] pb-2">
             <h4 className="text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
               <CalendarDays className="w-4 h-4 text-emerald-600" /> WEEKLY OVERVIEW
             </h4>
             <button
               onClick={() => onNavigateToTab('calendar')}
-              className="text-[10px] font-bold text-[#6750A4] hover:text-[#503E84] uppercase tracking-widest transition-colors cursor-pointer"
+              className="text-[10px] font-bold text-[#6750A4] hover:text-[#503E84] uppercase tracking-widest transition-colors cursor-pointer btn-press"
             >
               Month View
             </button>
@@ -240,7 +275,7 @@ export default function DashboardView({
                       periods.map(period => (
                         <div
                           key={period.id}
-                          className="px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 border"
+                          className="px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 border transition-transform duration-150 hover:scale-105"
                           style={{
                             backgroundColor: getCourseColor(period.courseId) + '15',
                             borderColor: getCourseColor(period.courseId) + '30',
@@ -260,10 +295,14 @@ export default function DashboardView({
               );
             })}
           </div>
-        </div>
+        </motion.div>
 
         {/* Column 3: Exams Countdown */}
-        <div className="lg:col-span-3 flex flex-col bg-white border border-[#E1E3E1] rounded-2xl p-3.5 sm:p-4" id="exams-countdown-container">
+        <motion.div 
+          variants={cardEntranceVariants}
+          className="lg:col-span-3 flex flex-col bg-white border border-[#E1E3E1] rounded-2xl p-3.5 sm:p-4 shadow-2xs" 
+          id="exams-countdown-container"
+        >
           <div className="flex items-center justify-between mb-3 border-b border-[#E1E3E1] pb-2">
             <h4 className="text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
               <Trophy className="w-4 h-4 text-amber-600" /> EXAMS COUNTDOWN
@@ -282,7 +321,7 @@ export default function DashboardView({
                   const isOverdue = diffDays < 0;
 
                   return (
-                    <div key={exam.id} className="p-3 bg-[#F7F9FC] border border-[#E1E3E1] rounded-xl space-y-1.5 hover:border-[#6750A4]/30 transition-all">
+                    <div key={exam.id} className="p-3 bg-[#F7F9FC] border border-[#E1E3E1] rounded-xl space-y-1.5 hover:border-[#6750A4]/30 transition-all card-interactive">
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-xs font-bold text-[#1D1B20] truncate">{exam.name}</span>
                         <span className="text-[9px] font-mono" style={{ color: getCourseColor(exam.courseId) }}>
@@ -291,7 +330,7 @@ export default function DashboardView({
                       </div>
                       <div className="flex items-center justify-between border-t border-[#E1E3E1] pt-1.5">
                         <span className="text-[10px] text-[#49454F] font-medium">{exam.date}</span>
-                        <span className={`text-[10px] font-black ${isOverdue ? 'text-rose-600' : 'text-amber-600 animate-pulse'}`}>
+                        <span className={`text-[10px] font-black ${isOverdue ? 'text-rose-600' : 'text-amber-600'}`}>
                           {isOverdue ? 'Passed' : `${diffDays} days left`}
                         </span>
                       </div>
@@ -311,9 +350,10 @@ export default function DashboardView({
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
 
       </div>
-    </div>
+    </motion.div>
   );
 }
+

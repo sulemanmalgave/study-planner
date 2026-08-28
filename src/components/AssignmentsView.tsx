@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { CheckSquare, Plus, Trash2, Edit2, Check, Clock, AlertCircle, Loader2 } from 'lucide-react';
 import { Course, Assignment } from '../types';
 import SubjectSelect from './SubjectSelect';
+import { pageVariants, listItemVariants } from '../lib/animations';
 
 interface AssignmentsViewProps {
   courses: Course[];
@@ -128,7 +130,14 @@ export default function AssignmentsView({
   });
 
   return (
-    <div className="space-y-6 text-[#1D1B20]" id="assignments-view-root">
+    <motion.div 
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="space-y-6 text-[#1D1B20]" 
+      id="assignments-view-root"
+    >
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-white border border-[#E1E3E1] rounded-2xl">
@@ -144,7 +153,7 @@ export default function AssignmentsView({
 
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full transition-all active:scale-[0.98]"
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full transition-all btn-press cursor-pointer"
           id="add-assignment-button"
         >
           <Plus className="w-4 h-4" />
@@ -206,185 +215,206 @@ export default function AssignmentsView({
       </div>
 
       {/* Form Dialog Box */}
-      {isFormOpen && (
-        <div className="p-5 bg-white border border-[#E1E3E1] rounded-2xl space-y-4 animate-fade-in shadow-sm" id="assignment-form-panel">
-          <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-2">
-            <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
-              {editingAssignment ? 'Modify Assignment Details' : 'Create New Study Assignment'}
-            </h3>
-            <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium">Cancel</button>
-          </div>
-
-          {errorMessage && (
-            <div className="p-3 text-xs text-[#410E0B] bg-[#FDECEB] border border-[#F9DEDC] rounded-xl flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMessage}</span>
+      <AnimatePresence>
+        {isFormOpen && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="p-5 bg-white border border-[#E1E3E1] rounded-2xl space-y-4 shadow-sm overflow-hidden" 
+            id="assignment-form-panel"
+          >
+            <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-2">
+              <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
+                {editingAssignment ? 'Modify Assignment Details' : 'Create New Study Assignment'}
+              </h3>
+              <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium btn-press cursor-pointer">Cancel</button>
             </div>
-          )}
 
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Title */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#49454F] uppercase block">Task Title / Assignment Topic</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Solve Integral Exercises Chapter 3"
-                className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
+            {errorMessage && (
+              <div className="p-3 text-xs text-[#410E0B] bg-[#FDECEB] border border-[#F9DEDC] rounded-xl flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Title */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Task Title / Assignment Topic</label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Solve Integral Exercises Chapter 3"
+                  className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
+                />
+              </div>
+
+              {/* Course Link */}
+              <SubjectSelect
+                courses={courses}
+                value={courseId}
+                onChange={setCourseId}
+                onAddCourse={onAddCourse}
+                label="Course Subject"
+                id="assignment-course-select"
               />
-            </div>
 
-            {/* Course Link */}
-            <SubjectSelect
-              courses={courses}
-              value={courseId}
-              onChange={setCourseId}
-              onAddCourse={onAddCourse}
-              label="Course Subject"
-              id="assignment-course-select"
-            />
+              {/* Due Date */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Due Date</label>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
+                />
+              </div>
 
-            {/* Due Date */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#49454F] uppercase block">Due Date</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
-              />
-            </div>
+              {/* Priority */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Priority Level</label>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as any)}
+                  className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
+                >
+                  <option value="low" className="text-slate-900 bg-white">Low Priority</option>
+                  <option value="medium" className="text-slate-900 bg-white">Medium Priority</option>
+                  <option value="high" className="text-slate-900 bg-white">High Priority</option>
+                </select>
+              </div>
 
-            {/* Priority */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[#49454F] uppercase block">Priority Level</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as any)}
-                className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
-              >
-                <option value="low" className="text-slate-900 bg-white">Low Priority</option>
-                <option value="medium" className="text-slate-900 bg-white">Medium Priority</option>
-                <option value="high" className="text-slate-900 bg-white">High Priority</option>
-              </select>
-            </div>
+              {/* Description */}
+              <div className="space-y-1 md:col-span-2">
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Additional Instructions / Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  placeholder="List textbooks, submission link portals, or custom tasks..."
+                  className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none resize-none"
+                />
+              </div>
 
-            {/* Description */}
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-[10px] font-bold text-[#49454F] uppercase block">Additional Instructions / Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                placeholder="List textbooks, submission link portals, or custom tasks..."
-                className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none resize-none"
-              />
-            </div>
-
-            <div className="md:col-span-2 pt-2 flex justify-end">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-6 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full flex items-center justify-center gap-1.5 transition-colors shadow-sm"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <span>{editingAssignment ? 'Save Changes' : 'Create Assignment'}</span>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+              <div className="md:col-span-2 pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full flex items-center justify-center gap-1.5 transition-colors shadow-sm btn-press cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <span>{editingAssignment ? 'Save Changes' : 'Create Assignment'}</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Grid of Tasks */}
       <div className="grid grid-cols-1 gap-3" id="assignments-list-grid">
-        {filteredAssignments.length > 0 ? (
-          filteredAssignments.map((assignment) => {
-            const isCompleted = assignment.status === 'completed';
-            const color = getCourseColor(assignment.courseId);
+        <AnimatePresence mode="popLayout">
+          {filteredAssignments.length > 0 ? (
+            filteredAssignments.map((assignment) => {
+              const isCompleted = assignment.status === 'completed';
+              const color = getCourseColor(assignment.courseId);
 
-            return (
-              <div
-                key={assignment.id}
-                className={`p-4 bg-white border rounded-2xl flex items-center justify-between gap-4 transition-all hover:shadow-sm ${
-                  isCompleted ? 'border-[#E1E3E1]/70 opacity-75' : 'border-[#E1E3E1]'
-                }`}
-                id={`assignment-card-${assignment.id}`}
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  {/* Status checkbox */}
-                  <button
-                    onClick={() => handleToggleStatus(assignment)}
-                    className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
-                      isCompleted
-                        ? 'bg-[#EADDFF] border-[#6750A4] text-[#21005D]'
-                        : 'border-[#79747E] hover:border-[#6750A4] text-transparent'
-                    }`}
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
+              return (
+                <motion.div
+                  key={assignment.id}
+                  layout
+                  variants={listItemVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  className={`p-4 bg-white border rounded-2xl flex items-center justify-between gap-4 transition-all hover:shadow-sm card-interactive ${
+                    isCompleted ? 'border-[#E1E3E1]/70 opacity-75' : 'border-[#E1E3E1]'
+                  }`}
+                  id={`assignment-card-${assignment.id}`}
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    {/* Status checkbox */}
+                    <button
+                      onClick={() => handleToggleStatus(assignment)}
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all btn-press cursor-pointer ${
+                        isCompleted
+                          ? 'bg-[#EADDFF] border-[#6750A4] text-[#21005D]'
+                          : 'border-[#79747E] hover:border-[#6750A4] text-transparent'
+                      }`}
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
 
-                  <div className="min-w-0">
-                    <h4 className={`text-xs font-bold leading-snug truncate ${isCompleted ? 'line-through text-[#79747E]' : 'text-[#1D1B20]'}`}>
-                      {assignment.title}
-                    </h4>
-                    {assignment.description && (
-                      <p className="text-[10px] text-[#49454F] truncate mt-1 max-w-md">{assignment.description}</p>
-                    )}
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border" style={{ backgroundColor: color + '12', borderColor: color + '25', color }}>
-                        {courses.find(c => c.id === assignment.courseId)?.name || 'Subject'}
-                      </span>
-                      <span className="flex items-center gap-1 text-[9px] text-[#49454F] font-semibold font-mono">
-                        <Clock className="w-3 h-3 text-[#49454F]" />
-                        Due: {assignment.dueDate}
-                      </span>
+                    <div className="min-w-0">
+                      <h4 className={`text-xs font-bold leading-snug truncate ${isCompleted ? 'line-through text-[#79747E]' : 'text-[#1D1B20]'}`}>
+                        {assignment.title}
+                      </h4>
+                      {assignment.description && (
+                        <p className="text-[10px] text-[#49454F] truncate mt-1 max-w-md">{assignment.description}</p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border" style={{ backgroundColor: color + '12', borderColor: color + '25', color }}>
+                          {courses.find(c => c.id === assignment.courseId)?.name || 'Subject'}
+                        </span>
+                        <span className="flex items-center gap-1 text-[9px] text-[#49454F] font-semibold font-mono">
+                          <Clock className="w-3 h-3 text-[#49454F]" />
+                          Due: {assignment.dueDate}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3 shrink-0">
-                  {/* Priority indicator tag */}
-                  <span className={`text-[8px] font-black tracking-wider uppercase px-2 py-0.5 rounded-lg border ${
-                    assignment.priority === 'high' ? 'bg-[#FDECEB] border-[#F9DEDC] text-[#B3261E]' :
-                    assignment.priority === 'medium' ? 'bg-[#FFF4E5] border-[#FFE2CC] text-[#D05C00]' :
-                    'bg-[#F7F9FC] border-[#E1E3E1] text-[#49454F]'
-                  }`}>
-                    {assignment.priority}
-                  </span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {/* Priority indicator tag */}
+                    <span className={`text-[8px] font-black tracking-wider uppercase px-2 py-0.5 rounded-lg border ${
+                      assignment.priority === 'high' ? 'bg-[#FDECEB] border-[#F9DEDC] text-[#B3261E]' :
+                      assignment.priority === 'medium' ? 'bg-[#FFF4E5] border-[#FFE2CC] text-[#D05C00]' :
+                      'bg-[#F7F9FC] border-[#E1E3E1] text-[#49454F]'
+                    }`}>
+                      {assignment.priority}
+                    </span>
 
-                  <div className="flex items-center gap-1.5 border-l border-[#E1E3E1] pl-3">
-                    <button
-                      onClick={() => handleOpenEdit(assignment)}
-                      className="p-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-lg border border-[#E1E3E1] transition-colors"
-                      title="Edit Assignment"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => onDeleteAssignment(assignment.id)}
-                      className="p-1.5 bg-[#FDECEB] hover:bg-[#F9DEDC] text-[#B3261E] rounded-lg border border-[#F9DEDC] transition-colors"
-                      title="Delete Assignment"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1.5 border-l border-[#E1E3E1] pl-3">
+                      <button
+                        onClick={() => handleOpenEdit(assignment)}
+                        className="p-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-lg border border-[#E1E3E1] transition-colors btn-press cursor-pointer"
+                        title="Edit Assignment"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => onDeleteAssignment(assignment.id)}
+                        className="p-1.5 bg-[#FDECEB] hover:bg-[#F9DEDC] text-[#B3261E] rounded-lg border border-[#F9DEDC] transition-colors btn-press cursor-pointer"
+                        title="Delete Assignment"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="p-8 bg-white border border-[#E1E3E1] rounded-2xl text-center space-y-3" id="assignments-empty-state">
-            <CheckSquare className="w-10 h-10 text-[#79747E] mx-auto" />
-            <h4 className="text-xs font-bold text-[#1D1B20]">No matching assignments!</h4>
-            <p className="text-[10px] text-[#49454F] max-w-sm mx-auto">Click "New Assignment" above to track upcoming homework items.</p>
-          </div>
-        )}
+                </motion.div>
+              );
+            })
+          ) : (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="p-8 bg-white border border-[#E1E3E1] rounded-2xl text-center space-y-3" 
+              id="assignments-empty-state"
+            >
+              <CheckSquare className="w-10 h-10 text-[#79747E] mx-auto" />
+              <h4 className="text-xs font-bold text-[#1D1B20]">No matching assignments!</h4>
+              <p className="text-[10px] text-[#49454F] max-w-sm mx-auto">Click "New Assignment" above to track upcoming homework items.</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-    </div>
+    </motion.div>
   );
 }

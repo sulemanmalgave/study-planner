@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   LayoutDashboard, 
   BookOpen,
@@ -16,6 +17,7 @@ import {
   X
 } from 'lucide-react';
 import { UserProfile } from '../types';
+import { drawerVariants, modalBackdropVariants } from '../lib/animations';
 
 interface SidebarProps {
   activeTab: string;
@@ -60,7 +62,7 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
             <img 
               src={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/logo.png`}
               alt="Study Planner Logo" 
-              className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/60 shrink-0" 
+              className="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200/60 shrink-0 transition-transform duration-200 hover:scale-105" 
               referrerPolicy="no-referrer"
               onError={(e) => {
                 const target = e.currentTarget;
@@ -82,7 +84,7 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
           {isDrawer && (
             <button
               onClick={onClose}
-              className="p-1.5 text-[#49454F] hover:text-[#1D1B20] hover:bg-[#F3EDF7] rounded-full transition-colors cursor-pointer shrink-0 ml-1"
+              className="p-1.5 text-[#49454F] hover:text-[#1D1B20] hover:bg-[#F3EDF7] rounded-full transition-colors cursor-pointer shrink-0 ml-1 btn-press"
               aria-label="Close navigation drawer"
               id="close-drawer-btn"
             >
@@ -92,7 +94,7 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
         </div>
 
         {/* Navigation Links */}
-        <nav className="space-y-0.5" id={isDrawer ? "drawer-nav" : "sidebar-nav"}>
+        <nav className="space-y-0.5 relative" id={isDrawer ? "drawer-nav" : "sidebar-nav"}>
           {menuItems.map((item) => {
             const IconComponent = item.icon;
             const isActive = activeTab === item.id;
@@ -100,19 +102,33 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
               <button
                 key={item.id}
                 onClick={() => handleItemClick(item.id)}
-                className={`w-full flex items-center justify-between px-3.5 py-2 lg:py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                className={`relative w-full flex items-center justify-between px-3.5 py-2 lg:py-1.5 rounded-full text-xs font-semibold tracking-wide transition-colors duration-150 cursor-pointer group btn-press ${
                   isActive
-                    ? 'bg-[#EADDFF] text-[#21005D] font-bold shadow-sm'
-                    : 'text-[#49454F] hover:bg-[#F3EDF7] hover:text-[#1D1B20]'
+                    ? 'text-[#21005D] font-bold shadow-xs'
+                    : 'text-[#49454F] hover:bg-[#F3EDF7]/70 hover:text-[#1D1B20]'
                 }`}
                 id={`${isDrawer ? 'drawer' : 'nav'}-link-${item.id}`}
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <IconComponent className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#21005D]' : 'text-[#49454F]'}`} />
+                {isActive && (
+                  <motion.div
+                    layoutId={isDrawer ? "drawerActiveNavPill" : "sidebarActiveNavPill"}
+                    className="absolute inset-0 bg-[#EADDFF] rounded-full z-0 overflow-hidden shadow-2xs"
+                    transition={{
+                      type: 'spring',
+                      stiffness: 420,
+                      damping: 32,
+                      mass: 0.8
+                    }}
+                  >
+                    <div className="absolute left-1.5 top-2 bottom-2 w-1 bg-[#6750A4] rounded-full" />
+                  </motion.div>
+                )}
+                <div className="relative z-10 flex items-center gap-3 min-w-0">
+                  <IconComponent className={`w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-[#21005D]' : 'text-[#49454F]'}`} />
                   <span className="truncate">{item.label}</span>
                 </div>
                 {item.isPremiumFeature && !isPremium && (
-                  <span className="px-1.5 py-0.5 text-[8px] font-black bg-[#6750A4] text-white rounded uppercase tracking-wider shrink-0">
+                  <span className="relative z-10 px-1.5 py-0.5 text-[8px] font-black bg-[#6750A4] text-white rounded uppercase tracking-wider shrink-0 shadow-2xs">
                     PRO
                   </span>
                 )}
@@ -126,12 +142,12 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
       <div className="pt-3 border-t border-[#E1E3E1] flex flex-col gap-3 mt-4" id={isDrawer ? "drawer-bottom-section" : "sidebar-bottom-section"}>
         {/* Premium Upgrade or Premium Active Card */}
         {isPremium ? (
-          <div className="p-3 bg-emerald-50 border border-emerald-200/60 rounded-2xl flex items-center justify-center gap-2 text-emerald-800" id={isDrawer ? "drawer-premium-active-card" : "sidebar-premium-active-card"}>
-            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+          <div className="p-3 bg-emerald-50 border border-emerald-200/60 rounded-2xl flex items-center justify-center gap-2 text-emerald-800 transition-all card-interactive" id={isDrawer ? "drawer-premium-active-card" : "sidebar-premium-active-card"}>
+            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 animate-pulse" />
             <span className="text-xs font-bold">Premium Active ✓</span>
           </div>
         ) : (
-          <div className="p-3 bg-[#EADDFF]/30 border border-[#D0BCFF]/40 rounded-2xl" id={isDrawer ? "drawer-premium-card" : "sidebar-premium-card"}>
+          <div className="p-3 bg-[#EADDFF]/30 border border-[#D0BCFF]/40 rounded-2xl transition-all card-interactive" id={isDrawer ? "drawer-premium-card" : "sidebar-premium-card"}>
             <div className="flex items-center gap-1.5 text-xs font-bold text-[#21005D]">
               <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
               <span>Study Planner Premium</span>
@@ -155,7 +171,7 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
                 onUpgradeClick();
                 if (onClose) onClose();
               }}
-              className="w-full mt-3 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-[10px] rounded-full uppercase tracking-wider transition-colors shadow-sm cursor-pointer"
+              className="w-full mt-3 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-[10px] rounded-full uppercase tracking-wider transition-colors shadow-sm cursor-pointer btn-press"
               id={isDrawer ? "drawer-upgrade-button" : "sidebar-upgrade-button"}
             >
               Upgrade
@@ -164,8 +180,8 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
         )}
 
         {/* Compact Profile Detail Card */}
-        <div className="flex items-center gap-2.5 px-2 py-1" id={isDrawer ? "drawer-profile-card" : "sidebar-profile-card"}>
-          <div className="w-8 h-8 rounded-full bg-[#6750A4] flex items-center justify-center text-xs font-bold text-white shadow-sm shrink-0">
+        <div className="flex items-center gap-2.5 px-2 py-1 rounded-xl transition-colors hover:bg-slate-50 cursor-pointer" id={isDrawer ? "drawer-profile-card" : "sidebar-profile-card"}>
+          <div className="w-8 h-8 rounded-full bg-[#6750A4] flex items-center justify-center text-xs font-bold text-white shadow-sm shrink-0 transition-transform duration-200 hover:scale-105">
             {profile.initials}
           </div>
           <div className="min-w-0 flex-1">
@@ -195,24 +211,35 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
       </aside>
 
       {/* 2. Mobile/Tablet Overlay Drawer (rendered when isOpen is true on screens < 1024px) */}
-      {isOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex" id="mobile-sidebar-container">
-          {/* Backdrop overlay */}
-          <div 
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-300" 
-            onClick={onClose} 
-            id="mobile-drawer-backdrop"
-          />
+      <AnimatePresence>
+        {isOpen && (
+          <div className="lg:hidden fixed inset-0 z-50 flex" id="mobile-sidebar-container">
+            {/* Backdrop overlay */}
+            <motion.div 
+              variants={modalBackdropVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs" 
+              onClick={onClose} 
+              id="mobile-drawer-backdrop"
+            />
 
-          {/* Slide-out drawer panel */}
-          <aside 
-            className="relative w-72 max-w-[85vw] bg-white h-full flex flex-col justify-between p-4 overflow-y-auto shadow-2xl z-10 text-[#49454F]" 
-            id="mobile-sidebar-drawer"
-          >
-            {renderContent(true)}
-          </aside>
-        </div>
-      )}
+            {/* Slide-out drawer panel */}
+            <motion.aside 
+              variants={drawerVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="relative w-72 max-w-[85vw] bg-white h-full flex flex-col justify-between p-4 overflow-y-auto shadow-2xl z-10 text-[#49454F]" 
+              id="mobile-sidebar-drawer"
+            >
+              {renderContent(true)}
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
+

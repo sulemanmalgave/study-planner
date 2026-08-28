@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { pageVariants, listItemVariants, modalVariants, backdropVariants } from '../lib/animations';
 import {
   Mic,
   Plus,
@@ -740,7 +742,14 @@ export default function AudioLecturesView({
   const isFreeLimitReached = !isPremium && audioLectures.length >= 2;
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6" id="audio-lectures-view-container">
+    <motion.div 
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6" 
+      id="audio-lectures-view-container"
+    >
       {/* Hidden audio element */}
       <audio
         ref={audioRef}
@@ -781,14 +790,14 @@ export default function AudioLecturesView({
         <button
           onClick={() => {
             if (isFreeLimitReached) {
-              onUpgradeClick();
+              onUpgradeClick?.();
               return;
             }
             setIsAddModalOpen(true);
             setFormSubjectName(courses[0]?.name || '');
             setFormCourseId(courses[0]?.id || '');
           }}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-xs sm:text-sm rounded-full tracking-wide transition-all shadow-sm hover:shadow cursor-pointer shrink-0"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-xs sm:text-sm rounded-full tracking-wide transition-all shadow-sm hover:shadow btn-press cursor-pointer shrink-0"
           id="add-lecture-button"
         >
           <Plus className="w-4 h-4" />
@@ -798,7 +807,12 @@ export default function AudioLecturesView({
 
       {/* Free Plan Limit Reached Banner */}
       {isFreeLimitReached && (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950 shadow-2xs" id="audio-lectures-limit-banner">
+        <motion.div 
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950 shadow-2xs" 
+          id="audio-lectures-limit-banner"
+        >
           <div className="flex items-center gap-3">
             <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0">
               <AlertCircle className="w-4 h-4" />
@@ -812,13 +826,13 @@ export default function AudioLecturesView({
           </div>
           <button
             onClick={onUpgradeClick}
-            className="px-4 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-xs rounded-full shadow-xs shrink-0 cursor-pointer transition-colors self-start sm:self-auto flex items-center gap-1.5"
+            className="px-4 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-xs rounded-full shadow-xs shrink-0 btn-press cursor-pointer transition-colors self-start sm:self-auto flex items-center gap-1.5"
             id="audio-banner-upgrade-btn"
           >
             <Sparkles className="w-3.5 h-3.5 text-yellow-300 fill-yellow-300" />
             <span>Upgrade to Pro</span>
           </button>
-        </div>
+        </motion.div>
       )}
 
       {/* Search & Subject Filter Bar */}
@@ -866,7 +880,12 @@ export default function AudioLecturesView({
       {/* Main Content Area */}
       {filteredLectures.length === 0 ? (
         /* Empty State */
-        <div className="bg-white border border-[#E1E3E1] rounded-3xl p-8 sm:p-12 text-center flex flex-col items-center justify-center my-6" id="empty-lectures-state">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white border border-[#E1E3E1] rounded-3xl p-8 sm:p-12 text-center flex flex-col items-center justify-center my-6" 
+          id="empty-lectures-state"
+        >
           <div className="w-16 h-16 rounded-full bg-[#EADDFF] flex items-center justify-center text-[#6750A4] mb-4">
             <Mic className="w-8 h-8" />
           </div>
@@ -879,40 +898,46 @@ export default function AudioLecturesView({
           <button
             onClick={() => {
               if (isFreeLimitReached) {
-                onUpgradeClick();
+                onUpgradeClick?.();
                 return;
               }
               setIsAddModalOpen(true);
               setFormSubjectName(courses[0]?.name || '');
               setFormCourseId(courses[0]?.id || '');
             }}
-            className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-xs sm:text-sm rounded-full tracking-wide transition-all shadow cursor-pointer"
+            className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-xs sm:text-sm rounded-full tracking-wide transition-all shadow btn-press cursor-pointer"
             id="empty-state-add-button"
           >
             <Plus className="w-4 h-4" />
             <span>Add Lecture</span>
           </button>
-        </div>
+        </motion.div>
       ) : (
         /* Lectures List & Player Split View */
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" id="lectures-grid">
           {/* Lecture Cards List Column */}
           <div className={`${selectedLecture ? 'lg:col-span-6' : 'lg:col-span-12'} space-y-3`} id="lectures-list-column">
-            {filteredLectures.map((lecture) => {
-              const isSelected = selectedLecture?.id === lecture.id;
-              const isThisPlaying = currentPlayingId === lecture.id && isPlaying;
+            <AnimatePresence mode="popLayout">
+              {filteredLectures.map((lecture) => {
+                const isSelected = selectedLecture?.id === lecture.id;
+                const isThisPlaying = currentPlayingId === lecture.id && isPlaying;
 
-              return (
-                <div
-                  key={lecture.id}
-                  className={`bg-white border transition-all rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:border-[#6750A4]/60 ${
-                    isSelected
-                      ? 'border-[#6750A4] ring-2 ring-[#6750A4]/20 shadow-sm bg-[#F3EDF7]/30'
-                      : 'border-[#E1E3E1]'
-                  }`}
-                  onClick={() => setSelectedLecture(lecture)}
-                  id={`lecture-card-${lecture.id}`}
-                >
+                return (
+                  <motion.div
+                    key={lecture.id}
+                    layout
+                    variants={listItemVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    className={`bg-white border transition-all rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer card-interactive hover:border-[#6750A4]/60 ${
+                      isSelected
+                        ? 'border-[#6750A4] ring-2 ring-[#6750A4]/20 shadow-sm bg-[#F3EDF7]/30'
+                        : 'border-[#E1E3E1]'
+                    }`}
+                    onClick={() => setSelectedLecture(lecture)}
+                    id={`lecture-card-${lecture.id}`}
+                  >
                   <div className="flex items-start gap-3.5 min-w-0 flex-1">
                     <button
                       type="button"
@@ -1021,9 +1046,10 @@ export default function AudioLecturesView({
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
+            </AnimatePresence>
           </div>
 
           {/* Lecture Detail & Audio Player Panel */}
@@ -1704,284 +1730,329 @@ export default function AudioLecturesView({
       )}
 
       {/* ADD LECTURE MODAL */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" id="add-lecture-modal">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-[#E1E3E1] max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
-              <h3 className="text-lg font-black text-[#1D1B20] tracking-tight flex items-center gap-2">
-                <Mic className="w-5 h-5 text-[#6750A4]" /> Add Lecture
-              </h3>
-              <button
-                onClick={() => {
-                  setIsAddModalOpen(false);
-                  setSelectedFile(null);
-                  setFileError(null);
-                }}
-                className="p-1 text-[#79747E] hover:text-[#1D1B20] rounded-full cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveLecture} className="space-y-4">
-              {/* Subject Selection */}
-              <div>
-                <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
-                  Subject *
-                </label>
-                <select
-                  value={formCourseId}
-                  onChange={(e) => {
-                    const cid = e.target.value;
-                    setFormCourseId(cid);
-                    const matched = courses.find((c) => c.id === cid);
-                    if (matched) {
-                      setFormSubjectName(matched.name);
-                    }
+      <AnimatePresence>
+        {isAddModalOpen && (
+          <motion.div 
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" 
+            id="add-lecture-modal"
+          >
+            <motion.div 
+              variants={modalVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-[#E1E3E1] max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
+                <h3 className="text-lg font-black text-[#1D1B20] tracking-tight flex items-center gap-2">
+                  <Mic className="w-5 h-5 text-[#6750A4]" /> Add Lecture
+                </h3>
+                <button
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setSelectedFile(null);
+                    setFileError(null);
                   }}
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] focus:outline-none focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
-                  id="add-modal-subject-select"
+                  className="p-1 text-[#79747E] hover:text-[#1D1B20] rounded-full cursor-pointer btn-press"
                 >
-                  {courses.map((course) => (
-                    <option key={course.id} value={course.id}>
-                      {course.name}
-                    </option>
-                  ))}
-                  {courses.length === 0 && <option value="">General</option>}
-                </select>
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              {/* Section / Chapter */}
-              <div>
-                <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
-                  Section / Chapter
-                </label>
-                <input
-                  type="text"
-                  value={formSection}
-                  onChange={(e) => setFormSection(e.target.value)}
-                  placeholder="e.g. Biology"
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] placeholder-[#79747E] focus:outline-none focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
-                  id="add-modal-section-input"
-                />
-              </div>
-
-              {/* Topic / Lecture Title */}
-              <div>
-                <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
-                  Topic / Lecture Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formTitle}
-                  onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="e.g. Reproduction System"
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] placeholder-[#79747E] focus:outline-none focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
-                  id="add-modal-title-input"
-                />
-              </div>
-
-              {/* Audio File Input */}
-              <div>
-                <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
-                  Audio File *
-                </label>
-
-                <div className="border-2 border-dashed border-[#D0BCFF] hover:border-[#6750A4] bg-[#F3EDF7]/40 rounded-2xl p-4 text-center cursor-pointer transition-colors relative">
-                  <input
-                    type="file"
-                    accept="audio/*"
-                    onChange={handleFileChange}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    id="add-modal-file-input"
-                  />
-                  <FileAudio className="w-8 h-8 text-[#6750A4] mx-auto mb-2" />
-                  <p className="text-xs font-bold text-[#1D1B20]">
-                    {selectedFile ? selectedFile.name : 'Click or drop audio recording file here'}
-                  </p>
-                  <p className="text-[10px] text-[#79747E] mt-0.5">
-                    Supports MP3, M4A, WAV, AAC &amp; web audio formats
-                  </p>
+              <form onSubmit={handleSaveLecture} className="space-y-4">
+                {/* Subject Selection */}
+                <div>
+                  <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
+                    Subject *
+                  </label>
+                  <select
+                    value={formCourseId}
+                    onChange={(e) => {
+                      const cid = e.target.value;
+                      setFormCourseId(cid);
+                      const matched = courses.find((c) => c.id === cid);
+                      if (matched) {
+                        setFormSubjectName(matched.name);
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] focus:outline-none focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
+                    id="add-modal-subject-select"
+                  >
+                    {courses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.name}
+                      </option>
+                    ))}
+                    {courses.length === 0 && <option value="">General</option>}
+                  </select>
                 </div>
 
-                {fileError && (
-                  <div className="mt-2 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{fileError}</span>
+                {/* Section / Chapter */}
+                <div>
+                  <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
+                    Section / Chapter
+                  </label>
+                  <input
+                    type="text"
+                    value={formSection}
+                    onChange={(e) => setFormSection(e.target.value)}
+                    placeholder="e.g. Biology"
+                    className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] placeholder-[#79747E] focus:outline-none focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
+                    id="add-modal-section-input"
+                  />
+                </div>
+
+                {/* Topic / Lecture Title */}
+                <div>
+                  <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
+                    Topic / Lecture Title *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                    placeholder="e.g. Reproduction System"
+                    className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] placeholder-[#79747E] focus:outline-none focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
+                    id="add-modal-title-input"
+                  />
+                </div>
+
+                {/* Audio File Input */}
+                <div>
+                  <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
+                    Audio File *
+                  </label>
+
+                  <div className="border-2 border-dashed border-[#D0BCFF] hover:border-[#6750A4] bg-[#F3EDF7]/40 rounded-2xl p-4 text-center cursor-pointer transition-colors relative">
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      onChange={handleFileChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      id="add-modal-file-input"
+                    />
+                    <FileAudio className="w-8 h-8 text-[#6750A4] mx-auto mb-2" />
+                    <p className="text-xs font-bold text-[#1D1B20]">
+                      {selectedFile ? selectedFile.name : 'Click or drop audio recording file here'}
+                    </p>
+                    <p className="text-[10px] text-[#79747E] mt-0.5">
+                      Supports MP3, M4A, WAV, AAC &amp; web audio formats
+                    </p>
                   </div>
-                )}
 
-                {selectedFile && !fileError && (
-                  <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-medium space-y-1">
-                    <div><span className="font-bold">Filename:</span> {selectedFile.name}</div>
-                    <div><span className="font-bold">Duration:</span> {formatTime(detectedDuration)}</div>
-                    <div><span className="font-bold">Size:</span> {formatFileSize(selectedFile.size)}</div>
-                    <div><span className="font-bold">Type:</span> {selectedFile.type || 'audio file'}</div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-end gap-3 border-t border-[#E1E3E1] pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-[#49454F] hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !selectedFile || !formTitle.trim()}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#6750A4] hover:bg-[#503E84] disabled:opacity-50 text-white font-bold text-xs sm:text-sm rounded-full transition-all cursor-pointer shadow-xs"
-                  id="add-modal-submit-btn"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <span>Save Lecture</span>
+                  {fileError && (
+                    <div className="mt-2 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{fileError}</span>
+                    </div>
                   )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+
+                  {selectedFile && !fileError && (
+                    <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-medium space-y-1">
+                      <div><span className="font-bold">Filename:</span> {selectedFile.name}</div>
+                      <div><span className="font-bold">Duration:</span> {formatTime(detectedDuration)}</div>
+                      <div><span className="font-bold">Size:</span> {formatFileSize(selectedFile.size)}</div>
+                      <div><span className="font-bold">Type:</span> {selectedFile.type || 'audio file'}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-3 border-t border-[#E1E3E1] pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="px-4 py-2 text-xs font-bold text-[#49454F] hover:bg-slate-100 rounded-full transition-colors cursor-pointer btn-press"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !selectedFile || !formTitle.trim()}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#6750A4] hover:bg-[#503E84] disabled:opacity-50 text-white font-bold text-xs sm:text-sm rounded-full transition-all cursor-pointer shadow-xs btn-press"
+                    id="add-modal-submit-btn"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <span>Save Lecture</span>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* EDIT LECTURE MODAL */}
-      {editingLecture && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" id="edit-lecture-modal">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-[#E1E3E1]">
-            <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
-              <h3 className="text-lg font-black text-[#1D1B20] tracking-tight flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-[#6750A4]" /> Edit Lecture
-              </h3>
-              <button
-                onClick={() => setEditingLecture(null)}
-                className="p-1 text-[#79747E] hover:text-[#1D1B20] rounded-full cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
-                  Subject
-                </label>
-                <select
-                  value={editCourseId}
-                  onChange={(e) => {
-                    const cid = e.target.value;
-                    setEditCourseId(cid);
-                    const matched = courses.find((c) => c.id === cid);
-                    if (matched) {
-                      setEditSubjectName(matched.name);
-                    }
-                  }}
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] focus:outline-none focus:border-[#6750A4]"
+      <AnimatePresence>
+        {editingLecture && (
+          <motion.div 
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" 
+            id="edit-lecture-modal"
+          >
+            <motion.div 
+              variants={modalVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-[#E1E3E1]"
+            >
+              <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
+                <h3 className="text-lg font-black text-[#1D1B20] tracking-tight flex items-center gap-2">
+                  <Edit3 className="w-5 h-5 text-[#6750A4]" /> Edit Lecture
+                </h3>
+                <button
+                  onClick={() => setEditingLecture(null)}
+                  className="p-1 text-[#79747E] hover:text-[#1D1B20] rounded-full cursor-pointer btn-press"
                 >
-                  {courses.map((course) => (
-                    <option key={course.id} value={course.id}>
-                      {course.name}
-                    </option>
-                  ))}
-                  {courses.length === 0 && <option value="">General</option>}
-                </select>
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              <div>
-                <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
-                  Section / Chapter
-                </label>
-                <input
-                  type="text"
-                  value={editSection}
-                  onChange={(e) => setEditSection(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] focus:outline-none focus:border-[#6750A4]"
-                />
+              <form onSubmit={handleSaveEdit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
+                    Subject
+                  </label>
+                  <select
+                    value={editCourseId}
+                    onChange={(e) => {
+                      const cid = e.target.value;
+                      setEditCourseId(cid);
+                      const matched = courses.find((c) => c.id === cid);
+                      if (matched) {
+                        setEditSubjectName(matched.name);
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] focus:outline-none focus:border-[#6750A4]"
+                  >
+                    {courses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.name}
+                      </option>
+                    ))}
+                    {courses.length === 0 && <option value="">General</option>}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
+                    Section / Chapter
+                  </label>
+                  <input
+                    type="text"
+                    value={editSection}
+                    onChange={(e) => setEditSection(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] focus:outline-none focus:border-[#6750A4]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
+                    Topic / Lecture Title *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] focus:outline-none focus:border-[#6750A4]"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-[#49454F]">
+                  <p className="font-semibold text-[#1D1B20] mb-0.5">Automated Filename Update:</p>
+                  Next download filename will be: <code className="bg-white px-1.5 py-0.5 rounded border font-mono text-[#6750A4] font-bold">{generateDownloadFilename({ ...editingLecture, subjectName: editSubjectName || editingLecture.subjectName, section: editSection, title: editTitle })}</code>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 border-t border-[#E1E3E1] pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setEditingLecture(null)}
+                    className="px-4 py-2 text-xs font-bold text-[#49454F] hover:bg-slate-100 rounded-full transition-colors cursor-pointer btn-press"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-xs sm:text-sm rounded-full transition-all cursor-pointer shadow-xs btn-press"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* DELETE CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {deletingLectureId && (
+          <motion.div 
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" 
+            id="delete-confirmation-modal"
+          >
+            <motion.div 
+              variants={modalVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 text-center shadow-2xl border border-[#E1E3E1]"
+            >
+              <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+                <AlertCircle className="w-6 h-6" />
               </div>
 
-              <div>
-                <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
-                  Topic / Lecture Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] focus:outline-none focus:border-[#6750A4]"
-                />
-              </div>
+              <h3 className="text-lg font-black text-[#1D1B20]">
+                Delete this lecture?
+              </h3>
 
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-[#49454F]">
-                <p className="font-semibold text-[#1D1B20] mb-0.5">Automated Filename Update:</p>
-                Next download filename will be: <code className="bg-white px-1.5 py-0.5 rounded border font-mono text-[#6750A4] font-bold">{generateDownloadFilename({ ...editingLecture, subjectName: editSubjectName || editingLecture.subjectName, section: editSection, title: editTitle })}</code>
-              </div>
+              <p className="text-xs text-[#49454F] font-medium leading-relaxed">
+                This audio recording will be permanently removed.
+              </p>
 
-              <div className="flex items-center justify-end gap-3 border-t border-[#E1E3E1] pt-4">
+              <div className="flex items-center justify-center gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setEditingLecture(null)}
-                  className="px-4 py-2 text-xs font-bold text-[#49454F] hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+                  onClick={() => setDeletingLectureId(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-[#1D1B20] text-xs font-bold rounded-full transition-colors cursor-pointer btn-press"
+                  id="cancel-delete-lecture-btn"
                 >
                   Cancel
                 </button>
+
                 <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-xs sm:text-sm rounded-full transition-all cursor-pointer shadow-xs"
+                  type="button"
+                  onClick={ConfirmDeleteLecture}
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-full transition-colors shadow-xs cursor-pointer btn-press"
+                  id="confirm-delete-lecture-btn"
                 >
-                  Save Changes
+                  Delete
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* DELETE CONFIRMATION MODAL */}
-      {deletingLectureId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" id="delete-confirmation-modal">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 text-center shadow-2xl border border-[#E1E3E1]">
-            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-              <AlertCircle className="w-6 h-6" />
-            </div>
-
-            <h3 className="text-lg font-black text-[#1D1B20]">
-              Delete this lecture?
-            </h3>
-
-            <p className="text-xs text-[#49454F] font-medium leading-relaxed">
-              This audio recording will be permanently removed.
-            </p>
-
-            <div className="flex items-center justify-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeletingLectureId(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-[#1D1B20] text-xs font-bold rounded-full transition-colors cursor-pointer"
-                id="cancel-delete-lecture-btn"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={ConfirmDeleteLecture}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-full transition-colors shadow-xs cursor-pointer"
-                id="confirm-delete-lecture-btn"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
