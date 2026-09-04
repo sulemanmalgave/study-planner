@@ -36,6 +36,7 @@ import MobileHomeView from './components/MobileHomeView';
 import UpgradeModal from './components/UpgradeModal';
 import QuickAddModal from './components/QuickAddModal';
 import LimitReachedDialog from './components/LimitReachedDialog';
+import RestoreSubscriptionModal from './components/RestoreSubscriptionModal';
 
 import { 
   DatabaseSchema, 
@@ -54,6 +55,13 @@ import {
 import { getInitialClientState } from './defaultState';
 import { db, isFirebaseConfigured } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import {
+  getStoredEntitlement,
+  isEntitlementActive,
+  saveStoredEntitlement,
+  reconcileSubscription,
+  syncEntitlementToBackend,
+} from './lib/entitlement';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -119,6 +127,7 @@ export default function App() {
   // Modals & Navigation state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [isUpgradeOpen, setIsUpgradeOpen] = useState<boolean>(false);
+  const [isRestoreOpen, setIsRestoreOpen] = useState<boolean>(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState<boolean>(false);
   const [quickAddDefaultType, setQuickAddDefaultType] = useState<'task' | 'class' | 'note' | 'exam'>('task');
   const [isLimitDialogOpen, setIsLimitDialogOpen] = useState<boolean>(false);
@@ -132,6 +141,11 @@ export default function App() {
       console.warn('Failed to save state to localStorage:', e);
     }
 
+    // Always preserve and update dedicated independent entitlement storage
+    if (newState?.profile?.subscription) {
+      saveStoredEntitlement(newState.profile.subscription);
+    }
+
     if (isFirebaseConfigured && db) {
       try {
         await setDoc(doc(db, 'workspaces', 'default'), newState, { merge: true });
@@ -141,15 +155,22 @@ export default function App() {
     }
   };
 
-  // Load state on mount
+  // Load state on mount with entitlement protection
   const fetchState = async () => {
     setIsLoading(true);
     setError(null);
     try {
+      const localEntitlement = getStoredEntitlement();
+
       // 1. Try Express Backend API
       const response = await fetch('/api/state').catch(() => null);
       if (response && response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as DatabaseSchema;
+        // Reconcile: Never allow an active entitlement to be wiped by free backend default
+        data.profile.subscription = reconcileSubscription(data?.profile?.subscription, localEntitlement);
+        if (isEntitlementActive(localEntitlement) && !isEntitlementActive(data?.profile?.subscription)) {
+          syncEntitlementToBackend(localEntitlement!);
+        }
         setDbState(data);
         persistState(data);
         return;
@@ -162,8 +183,9 @@ export default function App() {
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const firestoreData = docSnap.data() as DatabaseSchema;
+            firestoreData.profile.subscription = reconcileSubscription(firestoreData?.profile?.subscription, localEntitlement);
             setDbState(firestoreData);
-            localStorage.setItem('studyflow_db_state', JSON.stringify(firestoreData));
+            persistState(firestoreData);
             return;
           }
         } catch (fErr) {
@@ -175,7 +197,8 @@ export default function App() {
       const localData = localStorage.getItem('studyflow_db_state');
       if (localData) {
         try {
-          const parsed = JSON.parse(localData);
+          const parsed = JSON.parse(localData) as DatabaseSchema;
+          parsed.profile.subscription = reconcileSubscription(parsed?.profile?.subscription, localEntitlement);
           setDbState(parsed);
           return;
         } catch (e) {
@@ -185,12 +208,15 @@ export default function App() {
 
       // 4. Default Initial Client State fallback
       const initialState = getInitialClientState();
+      initialState.profile.subscription = reconcileSubscription(initialState?.profile?.subscription, localEntitlement);
       setDbState(initialState);
       persistState(initialState);
 
     } catch (err: any) {
       console.warn('Using initial fallback state:', err);
+      const localEntitlement = getStoredEntitlement();
       const fallback = getInitialClientState();
+      fallback.profile.subscription = reconcileSubscription(fallback?.profile?.subscription, localEntitlement);
       setDbState(fallback);
       persistState(fallback);
     } finally {
@@ -236,21 +262,13 @@ export default function App() {
   const audioLectures = dbState.audioLectures || [];
   const studyMaterials = dbState.studyMaterials || [];
   
-  // Calculate if subscription is active and valid
+  // Calculate if subscription is active and valid (checks in-memory state & independent storage)
   const isSubscriptionValid = () => {
-    const sub = profile?.subscription;
-    if (!sub) return false;
-    const isStatusPremium =
-      sub.subscriptionStatus === 'premium' ||
-      sub.plan === 'premium' ||
-      sub.plan === 'monthly' ||
-      sub.plan === 'yearly' ||
-      sub.plan === 'quarterly';
-    if (!isStatusPremium) return false;
-    if (sub.expiryDate) {
-      return new Date(sub.expiryDate).getTime() > Date.now();
+    if (isEntitlementActive(profile?.subscription)) {
+      return true;
     }
-    return true;
+    const stored = getStoredEntitlement();
+    return isEntitlementActive(stored);
   };
 
   const isPremium = isSubscriptionValid();
@@ -336,13 +354,31 @@ export default function App() {
 
   const handleDeleteCourse = async (id: string) => {
     try {
-      const response = await fetch(`/api/courses/${id}`, { method: 'DELETE' });
-      if (response.ok) {
-        // Cascade delete cascades done on backend, reload state cleanly
-        fetchState();
-      }
+      // 1. SAFE TARGETED SUBJECT DELETION:
+      // Remove ONLY the selected course and clean up its timetable slots.
+      // Profile, subscriptions, payments, and entitlements are 100% untouched and preserved.
+      // Premium is NOT tied to subject count (even with 0 subjects, Premium remains active!).
+      setDbState(prev => {
+        if (!prev) return null;
+        const nextState: DatabaseSchema = {
+          ...prev,
+          courses: prev.courses.filter(c => c.id !== id),
+          timetable: prev.timetable.filter(t => t.courseId !== id),
+          profile: {
+            ...prev.profile,
+            subscription: { ...prev.profile.subscription },
+          },
+        };
+        persistState(nextState);
+        return nextState;
+      });
+
+      // 2. Notify backend endpoint
+      await fetch(`/api/courses/${id}`, { method: 'DELETE' }).catch(err => {
+        console.warn('Backend course deletion warning:', err);
+      });
     } catch (e) {
-      console.error(e);
+      console.error('Error deleting course:', e);
     }
   };
 
@@ -719,19 +755,34 @@ export default function App() {
 
   const handleResetDatabase = async () => {
     try {
+      const activeEntitlement = getStoredEntitlement();
+      const hasActive = isEntitlementActive(activeEntitlement);
+
       const response = await fetch('/api/reset', { method: 'POST' }).catch(() => null);
       if (response && response.ok) {
         const data = await response.json();
-        setDbState(data.state);
-        persistState(data.state);
+        const resetState = data.state as DatabaseSchema;
+        // Never wipe paid entitlement even on academic data reset!
+        if (hasActive && activeEntitlement) {
+          resetState.profile.subscription = { ...activeEntitlement };
+        }
+        setDbState(resetState);
+        persistState(resetState);
       } else {
         const initialState = getInitialClientState();
+        if (hasActive && activeEntitlement) {
+          initialState.profile.subscription = { ...activeEntitlement };
+        }
         setDbState(initialState);
         persistState(initialState);
       }
       setActiveTab('dashboard');
     } catch (e) {
+      const activeEntitlement = getStoredEntitlement();
       const initialState = getInitialClientState();
+      if (isEntitlementActive(activeEntitlement)) {
+        initialState.profile.subscription = { ...activeEntitlement! };
+      }
       setDbState(initialState);
       persistState(initialState);
       setActiveTab('dashboard');
@@ -745,6 +796,11 @@ export default function App() {
   };
 
   const handleUpgradeSuccess = (updatedSubscription: Subscription) => {
+    // 1. Immediately store in dedicated independent entitlement ledger
+    saveStoredEntitlement(updatedSubscription, 'payment');
+    // 2. Sync to server-side subscriptions_ledger.json
+    syncEntitlementToBackend(updatedSubscription);
+    // 3. Update active workspace state
     setDbState(prev => {
       if (!prev) return null;
       const nextState = {
@@ -1041,6 +1097,7 @@ export default function App() {
               onResetDatabase={handleResetDatabase}
               onTriggerUpgrade={() => setIsUpgradeOpen(true)}
               onRefreshState={fetchState}
+              onOpenRestore={() => setIsRestoreOpen(true)}
             />
           )}
 
@@ -1074,6 +1131,13 @@ export default function App() {
       <UpgradeModal 
         isOpen={isUpgradeOpen} 
         onClose={() => setIsUpgradeOpen(false)} 
+        onSuccess={handleUpgradeSuccess}
+        onOpenRestore={() => setIsRestoreOpen(true)}
+      />
+
+      <RestoreSubscriptionModal
+        isOpen={isRestoreOpen}
+        onClose={() => setIsRestoreOpen(false)}
         onSuccess={handleUpgradeSuccess}
       />
 

@@ -16,6 +16,7 @@ interface UpgradeModalProps {
   onSuccess?: (updatedSubscription: Subscription) => void;
   currentCountry?: string;
   limitReason?: string;
+  onOpenRestore?: () => void;
 }
 
 declare global {
@@ -75,7 +76,8 @@ export default function UpgradeModal({
   isOpen, 
   onClose, 
   onSuccess, 
-  limitReason 
+  limitReason,
+  onOpenRestore
 }: UpgradeModalProps) {
   const [billingCountry, setBillingCountry] = useState<string>('US');
   const [selectedPlanId, setSelectedPlanId] = useState<'monthly' | 'quarterly' | 'yearly'>('yearly');
@@ -513,6 +515,21 @@ export default function UpgradeModal({
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                 <span>256-bit SSL Encrypted • Verified Backend Processing • Cancel Anytime</span>
               </div>
+
+              {onOpenRestore && (
+                <div className="pt-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenRestore();
+                    }}
+                    className="text-[11px] font-semibold text-[#6750A4] hover:underline cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span>Already paid? Restore your subscription</span>
+                  </button>
+                </div>
+              )}
             </div>
 
           </motion.div>

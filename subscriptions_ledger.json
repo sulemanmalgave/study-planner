@@ -1,0 +1,14 @@
+[
+  {
+    "transactionId": "sim_b1da4eb5-bdd",
+    "plan": "yearly",
+    "paymentGateway": "razorpay",
+    "amount": 19.99,
+    "currency": "USD",
+    "purchaseDate": "2026-09-04T03:51:54.933Z",
+    "expiryDate": "2027-09-04T03:51:54.933Z",
+    "billingCountry": "US",
+    "verifiedAt": "2026-09-04T03:51:54.933Z",
+    "status": "active"
+  }
+]

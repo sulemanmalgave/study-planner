@@ -281,6 +281,84 @@ const getDbFilePath = () => {
   return DB_FILE;
 };
 
+// --- Dedicated Subscriptions & Entitlements Ledger ---
+interface StoredSubscriptionLedgerEntry {
+  transactionId: string;
+  orderId?: string;
+  plan: 'monthly' | 'quarterly' | 'yearly' | 'premium';
+  paymentGateway: 'razorpay' | 'paypal';
+  amount?: number;
+  currency?: string;
+  purchaseDate: string;
+  expiryDate: string;
+  billingCountry: string;
+  verifiedAt: string;
+  status: 'active' | 'expired' | 'revoked';
+}
+
+const getLedgerFilePath = () => {
+  if (process.env.VERCEL || process.env.TMPDIR) {
+    return path.join('/tmp', 'subscriptions_ledger.json');
+  }
+  return path.join(process.cwd(), 'subscriptions_ledger.json');
+};
+
+const readSubscriptionsLedger = (): StoredSubscriptionLedgerEntry[] => {
+  try {
+    const filePath = getLedgerFilePath();
+    if (!fs.existsSync(filePath)) {
+      return [];
+    }
+    const data = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn('[Ledger] Could not read subscriptions ledger:', err);
+    return [];
+  }
+};
+
+const writeSubscriptionsLedger = (ledger: StoredSubscriptionLedgerEntry[]) => {
+  try {
+    const filePath = getLedgerFilePath();
+    fs.writeFileSync(filePath, JSON.stringify(ledger, null, 2));
+  } catch (err) {
+    console.warn('[Ledger] Could not write subscriptions ledger:', err);
+  }
+};
+
+const recordSubscriptionInLedger = (entry: StoredSubscriptionLedgerEntry) => {
+  const ledger = readSubscriptionsLedger();
+  const existingIdx = ledger.findIndex(e => e.transactionId === entry.transactionId);
+  if (existingIdx >= 0) {
+    ledger[existingIdx] = entry;
+  } else {
+    ledger.push(entry);
+  }
+  writeSubscriptionsLedger(ledger);
+};
+
+const getActiveSubscriptionFromLedger = (): StoredSubscriptionLedgerEntry | null => {
+  const ledger = readSubscriptionsLedger();
+  const now = Date.now();
+  const activeEntries = ledger.filter(e => {
+    if (e.status !== 'active') return false;
+    const expiry = new Date(e.expiryDate).getTime();
+    return !isNaN(expiry) && expiry > now;
+  });
+
+  if (activeEntries.length === 0) return null;
+  activeEntries.sort((a, b) => new Date(b.expiryDate).getTime() - new Date(a.expiryDate).getTime());
+  return activeEntries[0];
+};
+
+const normalizePlanType = (plan: string): 'monthly' | 'yearly' | 'quarterly' => {
+  if (plan === 'monthly' || plan === 'quarterly' || plan === 'yearly') {
+    return plan;
+  }
+  return 'yearly';
+};
+
 let inMemoryDb: DatabaseSchema | null = null;
 
 // Database utility helpers
@@ -289,6 +367,22 @@ const readDB = (): DatabaseSchema => {
     const filePath = getDbFilePath();
     if (!fs.existsSync(filePath)) {
       const defaultState = getInitialDatabaseState();
+      // Ensure ledger entitlement is not lost on initial creation
+      const activeFromLedger = getActiveSubscriptionFromLedger();
+      if (activeFromLedger) {
+        defaultState.profile.subscription = {
+          subscriptionStatus: 'premium',
+          plan: activeFromLedger.plan,
+          paymentGateway: activeFromLedger.paymentGateway,
+          transactionId: activeFromLedger.transactionId,
+          purchaseDate: activeFromLedger.purchaseDate,
+          expiryDate: activeFromLedger.expiryDate,
+          billingCountry: activeFromLedger.billingCountry,
+          type: normalizePlanType(activeFromLedger.plan),
+          paymentProvider: activeFromLedger.paymentGateway,
+          paymentId: activeFromLedger.transactionId,
+        };
+      }
       try {
         fs.writeFileSync(filePath, JSON.stringify(defaultState, null, 2));
       } catch (e) {
@@ -313,6 +407,26 @@ const readDB = (): DatabaseSchema => {
         periodStart: new Date().toISOString(),
       };
     }
+
+    // Protect subscription entitlement: If state has free but ledger has active subscription, reconcile
+    if (!isSubscriptionActive(parsed.profile?.subscription)) {
+      const activeFromLedger = getActiveSubscriptionFromLedger();
+      if (activeFromLedger) {
+        parsed.profile.subscription = {
+          subscriptionStatus: 'premium',
+          plan: activeFromLedger.plan,
+          paymentGateway: activeFromLedger.paymentGateway,
+          transactionId: activeFromLedger.transactionId,
+          purchaseDate: activeFromLedger.purchaseDate,
+          expiryDate: activeFromLedger.expiryDate,
+          billingCountry: activeFromLedger.billingCountry,
+          type: normalizePlanType(activeFromLedger.plan),
+          paymentProvider: activeFromLedger.paymentGateway,
+          paymentId: activeFromLedger.transactionId,
+        };
+      }
+    }
+
     return parsed;
   } catch (err) {
     console.error('Error reading database file, using fallback state:', err);
@@ -325,11 +439,47 @@ const readDB = (): DatabaseSchema => {
     if (!inMemoryDb.studyMaterials) {
       inMemoryDb.studyMaterials = [];
     }
+    if (!isSubscriptionActive(inMemoryDb.profile?.subscription)) {
+      const activeFromLedger = getActiveSubscriptionFromLedger();
+      if (activeFromLedger) {
+        inMemoryDb.profile.subscription = {
+          subscriptionStatus: 'premium',
+          plan: activeFromLedger.plan,
+          paymentGateway: activeFromLedger.paymentGateway,
+          transactionId: activeFromLedger.transactionId,
+          purchaseDate: activeFromLedger.purchaseDate,
+          expiryDate: activeFromLedger.expiryDate,
+          billingCountry: activeFromLedger.billingCountry,
+          type: normalizePlanType(activeFromLedger.plan),
+          paymentProvider: activeFromLedger.paymentGateway,
+          paymentId: activeFromLedger.transactionId,
+        };
+      }
+    }
     return inMemoryDb;
   }
 };
 
 const writeDB = (data: DatabaseSchema) => {
+  // Entitlement protection: Prevent accidental downgrade if ledger has active subscription
+  if (!isSubscriptionActive(data.profile?.subscription)) {
+    const activeFromLedger = getActiveSubscriptionFromLedger();
+    if (activeFromLedger) {
+      data.profile.subscription = {
+        subscriptionStatus: 'premium',
+        plan: activeFromLedger.plan,
+        paymentGateway: activeFromLedger.paymentGateway,
+        transactionId: activeFromLedger.transactionId,
+        purchaseDate: activeFromLedger.purchaseDate,
+        expiryDate: activeFromLedger.expiryDate,
+        billingCountry: activeFromLedger.billingCountry,
+        type: normalizePlanType(activeFromLedger.plan),
+        paymentProvider: activeFromLedger.paymentGateway,
+        paymentId: activeFromLedger.transactionId,
+      };
+    }
+  }
+
   inMemoryDb = data;
   try {
     const filePath = getDbFilePath();
@@ -2529,6 +2679,21 @@ ${payload.text}`,
         paymentId: transactionIdentifier,
       };
 
+      // Record in persistent subscriptions ledger
+      recordSubscriptionInLedger({
+        transactionId: transactionIdentifier,
+        orderId,
+        plan: originalOrder.planType,
+        paymentGateway: originalOrder.provider,
+        amount: originalOrder.amount,
+        currency: originalOrder.currency,
+        purchaseDate: purchaseDate.toISOString(),
+        expiryDate: expiryDate.toISOString(),
+        billingCountry: originalOrder.country,
+        verifiedAt: new Date().toISOString(),
+        status: 'active',
+      });
+
       writeDB(db);
       pendingOrders.delete(orderId); // Clean up cache
 
@@ -2540,6 +2705,272 @@ ${payload.text}`,
     } catch (error: any) {
       console.error('Error verifying payment:', error);
       res.status(500).json({ error: error.message || 'Failed to verify payment' });
+    }
+  });
+
+  // Secure Subscription Restoration Endpoint
+  app.post('/api/subscription/restore', async (req, res) => {
+    try {
+      const rawId = req.body?.identifier || req.body?.transactionId || req.body?.paymentId || req.body?.orderId;
+      if (!rawId || typeof rawId !== 'string') {
+        return res.status(400).json({
+          error: 'ID_REQUIRED',
+          message: 'Payment ID or Order ID is required for verification.',
+        });
+      }
+
+      const cleanId = rawId.trim();
+
+      // 1. Check persistent server subscriptions ledger
+      const ledger = readSubscriptionsLedger();
+      const ledgerEntry = ledger.find(e =>
+        e.transactionId.toLowerCase() === cleanId.toLowerCase() ||
+        (e.orderId && e.orderId.toLowerCase() === cleanId.toLowerCase())
+      );
+
+      if (ledgerEntry) {
+        const expiryTime = new Date(ledgerEntry.expiryDate).getTime();
+        if (isNaN(expiryTime) || expiryTime <= Date.now()) {
+          return res.status(400).json({
+            error: 'SUBSCRIPTION_EXPIRED',
+            message: `This subscription (${ledgerEntry.plan}) expired on ${new Date(ledgerEntry.expiryDate).toLocaleDateString()}. Please renew to access Premium features.`,
+            expiryDate: ledgerEntry.expiryDate,
+          });
+        }
+
+        const db = readDB();
+        db.profile.subscription = {
+          subscriptionStatus: 'premium',
+          plan: ledgerEntry.plan,
+          paymentGateway: ledgerEntry.paymentGateway,
+          transactionId: ledgerEntry.transactionId,
+          purchaseDate: ledgerEntry.purchaseDate,
+          expiryDate: ledgerEntry.expiryDate,
+          billingCountry: ledgerEntry.billingCountry,
+          type: normalizePlanType(ledgerEntry.plan),
+          paymentProvider: ledgerEntry.paymentGateway,
+          paymentId: ledgerEntry.transactionId,
+        };
+        writeDB(db);
+
+        return res.json({
+          success: true,
+          message: `Premium ${ledgerEntry.plan} subscription successfully verified and restored!`,
+          subscription: db.profile.subscription,
+        });
+      }
+
+      // 2. Query Razorpay API directly if it's a Razorpay payment ID (e.g., starts with pay_)
+      if (cleanId.startsWith('pay_')) {
+        const { keyId, keySecret } = getRazorpayCredentials();
+        if (!keyId || !keySecret) {
+          return res.status(400).json({
+            error: 'RAZORPAY_CONFIG_MISSING',
+            message: 'Razorpay configuration is not active on this environment.',
+          });
+        }
+
+        const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+        const rzpRes = await fetch(`https://api.razorpay.com/v1/payments/${cleanId}`, {
+          headers: { Authorization: authHeader },
+        });
+
+        if (!rzpRes.ok) {
+          return res.status(404).json({
+            error: 'PAYMENT_NOT_FOUND',
+            message: 'Payment ID not found on Razorpay. Please check the ID from your receipt email.',
+          });
+        }
+
+        const paymentData = (await rzpRes.json()) as any;
+        if (paymentData.status !== 'captured' && paymentData.status !== 'authorized') {
+          return res.status(400).json({
+            error: 'PAYMENT_NOT_COMPLETED',
+            message: `Payment status is ${paymentData.status}. Only captured payments can be restored.`,
+          });
+        }
+
+        // Determine plan from amount: ₹99 (9900 paise) = monthly, ₹999 (99900 paise) = yearly
+        const amountPaise = paymentData.amount || 0;
+        const plan: 'monthly' | 'yearly' = amountPaise >= 50000 ? 'yearly' : 'monthly';
+        const createdTimeMs = (paymentData.created_at || Math.floor(Date.now() / 1000)) * 1000;
+        const purchaseDate = new Date(createdTimeMs);
+        const expiryDate = new Date(createdTimeMs);
+
+        if (plan === 'monthly') {
+          expiryDate.setMonth(expiryDate.getMonth() + 1);
+        } else {
+          expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+        }
+
+        if (expiryDate.getTime() <= Date.now()) {
+          return res.status(400).json({
+            error: 'SUBSCRIPTION_EXPIRED',
+            message: `This Razorpay subscription expired on ${expiryDate.toLocaleDateString()}. Please renew to continue Premium access.`,
+            expiryDate: expiryDate.toISOString(),
+          });
+        }
+
+        const newLedgerEntry: StoredSubscriptionLedgerEntry = {
+          transactionId: paymentData.id,
+          orderId: paymentData.order_id,
+          plan,
+          paymentGateway: 'razorpay',
+          amount: amountPaise / 100,
+          currency: paymentData.currency || 'INR',
+          purchaseDate: purchaseDate.toISOString(),
+          expiryDate: expiryDate.toISOString(),
+          billingCountry: 'IN',
+          verifiedAt: new Date().toISOString(),
+          status: 'active',
+        };
+
+        recordSubscriptionInLedger(newLedgerEntry);
+
+        const db = readDB();
+        db.profile.subscription = {
+          subscriptionStatus: 'premium',
+          plan,
+          paymentGateway: 'razorpay',
+          transactionId: paymentData.id,
+          purchaseDate: purchaseDate.toISOString(),
+          expiryDate: expiryDate.toISOString(),
+          billingCountry: 'IN',
+          type: plan,
+          paymentProvider: 'razorpay',
+          paymentId: paymentData.id,
+        };
+        writeDB(db);
+
+        return res.json({
+          success: true,
+          message: 'Razorpay Premium subscription verified and restored successfully!',
+          subscription: db.profile.subscription,
+        });
+      }
+
+      // 3. Query PayPal API if configured
+      const { clientId, clientSecret, apiBase } = getPaypalCredentials();
+      if (clientId && clientSecret) {
+        try {
+          const accessToken = await fetchPaypalAccessToken(clientId, clientSecret, apiBase);
+          const ppRes = await fetch(`${apiBase}/v2/checkout/orders/${cleanId}`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (ppRes.ok) {
+            const orderData = (await ppRes.json()) as any;
+            if (orderData.status === 'COMPLETED') {
+              const capture = orderData.purchase_units?.[0]?.payments?.captures?.[0];
+              const createTime = new Date(orderData.create_time || Date.now());
+              const val = parseFloat(capture?.amount?.value || '19.99');
+              const plan: 'monthly' | 'yearly' = val < 10 ? 'monthly' : 'yearly';
+              const expiryDate = new Date(createTime.getTime());
+              if (plan === 'monthly') {
+                expiryDate.setMonth(expiryDate.getMonth() + 1);
+              } else {
+                expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+              }
+
+              if (expiryDate.getTime() <= Date.now()) {
+                return res.status(400).json({
+                  error: 'SUBSCRIPTION_EXPIRED',
+                  message: `This PayPal subscription expired on ${expiryDate.toLocaleDateString()}.`,
+                  expiryDate: expiryDate.toISOString(),
+                });
+              }
+
+              const newLedgerEntry: StoredSubscriptionLedgerEntry = {
+                transactionId: capture?.id || orderData.id,
+                orderId: orderData.id,
+                plan,
+                paymentGateway: 'paypal',
+                amount: val,
+                currency: capture?.amount?.currency_code || 'USD',
+                purchaseDate: createTime.toISOString(),
+                expiryDate: expiryDate.toISOString(),
+                billingCountry: 'US',
+                verifiedAt: new Date().toISOString(),
+                status: 'active',
+              };
+
+              recordSubscriptionInLedger(newLedgerEntry);
+
+              const db = readDB();
+              db.profile.subscription = {
+                subscriptionStatus: 'premium',
+                plan,
+                paymentGateway: 'paypal',
+                transactionId: newLedgerEntry.transactionId,
+                purchaseDate: newLedgerEntry.purchaseDate,
+                expiryDate: newLedgerEntry.expiryDate,
+                billingCountry: 'US',
+                type: plan,
+                paymentProvider: 'paypal',
+                paymentId: newLedgerEntry.transactionId,
+              };
+              writeDB(db);
+
+              return res.json({
+                success: true,
+                message: 'PayPal Premium subscription verified and restored successfully!',
+                subscription: db.profile.subscription,
+              });
+            }
+          }
+        } catch (ppErr) {
+          console.warn('[PayPal Restore Check Error]:', ppErr);
+        }
+      }
+
+      return res.status(404).json({
+        error: 'TRANSACTION_NOT_FOUND',
+        message: 'Unable to locate a valid, active subscription for the provided Transaction ID or Order ID. Please check the ID and try again.',
+      });
+    } catch (err: any) {
+      console.error('[Restore Subscription Error]:', err);
+      res.status(500).json({ error: err.message || 'Failed to restore subscription' });
+    }
+  });
+
+  // Entitlement Synchronization Endpoint (Allows client to sync active entitlement to backend ledger)
+  app.post('/api/subscription/sync-entitlement', (req, res) => {
+    try {
+      const { subscription } = req.body;
+      if (!subscription || !isSubscriptionActive(subscription)) {
+        return res.status(400).json({ error: 'Invalid or inactive subscription payload' });
+      }
+
+      if (subscription.expiryDate) {
+        const expiry = new Date(subscription.expiryDate).getTime();
+        if (!isNaN(expiry) && expiry <= Date.now()) {
+          return res.status(400).json({ error: 'Subscription has already expired' });
+        }
+      }
+
+      const db = readDB();
+      db.profile.subscription = { ...subscription };
+      writeDB(db);
+
+      if (subscription.transactionId) {
+        recordSubscriptionInLedger({
+          transactionId: subscription.transactionId,
+          plan: subscription.plan || 'premium',
+          paymentGateway: subscription.paymentGateway || 'razorpay',
+          purchaseDate: subscription.purchaseDate || new Date().toISOString(),
+          expiryDate: subscription.expiryDate || new Date(Date.now() + 30 * 86400000).toISOString(),
+          billingCountry: subscription.billingCountry || 'US',
+          verifiedAt: new Date().toISOString(),
+          status: 'active',
+        });
+      }
+
+      res.json({ success: true, subscription: db.profile.subscription });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to sync entitlement' });
     }
   });
 
@@ -2555,6 +2986,13 @@ ${payload.text}`,
         subscriptionStatus: 'free',
         expiryDate: pastDate.toISOString(),
       };
+
+      // Mark ledger entries as expired so testing works properly
+      const ledger = readSubscriptionsLedger();
+      ledger.forEach(e => {
+        e.status = 'expired';
+      });
+      writeSubscriptionsLedger(ledger);
 
       // Explicitly verify NO data collections were modified
       writeDB(db);
@@ -2574,19 +3012,34 @@ ${payload.text}`,
       const db = readDB();
       const futureDate = new Date();
       futureDate.setFullYear(futureDate.getFullYear() + 1); // Valid for 1 year
+      const simTxId = 'sim_' + crypto.randomUUID().slice(0, 12);
 
       db.profile.subscription = {
         subscriptionStatus: 'premium',
         plan: 'yearly',
         paymentGateway: 'razorpay',
-        transactionId: 'sim_' + crypto.randomUUID().slice(0, 12),
+        transactionId: simTxId,
         purchaseDate: new Date().toISOString(),
         expiryDate: futureDate.toISOString(),
         billingCountry: 'US',
         type: 'yearly',
         paymentProvider: 'razorpay',
-        paymentId: 'sim_' + crypto.randomUUID().slice(0, 12),
+        paymentId: simTxId,
       };
+
+      // Record in ledger so it persists across container restarts
+      recordSubscriptionInLedger({
+        transactionId: simTxId,
+        plan: 'yearly',
+        paymentGateway: 'razorpay',
+        amount: 19.99,
+        currency: 'USD',
+        purchaseDate: new Date().toISOString(),
+        expiryDate: futureDate.toISOString(),
+        billingCountry: 'US',
+        verifiedAt: new Date().toISOString(),
+        status: 'active',
+      });
 
       // Explicitly verify NO data collections were modified or duplicated
       writeDB(db);
@@ -2600,10 +3053,18 @@ ${payload.text}`,
     }
   });
 
-  // Manual Reset to default state
+  // Manual Reset to default state (preserves active subscription)
   app.post('/api/reset', (req, res) => {
     try {
+      const currentDb = readDB();
+      const activeSub = isSubscriptionActive(currentDb?.profile?.subscription)
+        ? currentDb.profile.subscription
+        : null;
+
       const defaultState = getInitialDatabaseState();
+      if (activeSub) {
+        defaultState.profile.subscription = { ...activeSub };
+      }
       writeDB(defaultState);
       res.json({ success: true, state: defaultState });
     } catch (error) {

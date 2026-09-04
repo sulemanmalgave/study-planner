@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, User, Sparkles, RefreshCw, Check, Loader2, AlertCircle, Lock } from 'lucide-react';
+import { Settings, User, Sparkles, RefreshCw, Check, Loader2, AlertCircle, Lock, RotateCcw } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface SettingsViewProps {
@@ -13,6 +13,7 @@ interface SettingsViewProps {
   onResetDatabase: () => Promise<void>;
   onTriggerUpgrade: () => void;
   onRefreshState?: () => void;
+  onOpenRestore?: () => void;
 }
 
 export default function SettingsView({
@@ -26,6 +27,7 @@ export default function SettingsView({
   onResetDatabase,
   onTriggerUpgrade,
   onRefreshState,
+  onOpenRestore,
 }: SettingsViewProps) {
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
@@ -282,6 +284,17 @@ export default function SettingsView({
                 >
                   Renew Pro Subscription
                 </button>
+                {onOpenRestore && (
+                  <button
+                    onClick={onOpenRestore}
+                    type="button"
+                    className="w-full py-2 bg-slate-50 hover:bg-slate-100 border border-[#E1E3E1] text-[#1D1B20] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    id="settings-renew-restore-button"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-[#6750A4]" />
+                    <span>Restore Existing Purchase</span>
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-3" id="settings-free-details">
@@ -298,6 +311,17 @@ export default function SettingsView({
                 >
                   Upgrade Premium
                 </button>
+                {onOpenRestore && (
+                  <button
+                    onClick={onOpenRestore}
+                    type="button"
+                    className="w-full py-2 bg-slate-50 hover:bg-slate-100 border border-[#E1E3E1] text-[#1D1B20] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    id="settings-restore-purchase-button"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-[#6750A4]" />
+                    <span>Restore Existing Purchase</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
