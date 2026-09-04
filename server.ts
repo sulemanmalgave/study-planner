@@ -99,13 +99,119 @@ function getGeminiClient(): GoogleGenAI {
 // Concurrency lock to prevent accidental duplicate Gemini requests per lecture/action
 const activeAiOperations = new Set<string>();
 
-// Resilient Text & Multimodal Generation with automatic model fallback
+// Gemini error parser for actionable diagnostic codes and friendly user messages
+interface GeminiErrorResponse {
+  error: string;
+  code: number;
+  provider: 'google-gemini';
+  message: string;
+  diagnostic?: string;
+}
+
+function parseGeminiError(error: any): GeminiErrorResponse {
+  const rawMsg = (error?.message || String(error || '')).replace(/AIza[0-9A-Za-z-_]{35}/g, '[REDACTED]');
+  let statusCode = error?.status || error?.code || 500;
+  if (typeof statusCode !== 'number') {
+    const parsed = parseInt(String(statusCode), 10);
+    statusCode = isNaN(parsed) ? 500 : parsed;
+  }
+
+  const lower = rawMsg.toLowerCase();
+
+  // 401: Authentication failure
+  if (lower.includes('401') || lower.includes('unauthenticated') || lower.includes('api key not valid') || lower.includes('invalid api key')) {
+    return {
+      error: 'AI_AUTH_FAILED',
+      code: 401,
+      provider: 'google-gemini',
+      message: 'Gemini API authentication failed. The configured GEMINI_API_KEY appears invalid or inactive.',
+      diagnostic: rawMsg.slice(0, 200),
+    };
+  }
+
+  // 403: Permission denied
+  if (lower.includes('403') || lower.includes('permission_denied') || lower.includes('access not configured')) {
+    return {
+      error: 'AI_PERMISSION_DENIED',
+      code: 403,
+      provider: 'google-gemini',
+      message: 'Gemini API permission denied. The configured API key lacks permissions for this model.',
+      diagnostic: rawMsg.slice(0, 200),
+    };
+  }
+
+  // 429: Quota / Rate limit
+  if (lower.includes('429') || lower.includes('quota') || lower.includes('resource_exhausted') || lower.includes('rate limit')) {
+    return {
+      error: 'AI_QUOTA_EXCEEDED',
+      code: 429,
+      provider: 'google-gemini',
+      message: 'Gemini API quota or rate limit exceeded. Please wait a minute and retry.',
+      diagnostic: rawMsg.slice(0, 200),
+    };
+  }
+
+  // 503: High demand / Unavailable
+  if (lower.includes('503') || lower.includes('unavailable') || lower.includes('high demand') || lower.includes('overloaded')) {
+    return {
+      error: 'AI_HIGH_DEMAND',
+      code: 503,
+      provider: 'google-gemini',
+      message: 'Gemini AI models are currently experiencing temporary high demand. Please try again shortly.',
+      diagnostic: rawMsg.slice(0, 200),
+    };
+  }
+
+  // 404: Model not found
+  if (lower.includes('404') || lower.includes('not found') || lower.includes('is no longer available')) {
+    return {
+      error: 'AI_MODEL_NOT_FOUND',
+      code: 404,
+      provider: 'google-gemini',
+      message: 'The requested Gemini model could not be found or is no longer available.',
+      diagnostic: rawMsg.slice(0, 200),
+    };
+  }
+
+  // 400: Malformed or invalid input
+  if (lower.includes('400') || lower.includes('invalid_argument') || lower.includes('bad request')) {
+    return {
+      error: 'AI_INVALID_ARGUMENT',
+      code: 400,
+      provider: 'google-gemini',
+      message: 'The audio file or text data provided could not be processed by Gemini.',
+      diagnostic: rawMsg.slice(0, 200),
+    };
+  }
+
+  // Network / Timeout
+  if (lower.includes('timeout') || lower.includes('econnreset') || lower.includes('etimedout') || lower.includes('network')) {
+    return {
+      error: 'AI_NETWORK_TIMEOUT',
+      code: 504,
+      provider: 'google-gemini',
+      message: 'Connection to Gemini AI service timed out. Please check connectivity and retry.',
+      diagnostic: rawMsg.slice(0, 200),
+    };
+  }
+
+  return {
+    error: 'AI_SERVICE_ERROR',
+    code: statusCode >= 400 && statusCode < 600 ? statusCode : 500,
+    provider: 'google-gemini',
+    message: rawMsg.length > 200 ? `${rawMsg.slice(0, 200)}...` : rawMsg || 'An unexpected Gemini API error occurred.',
+    diagnostic: rawMsg.slice(0, 200),
+  };
+}
+
+// Resilient Text & Multimodal Generation with verified multi-model fallback chain
 async function generateTextWithGemini(
   ai: GoogleGenAI,
   promptOrContents: any,
   systemInstruction?: string
 ): Promise<string> {
-  const models = ['gemini-flash-latest', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.8-flash'];
+  // Ordered by proven latency and availability in production testing
+  const models = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-flash-latest', 'gemini-3.8-flash'];
   let lastError: any = null;
 
   for (const model of models) {
@@ -119,21 +225,22 @@ async function generateTextWithGemini(
       if (text) return text;
     } catch (err: any) {
       lastError = err;
-      console.warn(`[Gemini AI] Generation with ${model} failed, attempting next fallback:`, err?.message || err);
+      console.warn(`[Gemini AI] Text generation with ${model} failed, attempting next fallback:`, err?.message || err);
     }
   }
 
-  throw lastError || new Error('Failed to generate content with Gemini.');
+  throw lastError || new Error('Failed to generate content with Gemini across all fallback models.');
 }
 
-// Resilient Audio Transcription with gemini-3.5-transcribe and automatic fallback to flash models
+// Resilient Audio Transcription with verified multimodal audio models
 async function transcribeAudioWithGemini(
   ai: GoogleGenAI,
   mimeType: string,
   base64Data: string,
   promptText: string
 ): Promise<string> {
-  const models = ['gemini-3.5-transcribe', 'gemini-flash-latest', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.8-flash'];
+  // Production verified multimodal models capable of transcribing raw audio waveforms
+  const models = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.8-flash'];
   let lastError: any = null;
 
   for (const model of models) {
@@ -158,12 +265,12 @@ async function transcribeAudioWithGemini(
       if (text) return text;
     } catch (err: any) {
       lastError = err;
-      console.warn(`[Gemini AI] Transcription with ${model} failed, attempting next fallback:`, err?.message || err);
+      console.warn(`[Gemini AI] Audio transcription with ${model} failed, attempting next fallback:`, err?.message || err);
     }
   }
 
   if (lastError) {
-    console.error('[Gemini AI] All transcription models failed:', lastError?.message || lastError);
+    console.error('[Gemini AI] All transcription fallback models failed:', lastError?.message || lastError);
     throw lastError;
   }
 
@@ -1113,9 +1220,11 @@ app.get('/api/state', (req, res) => {
       try {
         ai = getGeminiClient();
       } catch (e: any) {
-        return res.status(500).json({
+        return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'AI processing is temporarily unavailable. Please try again later.',
+          code: 503,
+          provider: 'google-gemini',
+          message: 'GEMINI_API_KEY is not configured on the server.',
         });
       }
 
@@ -1143,11 +1252,9 @@ app.get('/api/state', (req, res) => {
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('[Gemini AI] Error generating transcript with Gemini:', error);
-      res.status(500).json({
-        error: 'GEMINI_ERROR',
-        message: 'AI processing is temporarily unavailable. Please try again later.',
-      });
+      const errData = parseGeminiError(error);
+      console.error('[Gemini AI] Error generating transcript with Gemini:', errData);
+      res.status(errData.code).json(errData);
     } finally {
       activeAiOperations.delete(opKey);
     }
@@ -1192,9 +1299,11 @@ app.get('/api/state', (req, res) => {
       try {
         ai = getGeminiClient();
       } catch (e: any) {
-        return res.status(500).json({
+        return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'AI processing is temporarily unavailable. Please try again later.',
+          code: 503,
+          provider: 'google-gemini',
+          message: 'GEMINI_API_KEY is not configured on the server.',
         });
       }
 
@@ -1260,11 +1369,9 @@ ${rawTranscript}`
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('[Gemini AI] Error generating study notes with Gemini:', error);
-      res.status(500).json({
-        error: 'GEMINI_ERROR',
-        message: 'AI processing is temporarily unavailable. Please try again later.',
-      });
+      const errData = parseGeminiError(error);
+      console.error('[Gemini AI] Error generating study notes with Gemini:', errData);
+      res.status(errData.code).json(errData);
     } finally {
       activeAiOperations.delete(opKey);
     }
@@ -1309,9 +1416,11 @@ ${rawTranscript}`
       try {
         ai = getGeminiClient();
       } catch (e: any) {
-        return res.status(500).json({
+        return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'AI processing is temporarily unavailable. Please try again later.',
+          code: 503,
+          provider: 'google-gemini',
+          message: 'GEMINI_API_KEY is not configured on the server.',
         });
       }
 
@@ -1375,11 +1484,9 @@ ${rawTranscript}`
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('[Gemini AI] Error generating summary with Gemini:', error);
-      res.status(500).json({
-        error: 'GEMINI_ERROR',
-        message: 'AI processing is temporarily unavailable. Please try again later.',
-      });
+      const errData = parseGeminiError(error);
+      console.error('[Gemini AI] Error generating summary with Gemini:', errData);
+      res.status(errData.code).json(errData);
     } finally {
       activeAiOperations.delete(opKey);
     }
@@ -1424,9 +1531,11 @@ ${rawTranscript}`
       try {
         ai = getGeminiClient();
       } catch (e: any) {
-        return res.status(500).json({
+        return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'AI processing is temporarily unavailable. Please try again later.',
+          code: 503,
+          provider: 'google-gemini',
+          message: 'GEMINI_API_KEY is not configured on the server.',
         });
       }
 
@@ -1485,11 +1594,9 @@ ${rawTranscript}`
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('[Gemini AI] Error generating key points with Gemini:', error);
-      res.status(500).json({
-        error: 'GEMINI_ERROR',
-        message: 'AI processing is temporarily unavailable. Please try again later.',
-      });
+      const errData = parseGeminiError(error);
+      console.error('[Gemini AI] Error generating key points with Gemini:', errData);
+      res.status(errData.code).json(errData);
     } finally {
       activeAiOperations.delete(opKey);
     }
@@ -1514,6 +1621,58 @@ ${rawTranscript}`
       });
     } catch (error) {
       res.status(500).json({ error: 'Failed to retrieve AI usage' });
+    }
+  });
+
+  // AI 6: Health & Configuration check (Safe - never exposes secrets)
+  app.get('/api/ai/health', (req, res) => {
+    try {
+      const apiKey = getGeminiApiKey();
+      const db = readDB();
+      res.json({
+        configured: !!apiKey,
+        provider: 'google-gemini',
+        status: apiKey ? 'ready' : 'unconfigured',
+        models: ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-flash-latest', 'gemini-3.8-flash'],
+        audioModels: ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.8-flash'],
+        aiUsage: db.profile.aiUsage || null,
+        isPro: isSubscriptionActive(db.profile.subscription),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'AI_HEALTH_CHECK_FAILED', message: err?.message || 'Failed to check AI health' });
+    }
+  });
+
+  // AI 7: Diagnostic minimal server-side test (never exposes secrets or keys)
+  app.get('/api/ai/diagnostic', async (req, res) => {
+    try {
+      const apiKey = getGeminiApiKey();
+      if (!apiKey) {
+        return res.status(503).json({
+          configured: false,
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'GEMINI_API_KEY is not configured on the server.',
+        });
+      }
+
+      const ai = getGeminiClient();
+      const testResult = await generateTextWithGemini(ai, 'Reply with exactly: GEMINI_OK');
+      res.json({
+        configured: true,
+        testPromptResult: testResult,
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      const parsed = parseGeminiError(err);
+      res.status(parsed.code).json({
+        configured: true,
+        status: 'degraded',
+        error: parsed.error,
+        code: parsed.code,
+        message: parsed.message,
+        diagnostic: parsed.diagnostic,
+      });
     }
   });
 
