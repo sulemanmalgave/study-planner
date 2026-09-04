@@ -118,7 +118,7 @@ export default function StudyMaterialReaderModal({
 
       const data = await response.json();
       if (!response.ok) {
-        if (data.error === 'PREMIUM_REQUIRED') {
+        if (data.error === 'PREMIUM_REQUIRED' || data.error === 'PRO_FEATURE_REQUIRED' || response.status === 403) {
           onTriggerUpgrade();
           return;
         }

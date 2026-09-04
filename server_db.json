@@ -16,7 +16,7 @@
       "paymentId": "sim_b1da4eb5-bdd"
     },
     "aiUsage": {
-      "operationsCount": 0,
+      "operationsCount": 2,
       "maxMonthlyOperations": 60,
       "minutesTranscribed": 0,
       "maxMonthlyMinutes": 300,
@@ -29,6 +29,30 @@
   "exams": [],
   "notes": [],
   "studySessions": [],
-  "audioLectures": [],
+  "audioLectures": [
+    {
+      "id": "al_b8a81fa5",
+      "userId": "default",
+      "courseId": "",
+      "subjectName": "Neuroscience",
+      "section": "",
+      "title": "Action Potentials & Synapses",
+      "audioDataUrl": "",
+      "originalFileName": "recording.mp3",
+      "fileSize": 0,
+      "fileType": "audio/mpeg",
+      "duration": 180,
+      "transcript": "In this lecture, we examine action potentials and synaptic transmission. The resting membrane potential is around minus 70 millivolts, maintained by the sodium-potassium ATPase pump which pumps three sodium ions out for every two potassium ions in. When a stimulus causes depolarization to the threshold of minus 55 millivolts, voltage-gated sodium channels open rapidly. This causes a massive influx of sodium ions and depolarization up to plus 30 millivolts. Inactivation gates close sodium channels while voltage-gated potassium channels open, allowing potassium efflux and causing repolarization, followed by a brief hyperpolarization.",
+      "transcriptGeneratedAt": null,
+      "summary": "### Core Thesis & Objective\nThe lecture examines the physiological mechanisms driving the action potential, specifically focusing on how the resting membrane potential is established and how sequential voltage-gated ion flux mediates depolarization, repolarization, and hyperpolarization.\n\n---\n\n### Key Arguments & Discussions\n\n*   **Resting Membrane Potential (-70 mV):**\n    *   Maintained by the **$\\text{Na}^+/\\text{K}^+$ ATPase pump**, which actively transports **3 $\\text{Na}^+$ ions out** of the cell for every **2 $\\text{K}^+$ ions in**.\n\n*   **Depolarization Phase:**\n    *   A stimulus must depolarize the membrane to the threshold of **-55 mV**.\n    *   Reaching threshold triggers the rapid opening of **voltage-gated $\\text{Na}^+$ channels**.\n    *   A massive **influx of $\\text{Na}^+$** drives the membrane potential up to **+30 mV**.\n\n*   **Repolarization & Hyperpolarization Phases:**\n    *   Inactivation gates close the voltage-gated $\\text{Na}^+$ channels to halt $\\text{Na}^+$ entry.\n    *   **Voltage-gated $\\text{K}^+$ channels open**, leading to a **$\\text{K}^+$ efflux**.\n    *   The outflow of $\\text{K}^+$ causes **repolarization** of the membrane, followed by a brief period of **hyperpolarization**.\n\n---\n\n### Final Conclusion & Synthesis\nAn action potential is an all-or-none electrical event triggered when a stimulus depolarizes the resting membrane (-70 mV) to threshold (-55 mV). The precise sequence of rapid $\\text{Na}^+$ influx (up to +30 mV) followed by $\\text{K}^+$ efflux resets the membrane voltage through repolarization and transient hyperpolarization.",
+      "summaryGeneratedAt": "2026-09-04T06:30:27.414Z",
+      "studyNotes": "",
+      "studyNotesGeneratedAt": null,
+      "keyPoints": "",
+      "keyPointsGeneratedAt": null,
+      "createdAt": "2026-09-04T06:26:09.912Z",
+      "updatedAt": "2026-09-04T06:30:27.414Z"
+    }
+  ],
   "studyMaterials": []
 }

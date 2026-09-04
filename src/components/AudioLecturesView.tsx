@@ -161,7 +161,7 @@ export default function AudioLecturesView({
 
       const data = await res.json();
       if (!res.ok) {
-        if (data.error === 'PREMIUM_REQUIRED') {
+        if (data.error === 'PREMIUM_REQUIRED' || data.error === 'PRO_FEATURE_REQUIRED' || res.status === 403) {
           onUpgradeClick?.();
           return;
         }
@@ -221,7 +221,7 @@ export default function AudioLecturesView({
 
       const data = await res.json();
       if (!res.ok) {
-        if (data.error === 'PREMIUM_REQUIRED') {
+        if (data.error === 'PREMIUM_REQUIRED' || data.error === 'PRO_FEATURE_REQUIRED' || res.status === 403) {
           onUpgradeClick?.();
           return;
         }
@@ -281,7 +281,7 @@ export default function AudioLecturesView({
 
       const data = await res.json();
       if (!res.ok) {
-        if (data.error === 'PREMIUM_REQUIRED') {
+        if (data.error === 'PREMIUM_REQUIRED' || data.error === 'PRO_FEATURE_REQUIRED' || res.status === 403) {
           onUpgradeClick?.();
           return;
         }
@@ -341,7 +341,7 @@ export default function AudioLecturesView({
 
       const data = await res.json();
       if (!res.ok) {
-        if (data.error === 'PREMIUM_REQUIRED') {
+        if (data.error === 'PREMIUM_REQUIRED' || data.error === 'PRO_FEATURE_REQUIRED' || res.status === 403) {
           onUpgradeClick?.();
           return;
         }

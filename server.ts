@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -51,12 +52,36 @@ const uploadMaterial = multer({
   },
 });
 
+const sanitizeEnvVar = (val: string | undefined): string | undefined => {
+  if (!val) return undefined;
+  // Strip whitespace, tabs, newlines, carriage returns
+  let clean = val.trim().replace(/[\r\n\t]/g, '');
+  // Strip surrounding double/single quotes if present
+  clean = clean.replace(/^["']|["']$/g, '').trim();
+  return clean || undefined;
+};
+
+// Check whether a Gemini API secret/environment variable exists under any standard name
+const getGeminiApiKey = (): string | undefined => {
+  return (
+    sanitizeEnvVar(process.env.GEMINI_API_KEY) ||
+    sanitizeEnvVar(process.env.GOOGLE_GEMINI_API_KEY) ||
+    sanitizeEnvVar(process.env.GOOGLE_AI_API_KEY)
+  );
+};
+
 // Gemini Client Lazy Initializer
 let geminiClient: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI {
-  const apiKey = sanitizeEnvVar(process.env.GEMINI_API_KEY);
+  const apiKey = getGeminiApiKey();
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured on the server. Please add your Gemini API key in the Settings > Secrets panel.');
+    console.error(
+      '[Gemini AI Config] GEMINI_API_KEY is not configured in the server environment. Please set GEMINI_API_KEY in the Settings > Secrets panel.'
+    );
+    const err: any = new Error('AI processing is temporarily unavailable. Please try again later.');
+    err.code = 'GEMINI_NOT_CONFIGURED';
+    err.isConfigError = true;
+    throw err;
   }
   if (!geminiClient) {
     geminiClient = new GoogleGenAI({
@@ -71,14 +96,79 @@ function getGeminiClient(): GoogleGenAI {
   return geminiClient;
 }
 
-const sanitizeEnvVar = (val: string | undefined): string | undefined => {
-  if (!val) return undefined;
-  // Strip whitespace, tabs, newlines, carriage returns
-  let clean = val.trim().replace(/[\r\n\t]/g, '');
-  // Strip surrounding double/single quotes if present
-  clean = clean.replace(/^["']|["']$/g, '').trim();
-  return clean || undefined;
-};
+// Concurrency lock to prevent accidental duplicate Gemini requests per lecture/action
+const activeAiOperations = new Set<string>();
+
+// Resilient Text & Multimodal Generation with automatic model fallback
+async function generateTextWithGemini(
+  ai: GoogleGenAI,
+  promptOrContents: any,
+  systemInstruction?: string
+): Promise<string> {
+  const models = ['gemini-flash-latest', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.8-flash'];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: promptOrContents,
+        config: systemInstruction ? { systemInstruction } : undefined,
+      });
+      const text = response.text?.trim() || '';
+      if (text) return text;
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`[Gemini AI] Generation with ${model} failed, attempting next fallback:`, err?.message || err);
+    }
+  }
+
+  throw lastError || new Error('Failed to generate content with Gemini.');
+}
+
+// Resilient Audio Transcription with gemini-3.5-transcribe and automatic fallback to flash models
+async function transcribeAudioWithGemini(
+  ai: GoogleGenAI,
+  mimeType: string,
+  base64Data: string,
+  promptText: string
+): Promise<string> {
+  const models = ['gemini-3.5-transcribe', 'gemini-flash-latest', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.8-flash'];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType,
+                data: base64Data,
+              },
+            },
+            {
+              text: promptText,
+            },
+          ],
+        },
+      });
+      const text = response.text?.trim();
+      if (text) return text;
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`[Gemini AI] Transcription with ${model} failed, attempting next fallback:`, err?.message || err);
+    }
+  }
+
+  if (lastError) {
+    console.error('[Gemini AI] All transcription models failed:', lastError?.message || lastError);
+    throw lastError;
+  }
+
+  return 'No speech content could be transcribed.';
+}
 
 const getRazorpayCredentials = () => {
   const keyId = sanitizeEnvVar(process.env.RAZORPAY_KEY_ID);
@@ -924,6 +1014,14 @@ app.get('/api/state', (req, res) => {
         fileSize: req.body.fileSize || 0,
         fileType: req.body.fileType || 'audio/mpeg',
         duration: req.body.duration || 0,
+        transcript: req.body.transcript || '',
+        transcriptGeneratedAt: req.body.transcriptGeneratedAt || null,
+        summary: req.body.summary || '',
+        summaryGeneratedAt: req.body.summaryGeneratedAt || null,
+        studyNotes: req.body.studyNotes || '',
+        studyNotesGeneratedAt: req.body.studyNotesGeneratedAt || null,
+        keyPoints: req.body.keyPoints || '',
+        keyPointsGeneratedAt: req.body.keyPointsGeneratedAt || null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -970,12 +1068,21 @@ app.get('/api/state', (req, res) => {
   
   // AI 1: Generate Transcript (uses audio data)
   app.post('/api/ai/audio-lectures/:id/transcript', async (req, res) => {
+    const opKey = `${req.params.id}:transcript`;
+    if (activeAiOperations.has(opKey)) {
+      return res.status(409).json({
+        error: 'OPERATION_IN_PROGRESS',
+        message: 'An AI transcription is already in progress for this lecture. Please wait a moment.',
+      });
+    }
+
+    activeAiOperations.add(opKey);
     try {
       const db = readDB();
       if (!isSubscriptionActive(db.profile.subscription)) {
         return res.status(403).json({
-          error: 'PREMIUM_REQUIRED',
-          message: 'AI Audio Lecture Transcription requires an active Pro subscription. Upgrade to Pro to unlock AI transcription.',
+          error: 'PRO_FEATURE_REQUIRED',
+          message: 'AI Audio Lecture Studio requires an active Pro subscription.',
         });
       }
 
@@ -1008,7 +1115,7 @@ app.get('/api/state', (req, res) => {
       } catch (e: any) {
         return res.status(500).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: e.message || 'Gemini API client is not configured.',
+          message: 'AI processing is temporarily unavailable. Please try again later.',
         });
       }
 
@@ -1016,24 +1123,13 @@ app.get('/api/state', (req, res) => {
       const mimeType = req.body.mimeType || lecture.fileType || 'audio/mp3';
 
       console.log(`[Gemini AI] Transcribing audio lecture ${lecture.id} (${lecture.title})...`);
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.5-transcribe',
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                mimeType,
-                data: cleanBase64,
-              },
-            },
-            {
-              text: 'Provide a clear, accurate, and comprehensive transcript of this lecture recording for a student. Format paragraphs cleanly with natural topic transitions.',
-            },
-          ],
-        },
-      });
+      const transcript = await transcribeAudioWithGemini(
+        ai,
+        mimeType,
+        cleanBase64,
+        'Provide a clear, accurate, and comprehensive transcript of this lecture recording for a student. Format paragraphs cleanly with natural topic transitions.'
+      );
 
-      const transcript = response.text?.trim() || 'No speech content could be transcribed.';
       lecture.transcript = transcript;
       lecture.transcriptGeneratedAt = new Date().toISOString();
       lecture.updatedAt = new Date().toISOString();
@@ -1047,22 +1143,33 @@ app.get('/api/state', (req, res) => {
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('Error generating transcript with Gemini:', error);
+      console.error('[Gemini AI] Error generating transcript with Gemini:', error);
       res.status(500).json({
         error: 'GEMINI_ERROR',
-        message: error?.message || 'Failed to generate transcript with Gemini. Please try again.',
+        message: 'AI processing is temporarily unavailable. Please try again later.',
       });
+    } finally {
+      activeAiOperations.delete(opKey);
     }
   });
 
   // AI 2: Generate Study Notes (reuses saved transcript when available to minimize Gemini cost)
   app.post('/api/ai/audio-lectures/:id/study-notes', async (req, res) => {
+    const opKey = `${req.params.id}:study-notes`;
+    if (activeAiOperations.has(opKey)) {
+      return res.status(409).json({
+        error: 'OPERATION_IN_PROGRESS',
+        message: 'AI Study Notes generation is already in progress for this lecture. Please wait a moment.',
+      });
+    }
+
+    activeAiOperations.add(opKey);
     try {
       const db = readDB();
       if (!isSubscriptionActive(db.profile.subscription)) {
         return res.status(403).json({
-          error: 'PREMIUM_REQUIRED',
-          message: 'AI Study Notes generation requires an active Pro subscription.',
+          error: 'PRO_FEATURE_REQUIRED',
+          message: 'AI Audio Lecture Studio requires an active Pro subscription.',
         });
       }
 
@@ -1087,7 +1194,7 @@ app.get('/api/state', (req, res) => {
       } catch (e: any) {
         return res.status(500).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: e.message || 'Gemini API client is not configured.',
+          message: 'AI processing is temporarily unavailable. Please try again later.',
         });
       }
 
@@ -1095,11 +1202,10 @@ app.get('/api/state', (req, res) => {
       const transcriptToUse = lecture.transcript || req.body.transcript;
 
       if (transcriptToUse) {
-        // Cost-effective: Text-only call using saved transcript
         console.log(`[Gemini AI] Generating study notes using saved transcript for ${lecture.id}...`);
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: `You are an expert academic tutor. Generate structured, thorough, and highly actionable study notes for the subject "${lecture.subjectName}" (Topic: "${lecture.title}").
+        studyNotes = await generateTextWithGemini(
+          ai,
+          `You are an expert academic tutor. Generate structured, thorough, and highly actionable study notes for the subject "${lecture.subjectName}" (Topic: "${lecture.title}").
 
 Use clean Markdown formatting with clear section headers:
 ### 1. Subject Overview & Core Theme
@@ -1109,31 +1215,31 @@ Use clean Markdown formatting with clear section headers:
 ### 5. High-Yield Exam Takeaways
 
 LECTURE TRANSCRIPT:
-${transcriptToUse}`,
-        });
-        studyNotes = response.text?.trim() || '';
+${transcriptToUse}`
+        );
       } else if (req.body.audioBase64 || lecture.audioDataUrl) {
         const audioBase64 = req.body.audioBase64 || lecture.audioDataUrl;
         const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
         const mimeType = req.body.mimeType || lecture.fileType || 'audio/mp3';
         console.log(`[Gemini AI] Generating study notes directly from audio for ${lecture.id}...`);
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: {
-            parts: [
-              {
-                inlineData: {
-                  mimeType,
-                  data: cleanBase64,
-                },
-              },
-              {
-                text: `Generate comprehensive structured study notes for this lecture on "${lecture.subjectName}: ${lecture.title}". Include core principles, definitions, key points, and review notes in clean Markdown.`,
-              },
-            ],
-          },
-        });
-        studyNotes = response.text?.trim() || '';
+        
+        // Transcribe first to create high quality notes
+        const rawTranscript = await transcribeAudioWithGemini(
+          ai,
+          mimeType,
+          cleanBase64,
+          'Transcribe this lecture recording thoroughly for note taking.'
+        );
+        lecture.transcript = rawTranscript;
+        lecture.transcriptGeneratedAt = new Date().toISOString();
+
+        studyNotes = await generateTextWithGemini(
+          ai,
+          `Generate comprehensive structured study notes in clean Markdown for this lecture on "${lecture.subjectName}: ${lecture.title}". Include core principles, definitions, key points, and review takeaways:
+
+LECTURE CONTENT:
+${rawTranscript}`
+        );
       } else {
         return res.status(400).json({
           error: 'NO_SOURCE_DATA',
@@ -1154,22 +1260,33 @@ ${transcriptToUse}`,
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('Error generating study notes with Gemini:', error);
+      console.error('[Gemini AI] Error generating study notes with Gemini:', error);
       res.status(500).json({
         error: 'GEMINI_ERROR',
-        message: error?.message || 'Failed to generate study notes with Gemini.',
+        message: 'AI processing is temporarily unavailable. Please try again later.',
       });
+    } finally {
+      activeAiOperations.delete(opKey);
     }
   });
 
   // AI 3: Generate Summary (reuses saved transcript when available to minimize Gemini cost)
   app.post('/api/ai/audio-lectures/:id/summary', async (req, res) => {
+    const opKey = `${req.params.id}:summary`;
+    if (activeAiOperations.has(opKey)) {
+      return res.status(409).json({
+        error: 'OPERATION_IN_PROGRESS',
+        message: 'AI Summary generation is already in progress for this lecture. Please wait a moment.',
+      });
+    }
+
+    activeAiOperations.add(opKey);
     try {
       const db = readDB();
       if (!isSubscriptionActive(db.profile.subscription)) {
         return res.status(403).json({
-          error: 'PREMIUM_REQUIRED',
-          message: 'AI Summary generation requires an active Pro subscription.',
+          error: 'PRO_FEATURE_REQUIRED',
+          message: 'AI Audio Lecture Studio requires an active Pro subscription.',
         });
       }
 
@@ -1194,7 +1311,7 @@ ${transcriptToUse}`,
       } catch (e: any) {
         return res.status(500).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: e.message || 'Gemini API client is not configured.',
+          message: 'AI processing is temporarily unavailable. Please try again later.',
         });
       }
 
@@ -1203,9 +1320,9 @@ ${transcriptToUse}`,
 
       if (transcriptToUse) {
         console.log(`[Gemini AI] Generating summary using saved transcript for ${lecture.id}...`);
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: `You are an expert academic assistant. Generate a concise, clear, study-focused summary for the lecture "${lecture.title}" in "${lecture.subjectName}".
+        summary = await generateTextWithGemini(
+          ai,
+          `You are an expert academic assistant. Generate a concise, clear, study-focused summary for the lecture "${lecture.title}" in "${lecture.subjectName}".
 Structure the summary into:
 - **Core Thesis & Objective**
 - **Key Arguments & Discussions**
@@ -1214,31 +1331,30 @@ Structure the summary into:
 Keep it concise, high-yield, and easy to review before an exam.
 
 LECTURE TRANSCRIPT:
-${transcriptToUse}`,
-        });
-        summary = response.text?.trim() || '';
+${transcriptToUse}`
+        );
       } else if (req.body.audioBase64 || lecture.audioDataUrl) {
         const audioBase64 = req.body.audioBase64 || lecture.audioDataUrl;
         const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
         const mimeType = req.body.mimeType || lecture.fileType || 'audio/mp3';
         console.log(`[Gemini AI] Generating summary directly from audio for ${lecture.id}...`);
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: {
-            parts: [
-              {
-                inlineData: {
-                  mimeType,
-                  data: cleanBase64,
-                },
-              },
-              {
-                text: `Generate a concise, study-focused summary of this lecture for "${lecture.subjectName}: ${lecture.title}".`,
-              },
-            ],
-          },
-        });
-        summary = response.text?.trim() || '';
+        
+        const rawTranscript = await transcribeAudioWithGemini(
+          ai,
+          mimeType,
+          cleanBase64,
+          'Transcribe this lecture recording for summarization.'
+        );
+        lecture.transcript = rawTranscript;
+        lecture.transcriptGeneratedAt = new Date().toISOString();
+
+        summary = await generateTextWithGemini(
+          ai,
+          `Generate a concise, study-focused summary of this lecture for "${lecture.subjectName}: ${lecture.title}":
+
+LECTURE CONTENT:
+${rawTranscript}`
+        );
       } else {
         return res.status(400).json({
           error: 'NO_SOURCE_DATA',
@@ -1259,22 +1375,33 @@ ${transcriptToUse}`,
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('Error generating summary with Gemini:', error);
+      console.error('[Gemini AI] Error generating summary with Gemini:', error);
       res.status(500).json({
         error: 'GEMINI_ERROR',
-        message: error?.message || 'Failed to generate summary with Gemini.',
+        message: 'AI processing is temporarily unavailable. Please try again later.',
       });
+    } finally {
+      activeAiOperations.delete(opKey);
     }
   });
 
   // AI 4: Generate Key Points (reuses saved transcript when available to minimize Gemini cost)
   app.post('/api/ai/audio-lectures/:id/key-points', async (req, res) => {
+    const opKey = `${req.params.id}:key-points`;
+    if (activeAiOperations.has(opKey)) {
+      return res.status(409).json({
+        error: 'OPERATION_IN_PROGRESS',
+        message: 'AI Key Points extraction is already in progress for this lecture. Please wait a moment.',
+      });
+    }
+
+    activeAiOperations.add(opKey);
     try {
       const db = readDB();
       if (!isSubscriptionActive(db.profile.subscription)) {
         return res.status(403).json({
-          error: 'PREMIUM_REQUIRED',
-          message: 'AI Key Points extraction requires an active Pro subscription.',
+          error: 'PRO_FEATURE_REQUIRED',
+          message: 'AI Audio Lecture Studio requires an active Pro subscription.',
         });
       }
 
@@ -1299,7 +1426,7 @@ ${transcriptToUse}`,
       } catch (e: any) {
         return res.status(500).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: e.message || 'Gemini API client is not configured.',
+          message: 'AI processing is temporarily unavailable. Please try again later.',
         });
       }
 
@@ -1308,37 +1435,36 @@ ${transcriptToUse}`,
 
       if (transcriptToUse) {
         console.log(`[Gemini AI] Extracting key points using saved transcript for ${lecture.id}...`);
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: `You are an academic exam coach. Extract the crucial key points, definitions, facts, and essential concepts from this lecture transcript for "${lecture.subjectName}: ${lecture.title}".
+        keyPoints = await generateTextWithGemini(
+          ai,
+          `You are an academic exam coach. Extract the crucial key points, definitions, facts, and essential concepts from this lecture transcript for "${lecture.subjectName}: ${lecture.title}".
 Format them as a clean bulleted list with bolded terms for easy memorization:
 
 LECTURE TRANSCRIPT:
-${transcriptToUse}`,
-        });
-        keyPoints = response.text?.trim() || '';
+${transcriptToUse}`
+        );
       } else if (req.body.audioBase64 || lecture.audioDataUrl) {
         const audioBase64 = req.body.audioBase64 || lecture.audioDataUrl;
         const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
         const mimeType = req.body.mimeType || lecture.fileType || 'audio/mp3';
         console.log(`[Gemini AI] Extracting key points directly from audio for ${lecture.id}...`);
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: {
-            parts: [
-              {
-                inlineData: {
-                  mimeType,
-                  data: cleanBase64,
-                },
-              },
-              {
-                text: `Extract key points, definitions, and important exam concepts from this lecture on "${lecture.subjectName}: ${lecture.title}". Format as a bulleted list with bolded terms.`,
-              },
-            ],
-          },
-        });
-        keyPoints = response.text?.trim() || '';
+        
+        const rawTranscript = await transcribeAudioWithGemini(
+          ai,
+          mimeType,
+          cleanBase64,
+          'Transcribe this lecture recording for key point extraction.'
+        );
+        lecture.transcript = rawTranscript;
+        lecture.transcriptGeneratedAt = new Date().toISOString();
+
+        keyPoints = await generateTextWithGemini(
+          ai,
+          `Extract key points, definitions, and important exam concepts from this lecture on "${lecture.subjectName}: ${lecture.title}". Format as a bulleted list with bolded terms:
+
+LECTURE CONTENT:
+${rawTranscript}`
+        );
       } else {
         return res.status(400).json({
           error: 'NO_SOURCE_DATA',
@@ -1359,11 +1485,13 @@ ${transcriptToUse}`,
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('Error generating key points with Gemini:', error);
+      console.error('[Gemini AI] Error generating key points with Gemini:', error);
       res.status(500).json({
         error: 'GEMINI_ERROR',
-        message: error?.message || 'Failed to extract key points with Gemini.',
+        message: 'AI processing is temporarily unavailable. Please try again later.',
       });
+    } finally {
+      activeAiOperations.delete(opKey);
     }
   });
 
@@ -1763,12 +1891,21 @@ ${transcriptToUse}`,
 
   // AI 1: Generate Document Summary
   app.post('/api/ai/study-materials/:id/summary', async (req, res) => {
+    const opKey = `mat:${req.params.id}:summary`;
+    if (activeAiOperations.has(opKey)) {
+      return res.status(409).json({
+        error: 'OPERATION_IN_PROGRESS',
+        message: 'AI Document Summary is already in progress. Please wait a moment.',
+      });
+    }
+
+    activeAiOperations.add(opKey);
     try {
       const db = readDB();
       if (!isSubscriptionActive(db.profile.subscription)) {
         return res.status(403).json({
-          error: 'PREMIUM_REQUIRED',
-          message: 'AI Document Summarization requires an active Pro subscription. Upgrade to Pro to unlock AI summaries for study materials.',
+          error: 'PRO_FEATURE_REQUIRED',
+          message: 'AI Document Summarization requires an active Pro subscription.',
         });
       }
 
@@ -1793,7 +1930,7 @@ ${transcriptToUse}`,
       } catch (e: any) {
         return res.status(500).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: e.message || 'Gemini API client is not configured.',
+          message: 'AI processing is temporarily unavailable. Please try again later.',
         });
       }
 
@@ -1801,9 +1938,9 @@ ${transcriptToUse}`,
       let summary = '';
 
       if (payload?.type === 'text') {
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: `You are an expert academic tutor. Generate a clear, high-yield study summary for this study material document:
+        summary = await generateTextWithGemini(
+          ai,
+          `You are an expert academic tutor. Generate a clear, high-yield study summary for this study material document:
 Document Title: "${material.name}"
 Subject / Course: "${material.subjectName}"
 Topic / Chapter: "${material.topic || 'General'}"
@@ -1817,24 +1954,19 @@ Structure the summary cleanly with Markdown headers:
 Keep it concise, actionable, and easy for students to review before tests.
 
 DOCUMENT CONTENT:
-${payload.text}`,
-        });
-        summary = response.text?.trim() || '';
+${payload.text}`
+        );
       } else if (payload?.type === 'inlineData') {
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: {
-            parts: [
-              {
-                inlineData: payload.inlineData,
-              },
-              {
-                text: `You are an expert academic tutor. Generate a high-yield study summary for this document ("${material.name}", Subject: "${material.subjectName}", Topic: "${material.topic || 'General'}"). Structure into Overview, Core Principles, Key Arguments, and Exam Review Summary using clean Markdown.`,
-              },
-            ],
-          },
+        summary = await generateTextWithGemini(ai, {
+          parts: [
+            {
+              inlineData: payload.inlineData,
+            },
+            {
+              text: `You are an expert academic tutor. Generate a high-yield study summary for this document ("${material.name}", Subject: "${material.subjectName}", Topic: "${material.topic || 'General'}"). Structure into Overview, Core Principles, Key Arguments, and Exam Review Summary using clean Markdown.`,
+            },
+          ],
         });
-        summary = response.text?.trim() || '';
       } else {
         return res.status(400).json({
           error: 'NO_SOURCE_DATA',
@@ -1855,21 +1987,32 @@ ${payload.text}`,
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('Error generating document summary with Gemini:', error);
+      console.error('[Gemini AI] Error generating document summary with Gemini:', error);
       res.status(500).json({
         error: 'GEMINI_ERROR',
-        message: error?.message || 'Failed to generate document summary with Gemini.',
+        message: 'AI processing is temporarily unavailable. Please try again later.',
       });
+    } finally {
+      activeAiOperations.delete(opKey);
     }
   });
 
   // AI 2: Generate Structured Study Notes
   app.post('/api/ai/study-materials/:id/notes', async (req, res) => {
+    const opKey = `mat:${req.params.id}:notes`;
+    if (activeAiOperations.has(opKey)) {
+      return res.status(409).json({
+        error: 'OPERATION_IN_PROGRESS',
+        message: 'AI Study Notes generation is already in progress. Please wait a moment.',
+      });
+    }
+
+    activeAiOperations.add(opKey);
     try {
       const db = readDB();
       if (!isSubscriptionActive(db.profile.subscription)) {
         return res.status(403).json({
-          error: 'PREMIUM_REQUIRED',
+          error: 'PRO_FEATURE_REQUIRED',
           message: 'AI Study Notes Generation requires an active Pro subscription.',
         });
       }
@@ -1895,7 +2038,7 @@ ${payload.text}`,
       } catch (e: any) {
         return res.status(500).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: e.message || 'Gemini API client is not configured.',
+          message: 'AI processing is temporarily unavailable. Please try again later.',
         });
       }
 
@@ -1903,9 +2046,9 @@ ${payload.text}`,
       let studyNotes = '';
 
       if (payload?.type === 'text') {
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: `You are an academic mentor. Generate comprehensive, well-organized study notes based on this document:
+        studyNotes = await generateTextWithGemini(
+          ai,
+          `You are an academic mentor. Generate comprehensive, well-organized study notes based on this document:
 Document: "${material.name}"
 Subject: "${material.subjectName}"
 Topic: "${material.topic || 'General'}"
@@ -1919,24 +2062,19 @@ Format in clean Markdown:
 ### 6. Common Pitfalls & High-Yield Exam Tips
 
 DOCUMENT TEXT:
-${payload.text}`,
-        });
-        studyNotes = response.text?.trim() || '';
+${payload.text}`
+        );
       } else if (payload?.type === 'inlineData') {
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: {
-            parts: [
-              {
-                inlineData: payload.inlineData,
-              },
-              {
-                text: `Generate thorough, structured academic study notes for this document ("${material.name}", Subject: "${material.subjectName}"). Use clean Markdown with sections for Concepts, In-Depth Explanations, Key Terms, Formulas, and Exam Tips.`,
-              },
-            ],
-          },
+        studyNotes = await generateTextWithGemini(ai, {
+          parts: [
+            {
+              inlineData: payload.inlineData,
+            },
+            {
+              text: `Generate thorough, structured academic study notes for this document ("${material.name}", Subject: "${material.subjectName}"). Use clean Markdown with sections for Concepts, In-Depth Explanations, Key Terms, Formulas, and Exam Tips.`,
+            },
+          ],
         });
-        studyNotes = response.text?.trim() || '';
       } else {
         return res.status(400).json({
           error: 'NO_SOURCE_DATA',
@@ -1957,21 +2095,32 @@ ${payload.text}`,
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('Error generating study notes with Gemini:', error);
+      console.error('[Gemini AI] Error generating study notes with Gemini:', error);
       res.status(500).json({
         error: 'GEMINI_ERROR',
-        message: error?.message || 'Failed to generate study notes with Gemini.',
+        message: 'AI processing is temporarily unavailable. Please try again later.',
       });
+    } finally {
+      activeAiOperations.delete(opKey);
     }
   });
 
   // AI 3: Extract Key Points & Flashcard Concepts
   app.post('/api/ai/study-materials/:id/key-points', async (req, res) => {
+    const opKey = `mat:${req.params.id}:key-points`;
+    if (activeAiOperations.has(opKey)) {
+      return res.status(409).json({
+        error: 'OPERATION_IN_PROGRESS',
+        message: 'AI Key Points extraction is already in progress. Please wait a moment.',
+      });
+    }
+
+    activeAiOperations.add(opKey);
     try {
       const db = readDB();
       if (!isSubscriptionActive(db.profile.subscription)) {
         return res.status(403).json({
-          error: 'PREMIUM_REQUIRED',
+          error: 'PRO_FEATURE_REQUIRED',
           message: 'AI Key Points Extraction requires an active Pro subscription.',
         });
       }
@@ -1997,7 +2146,7 @@ ${payload.text}`,
       } catch (e: any) {
         return res.status(500).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: e.message || 'Gemini API client is not configured.',
+          message: 'AI processing is temporarily unavailable. Please try again later.',
         });
       }
 
@@ -2005,9 +2154,9 @@ ${payload.text}`,
       let keyPoints = '';
 
       if (payload?.type === 'text') {
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: `You are an academic exam coach. Extract key points, definitions, facts, and essential review concepts from this document:
+        keyPoints = await generateTextWithGemini(
+          ai,
+          `You are an academic exam coach. Extract key points, definitions, facts, and essential review concepts from this document:
 Document: "${material.name}"
 Subject: "${material.subjectName}"
 Topic: "${material.topic || 'General'}"
@@ -2015,24 +2164,19 @@ Topic: "${material.topic || 'General'}"
 Format as a high-yield bulleted cheat-sheet with **bolded key terms** and clear concise explanations.
 
 DOCUMENT TEXT:
-${payload.text}`,
-        });
-        keyPoints = response.text?.trim() || '';
+${payload.text}`
+        );
       } else if (payload?.type === 'inlineData') {
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: {
-            parts: [
-              {
-                inlineData: payload.inlineData,
-              },
-              {
-                text: `Extract the crucial key points, definitions, and essential exam facts from this document ("${material.name}", Subject: "${material.subjectName}"). Format as a bulleted list with bolded terms.`,
-              },
-            ],
-          },
+        keyPoints = await generateTextWithGemini(ai, {
+          parts: [
+            {
+              inlineData: payload.inlineData,
+            },
+            {
+              text: `Extract the crucial key points, definitions, and essential exam facts from this document ("${material.name}", Subject: "${material.subjectName}"). Format as a bulleted list with bolded terms.`,
+            },
+          ],
         });
-        keyPoints = response.text?.trim() || '';
       } else {
         return res.status(400).json({
           error: 'NO_SOURCE_DATA',
@@ -2053,11 +2197,13 @@ ${payload.text}`,
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('Error generating key points with Gemini:', error);
+      console.error('[Gemini AI] Error generating key points with Gemini:', error);
       res.status(500).json({
         error: 'GEMINI_ERROR',
-        message: error?.message || 'Failed to extract key points with Gemini.',
+        message: 'AI processing is temporarily unavailable. Please try again later.',
       });
+    } finally {
+      activeAiOperations.delete(opKey);
     }
   });
 
