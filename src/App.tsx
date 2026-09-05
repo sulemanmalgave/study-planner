@@ -54,6 +54,7 @@ import {
 } from './types';
 import { getInitialClientState } from './defaultState';
 import { db, isFirebaseConfigured, onAuthUserChange, signInWithGoogle, signOutUser, AuthUserProfile } from './lib/firebase';
+import { initGoogleIdentityServices, triggerInteractiveGoogleLogin } from './lib/googleAuth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   getStoredEntitlement,
@@ -95,6 +96,30 @@ export default function App() {
 
   // Listen to Google authentication changes
   useEffect(() => {
+    // Initialize Google Identity Services once at app root
+    initGoogleIdentityServices((gisUser, linkedSubscription) => {
+      setAuthUser(gisUser);
+      if (linkedSubscription) {
+        saveStoredEntitlement(linkedSubscription, 'restored');
+        setDbState((prev) => {
+          if (!prev) return prev;
+          const next = {
+            ...prev,
+            profile: {
+              ...prev.profile,
+              subscription: linkedSubscription,
+            },
+          };
+          try {
+            localStorage.setItem('studyflow_db_state', JSON.stringify(next));
+          } catch (e) {
+            // ignore
+          }
+          return next;
+        });
+      }
+    });
+
     const unsubscribe = onAuthUserChange((user) => {
       setAuthUser(user);
       if (user) {
@@ -1182,7 +1207,7 @@ export default function App() {
         onSuccess={handleUpgradeSuccess}
         onOpenRestore={() => setIsRestoreOpen(true)}
         authUser={authUser}
-        onSignInWithGoogle={signInWithGoogle}
+        onSignInWithGoogle={triggerInteractiveGoogleLogin}
       />
 
       <RestoreSubscriptionModal
@@ -1190,7 +1215,7 @@ export default function App() {
         onClose={() => setIsRestoreOpen(false)}
         onSuccess={handleUpgradeSuccess}
         authUser={authUser}
-        onSignInWithGoogle={signInWithGoogle}
+        onSignInWithGoogle={triggerInteractiveGoogleLogin}
       />
 
       <QuickAddModal 

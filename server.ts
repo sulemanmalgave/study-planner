@@ -2643,6 +2643,98 @@ ${payload.text}`
     return 'US';
   }
 
+  // Google ID Token Server-Side Verification and Safe Account Association Endpoint
+  app.post('/api/auth/google', async (req, res) => {
+    try {
+      const { credential } = req.body || {};
+      if (!credential || typeof credential !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'CREDENTIAL_REQUIRED',
+          message: 'Google credential ID token is required.',
+        });
+      }
+
+      console.log('[Google Auth] backend authentication request started');
+
+      // Call Google's authoritative tokeninfo endpoint
+      const tokeninfoResponse = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential.trim())}`
+      );
+
+      if (!tokeninfoResponse.ok) {
+        const errorText = await tokeninfoResponse.text();
+        console.warn('[Google Auth] backend authentication failed: Google tokeninfo returned non-200', tokeninfoResponse.status, errorText);
+        return res.status(401).json({
+          success: false,
+          error: 'INVALID_CREDENTIAL',
+          message: 'Google token could not be verified by Google servers.',
+        });
+      }
+
+      const tokenInfo: any = await tokeninfoResponse.json();
+      const googleSub = tokenInfo.sub;
+      const email = tokenInfo.email;
+      const name = tokenInfo.name || tokenInfo.given_name || 'Google Student';
+      const picture = tokenInfo.picture || null;
+      const emailVerified = tokenInfo.email_verified === 'true' || tokenInfo.email_verified === true;
+
+      if (!googleSub) {
+        console.warn('[Google Auth] backend authentication failed: missing sub in tokeninfo');
+        return res.status(401).json({
+          success: false,
+          error: 'INVALID_TOKEN_PAYLOAD',
+          message: 'Google identity identifier (sub) missing from token response.',
+        });
+      }
+
+      console.log('[Google Auth] backend authentication succeeded for user', {
+        email: email ? `${email.slice(0, 3)}***` : 'unknown',
+        sub: `${googleSub.slice(0, 6)}***`,
+      });
+
+      // Safe non-destructive account linking & subscription lookup
+      console.log('[Google Auth] account linking started');
+      const activeEntry = getActiveSubscriptionFromLedger(googleSub, email);
+      console.log('[Google Auth] account linking completed');
+      console.log('[Google Auth] Premium status retrieved:', activeEntry ? `Active (${activeEntry.plan})` : 'Free Tier');
+
+      return res.json({
+        success: true,
+        user: {
+          uid: googleSub,
+          googleId: googleSub,
+          email: email || null,
+          displayName: name,
+          photoURL: picture,
+          emailVerified,
+        },
+        hasActiveSubscription: Boolean(activeEntry),
+        subscription: activeEntry
+          ? {
+              subscriptionStatus: 'premium',
+              plan: activeEntry.plan,
+              paymentGateway: activeEntry.paymentGateway,
+              transactionId: activeEntry.transactionId,
+              purchaseDate: activeEntry.purchaseDate,
+              expiryDate: activeEntry.expiryDate,
+              billingCountry: activeEntry.billingCountry,
+              type: normalizePlanType(activeEntry.plan),
+              paymentProvider: activeEntry.paymentGateway,
+              paymentId: activeEntry.transactionId,
+            }
+          : null,
+      });
+    } catch (err: any) {
+      console.error('[Google Auth] Internal server error during Google token verification:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'SERVER_AUTH_ERROR',
+        message: 'Internal server error while verifying Google authentication.',
+      });
+    }
+  });
+
   // Server-side country detection endpoint
   app.get('/api/subscription/detect-country', (req, res) => {
     const country = detectCountryFromRequest(req);

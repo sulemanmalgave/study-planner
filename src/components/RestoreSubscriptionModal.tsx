@@ -4,7 +4,8 @@ import { X, RotateCcw, ShieldCheck, Check, AlertCircle, Loader2, Sparkles, Recei
 import { Subscription } from '../types';
 import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
 import { getStoredEntitlement, isEntitlementActive, saveStoredEntitlement } from '../lib/entitlement';
-import { AuthUserProfile, signInWithGoogle } from '../lib/firebase';
+import { AuthUserProfile } from '../lib/firebase';
+import { triggerInteractiveGoogleLogin } from '../lib/googleAuth';
 
 interface RestoreSubscriptionModalProps {
   isOpen: boolean;
@@ -37,7 +38,7 @@ export default function RestoreSubscriptionModal({
         if (onSignInWithGoogle) {
           activeUser = await onSignInWithGoogle();
         } else {
-          activeUser = await signInWithGoogle();
+          activeUser = await triggerInteractiveGoogleLogin(20000);
         }
       }
 
