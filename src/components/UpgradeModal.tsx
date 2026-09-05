@@ -16,6 +16,7 @@ import {
   triggerInteractiveGoogleLogin,
   initGoogleIdentityServices
 } from '../lib/googleAuth';
+import OAuthDiagnosticPanel from './OAuthDiagnosticPanel';
 
 interface UpgradeModalProps {
   isOpen: boolean;
@@ -158,30 +159,38 @@ export default function UpgradeModal({
   };
 
   const handleGoogleSignIn = async () => {
+    if (isSigningIn) return; // Prevent duplicate popup requests
     setError(null);
     setIsSigningIn(true);
     try {
       if (onSignInWithGoogle) {
         await onSignInWithGoogle();
       } else {
-        await triggerInteractiveGoogleLogin(12000);
+        await triggerInteractiveGoogleLogin(45000);
       }
     } catch (err: any) {
       console.error('[Google Sign-In Error]', err);
+      const isCancelled = err?.code === 'auth/cancelled-popup-request' ||
+                          err?.code === 'auth/popup-closed-by-user' ||
+                          err?.message?.includes('cancelled-popup-request') ||
+                          err?.message?.includes('popup-closed-by-user') ||
+                          err?.message?.includes('cancelled or closed');
       const isTimeout = err?.message?.includes('timed out');
-      const isBlocked = err?.code === 'auth/popup-blocked' || err?.message?.includes('popup') || err?.message?.includes('blocked');
+      const isBlocked = err?.code === 'auth/popup-blocked' || err?.message?.includes('popup-blocked') || err?.message?.includes('blocked');
       const isOriginMismatch = err?.message?.includes('origin_mismatch') || err?.message?.includes('redirect_uri_mismatch') || (typeof err?.message === 'string' && err.message.includes('400'));
       const isUnauthorizedDomain = err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain');
 
       let message = err?.message || 'Google sign-in could not be completed. Please try again.';
-      if (isOriginMismatch) {
+      if (isCancelled) {
+        message = 'Sign-in prompt was cancelled or closed. Click "Sign in with Google Account" when ready.';
+      } else if (isOriginMismatch) {
         message = 'Google OAuth Error 400 (origin_mismatch): The JavaScript origin https://study-planner-tool.vercel.app must be added to Authorized JavaScript origins in Google Cloud Console.';
       } else if (isUnauthorizedDomain) {
         message = 'Firebase Error: study-planner-tool.vercel.app must be added to Authorized domains in Firebase Authentication.';
       } else if (isBlocked) {
         message = 'Sign-in popup was blocked by browser. Please allow popups or use the Google Sign-in button directly.';
       } else if (isTimeout) {
-        message = 'Google sign-in timed out or was closed. Please click "Try Again" below to reconnect.';
+        message = 'Google sign-in timed out. Please click "Try Again" below to reconnect.';
       }
       setError(message);
     } finally {
@@ -638,6 +647,9 @@ export default function UpgradeModal({
                   </div>
                 )}
               </div>
+
+              {/* OAuth Domain Diagnostic Tool */}
+              <OAuthDiagnosticPanel defaultExpanded={false} compact={true} />
 
               {/* Premium Features Included */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">

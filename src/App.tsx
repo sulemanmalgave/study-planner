@@ -1208,7 +1208,7 @@ export default function App() {
         onOpenRestore={() => setIsRestoreOpen(true)}
         authUser={authUser}
         onSignInWithGoogle={async () => {
-          const user = await triggerInteractiveGoogleLogin(12000);
+          const user = await triggerInteractiveGoogleLogin(45000);
           if (user) {
             setAuthUser(user);
           }
@@ -1222,7 +1222,7 @@ export default function App() {
         onSuccess={handleUpgradeSuccess}
         authUser={authUser}
         onSignInWithGoogle={async () => {
-          const user = await triggerInteractiveGoogleLogin(12000);
+          const user = await triggerInteractiveGoogleLogin(45000);
           if (user) {
             setAuthUser(user);
           }

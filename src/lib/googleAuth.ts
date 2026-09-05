@@ -280,7 +280,7 @@ export async function verifyAndCompleteGoogleAuth(credential: string): Promise<{
  * Prevents UI from staying permanently stuck in "Connecting..."
  */
 export async function triggerInteractiveGoogleLogin(
-  timeoutMs: number = 12000
+  timeoutMs: number = 45000
 ): Promise<AuthUserProfile> {
   let timerId: ReturnType<typeof setTimeout> | null = null;
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -291,10 +291,13 @@ export async function triggerInteractiveGoogleLogin(
 
   // Attempt GIS prompt first if available, otherwise popup
   const authAction = async (): Promise<AuthUserProfile> => {
-    // Try Firebase popup which handles user interaction directly
-    const user = await signInWithFirebasePopup();
-    if (timerId) clearTimeout(timerId);
-    return user;
+    try {
+      // Try Firebase popup which handles user interaction directly
+      const user = await signInWithFirebasePopup();
+      return user;
+    } finally {
+      if (timerId) clearTimeout(timerId);
+    }
   };
 
   return await Promise.race([authAction(), timeoutPromise]);

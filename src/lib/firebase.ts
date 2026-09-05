@@ -65,6 +65,9 @@ try {
   console.warn('[Firebase] Initialization skipped or error caught gracefully:', error);
 }
 
+// Track active in-flight popup promise to prevent concurrent popup requests (which causes auth/cancelled-popup-request)
+let inFlightPopupPromise: Promise<AuthUserProfile> | null = null;
+
 /**
  * Sign in with Google using Firebase Auth popup or Google Identity Services credential
  */
@@ -73,35 +76,51 @@ export async function signInWithGoogle(): Promise<AuthUserProfile> {
     throw new Error('Firebase Authentication is not configured.');
   }
 
-  try {
-    const provider = new GoogleAuthProvider();
-    provider.addScope('email');
-    provider.addScope('profile');
-    provider.setCustomParameters({ prompt: 'select_account' });
-
-    const result = await signInWithPopup(auth, provider);
-    const user = result.user;
-
-    return {
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-    };
-  } catch (err: any) {
-    console.warn('[Google Auth] Popup sign-in error:', err);
-    if (err.code === 'auth/popup-blocked') {
-      throw new Error('The sign-in popup was blocked by your browser. Please allow popups or click the sign-in button again.');
-    }
-    if (err.code === 'auth/popup-closed-by-user') {
-      throw new Error('Sign-in cancelled. Please complete the Google sign-in prompt to continue.');
-    }
-    if (err.code === 'auth/unauthorized-domain') {
-      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'this domain';
-      throw new Error(`Domain not authorized for Firebase Google Sign-In (${currentOrigin}). Please ensure ${currentOrigin} is added to Firebase Authentication Authorized Domains.`);
-    }
-    throw new Error(err.message || 'Failed to sign in with Google.');
+  // If a popup request is already in progress, reuse the existing promise to prevent duplicate popups
+  if (inFlightPopupPromise) {
+    console.log('[Google Auth] Sign-in popup already in progress, reusing existing request');
+    return inFlightPopupPromise;
   }
+
+  const runSignIn = async (): Promise<AuthUserProfile> => {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+      provider.setCustomParameters({ prompt: 'select_account' });
+
+      const result = await signInWithPopup(auth!, provider);
+      const user = result.user;
+
+      return {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+      };
+    } catch (err: any) {
+      console.warn('[Google Auth] Popup sign-in error:', err);
+      if (err?.code === 'auth/cancelled-popup-request' || err?.message?.includes('cancelled-popup-request')) {
+        throw new Error('Sign-in prompt was cancelled or closed. Please click "Sign in with Google" when you are ready.');
+      }
+      if (err?.code === 'auth/popup-closed-by-user' || err?.message?.includes('popup-closed-by-user')) {
+        throw new Error('Sign-in prompt was closed. Please click "Sign in with Google" when you are ready.');
+      }
+      if (err?.code === 'auth/popup-blocked' || err?.message?.includes('popup-blocked')) {
+        throw new Error('The sign-in popup was blocked by your browser. Please allow popups or click the sign-in button again.');
+      }
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'this domain';
+        throw new Error(`Domain not authorized for Firebase Google Sign-In (${currentOrigin}). Please ensure ${currentOrigin} is added to Firebase Authentication Authorized Domains.`);
+      }
+      throw new Error(err?.message || 'Failed to sign in with Google.');
+    } finally {
+      inFlightPopupPromise = null;
+    }
+  };
+
+  inFlightPopupPromise = runSignIn();
+  return inFlightPopupPromise;
 }
 
 /**

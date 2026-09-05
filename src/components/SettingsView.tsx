@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Settings, User, Sparkles, RefreshCw, Check, Loader2, AlertCircle, Lock, RotateCcw, LogIn, LogOut } from 'lucide-react';
 import { UserProfile } from '../types';
 import { AuthUserProfile } from '../lib/firebase';
+import OAuthDiagnosticPanel from './OAuthDiagnosticPanel';
 
 interface SettingsViewProps {
   profile: UserProfile;
@@ -457,6 +458,9 @@ export default function SettingsView({
               </button>
             )}
           </div>
+
+          {/* OAuth Origin & Domain Diagnostic */}
+          <OAuthDiagnosticPanel defaultExpanded={true} />
 
           {/* Developer Testing Control box */}
           <div className="p-5 bg-white border border-[#E1E3E1] rounded-2xl space-y-4">

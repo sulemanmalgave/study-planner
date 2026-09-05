@@ -28,6 +28,7 @@ export default function RestoreSubscriptionModal({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleGoogleAccountRestore = async () => {
+    if (isLoading) return;
     setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
@@ -38,7 +39,7 @@ export default function RestoreSubscriptionModal({
         if (onSignInWithGoogle) {
           activeUser = await onSignInWithGoogle();
         } else {
-          activeUser = await triggerInteractiveGoogleLogin(20000);
+          activeUser = await triggerInteractiveGoogleLogin(45000);
         }
       }
 
@@ -93,7 +94,16 @@ export default function RestoreSubscriptionModal({
       setError(`No active Premium subscription was found for Google account (${activeUser.email}). If you used a different payment ID, please enter it below.`);
     } catch (err: any) {
       console.error('[Google Restore Error]', err);
-      setError(err.message || 'Unable to restore with Google account. Please try entering your Payment ID.');
+      const isCancelled = err?.code === 'auth/cancelled-popup-request' ||
+                          err?.code === 'auth/popup-closed-by-user' ||
+                          err?.message?.includes('cancelled-popup-request') ||
+                          err?.message?.includes('popup-closed-by-user') ||
+                          err?.message?.includes('cancelled or closed');
+      if (isCancelled) {
+        setError('Sign-in prompt was closed or cancelled. Click "Restore with Google Account" when ready.');
+      } else {
+        setError(err?.message || 'Unable to restore with Google account. Please try entering your Payment ID.');
+      }
     } finally {
       setIsLoading(false);
     }
