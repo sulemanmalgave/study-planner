@@ -53,7 +53,7 @@ import {
   FREE_PLAN_LIMITS
 } from './types';
 import { getInitialClientState } from './defaultState';
-import { db, isFirebaseConfigured } from './lib/firebase';
+import { db, isFirebaseConfigured, onAuthUserChange, signInWithGoogle, signOutUser, AuthUserProfile } from './lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   getStoredEntitlement,
@@ -91,6 +91,48 @@ export default function App() {
   const [dbState, setDbState] = useState<DatabaseSchema | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUserProfile | null>(null);
+
+  // Listen to Google authentication changes
+  useEffect(() => {
+    const unsubscribe = onAuthUserChange((user) => {
+      setAuthUser(user);
+      if (user) {
+        // Query server for any subscriptions linked to this Google account
+        fetch('/api/subscription/account-status', {
+          headers: {
+            'x-user-id': user.uid,
+            'x-user-email': user.email || '',
+          },
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data?.hasActiveSubscription && data?.subscription) {
+              saveStoredEntitlement(data.subscription, 'restored');
+              setDbState((prev) => {
+                if (!prev) return prev;
+                const next = {
+                  ...prev,
+                  profile: {
+                    ...prev.profile,
+                    subscription: data.subscription,
+                  },
+                };
+                try {
+                  localStorage.setItem('studyflow_db_state', JSON.stringify(next));
+                } catch (e) {
+                  // ignore
+                }
+                return next;
+              });
+            }
+          })
+          .catch((err) => console.warn('[Auth] Error querying linked subscription:', err));
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Sync route and document title
   useEffect(() => {
@@ -862,6 +904,9 @@ export default function App() {
         onUpgradeClick={() => setIsUpgradeOpen(true)} 
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
+        authUser={authUser}
+        onSignIn={signInWithGoogle}
+        onSignOut={signOutUser}
       />
 
       {/* 2. Main Workspace (Right Panel) */}
@@ -1098,6 +1143,9 @@ export default function App() {
               onTriggerUpgrade={() => setIsUpgradeOpen(true)}
               onRefreshState={fetchState}
               onOpenRestore={() => setIsRestoreOpen(true)}
+              authUser={authUser}
+              onSignInWithGoogle={signInWithGoogle}
+              onSignOut={signOutUser}
             />
           )}
 
@@ -1133,12 +1181,16 @@ export default function App() {
         onClose={() => setIsUpgradeOpen(false)} 
         onSuccess={handleUpgradeSuccess}
         onOpenRestore={() => setIsRestoreOpen(true)}
+        authUser={authUser}
+        onSignInWithGoogle={signInWithGoogle}
       />
 
       <RestoreSubscriptionModal
         isOpen={isRestoreOpen}
         onClose={() => setIsRestoreOpen(false)}
         onSuccess={handleUpgradeSuccess}
+        authUser={authUser}
+        onSignInWithGoogle={signInWithGoogle}
       />
 
       <QuickAddModal 

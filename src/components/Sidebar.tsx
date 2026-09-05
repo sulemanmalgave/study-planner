@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { drawerVariants, modalBackdropVariants } from '../lib/animations';
+import { AuthUserProfile } from '../lib/firebase';
 
 interface SidebarProps {
   activeTab: string;
@@ -26,9 +27,22 @@ interface SidebarProps {
   onUpgradeClick: () => void;
   isOpen?: boolean;
   onClose?: () => void;
+  authUser?: AuthUserProfile | null;
+  onSignIn?: () => void;
+  onSignOut?: () => void;
 }
 
-export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeClick, isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ 
+  activeTab, 
+  setActiveTab, 
+  profile, 
+  onUpgradeClick, 
+  isOpen, 
+  onClose,
+  authUser,
+  onSignIn,
+  onSignOut,
+}: SidebarProps) {
   const isPremium = profile.subscription.subscriptionStatus === 'premium' || profile.subscription.plan === 'premium';
 
   const menuItems = [
@@ -180,13 +194,24 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
         )}
 
         {/* Compact Profile Detail Card */}
-        <div className="flex items-center gap-2.5 px-2 py-1 rounded-xl transition-colors hover:bg-slate-50 cursor-pointer" id={isDrawer ? "drawer-profile-card" : "sidebar-profile-card"}>
-          <div className="w-8 h-8 rounded-full bg-[#6750A4] flex items-center justify-center text-xs font-bold text-white shadow-sm shrink-0 transition-transform duration-200 hover:scale-105">
-            {profile.initials}
-          </div>
+        <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl transition-colors hover:bg-slate-50" id={isDrawer ? "drawer-profile-card" : "sidebar-profile-card"}>
+          {authUser?.photoURL ? (
+            <img 
+              src={authUser.photoURL} 
+              alt={authUser.displayName || 'Google User'} 
+              className="w-8 h-8 rounded-full border border-purple-200 shadow-xs shrink-0 object-cover" 
+              referrerPolicy="no-referrer" 
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-[#6750A4] flex items-center justify-center text-xs font-bold text-white shadow-xs shrink-0 transition-transform duration-200 hover:scale-105">
+              {authUser?.displayName ? authUser.displayName[0].toUpperCase() : profile.initials}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
-            <h4 className="text-xs font-bold text-[#1D1B20] truncate leading-tight">{profile.name}</h4>
-            <div className="mt-1">
+            <h4 className="text-xs font-bold text-[#1D1B20] truncate leading-tight">
+              {authUser?.displayName || profile.name}
+            </h4>
+            <div className="mt-1 flex items-center justify-between gap-1">
               {isPremium ? (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-black bg-[#EADDFF] text-[#21005D] border border-[#D0BCFF] uppercase tracking-wider" id={isDrawer ? "drawer-badge-premium" : "sidebar-badge-premium"}>
                   Premium
@@ -196,6 +221,26 @@ export default function Sidebar({ activeTab, setActiveTab, profile, onUpgradeCli
                   Free Plan
                 </span>
               )}
+
+              {authUser ? (
+                <button
+                  type="button"
+                  onClick={onSignOut}
+                  title="Sign out of Google"
+                  className="text-[10px] text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                >
+                  Sign out
+                </button>
+              ) : onSignIn ? (
+                <button
+                  type="button"
+                  onClick={onSignIn}
+                  title="Sign in with Google"
+                  className="text-[10px] text-[#6750A4] hover:underline font-semibold cursor-pointer"
+                >
+                  Sign in
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

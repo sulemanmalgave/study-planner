@@ -6,6 +6,8 @@ export const DB_STATE_STORAGE_KEY = 'studyflow_db_state';
 export interface EntitlementRecord extends Subscription {
   lastVerifiedAt?: string;
   source?: 'payment' | 'restored' | 'cache' | 'server';
+  userId?: string;
+  userEmail?: string;
 }
 
 /**
@@ -76,13 +78,16 @@ export function getStoredEntitlement(): EntitlementRecord | null {
  */
 export function saveStoredEntitlement(
   subscription: Subscription,
-  source: 'payment' | 'restored' | 'cache' | 'server' = 'cache'
+  source: 'payment' | 'restored' | 'cache' | 'server' = 'cache',
+  userDetails?: { userId?: string; userEmail?: string }
 ): void {
   try {
     const record: EntitlementRecord = {
       ...subscription,
       source,
       lastVerifiedAt: new Date().toISOString(),
+      ...(userDetails?.userId ? { userId: userDetails.userId } : {}),
+      ...(userDetails?.userEmail ? { userEmail: userDetails.userEmail } : {}),
     };
 
     localStorage.setItem(ENTITLEMENT_STORAGE_KEY, JSON.stringify(record));
@@ -152,17 +157,51 @@ export function reconcileSubscription(
  * Asynchronously synchronizes the verified entitlement to the backend server
  * so server endpoints stay authoritatively informed.
  */
-export async function syncEntitlementToBackend(entitlement: Subscription): Promise<boolean> {
+export async function syncEntitlementToBackend(
+  entitlement: Subscription,
+  userDetails?: { userId?: string; userEmail?: string }
+): Promise<boolean> {
   if (!isEntitlementActive(entitlement)) return false;
   try {
     const res = await fetch('/api/subscription/sync-entitlement', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subscription: entitlement }),
+      body: JSON.stringify({ 
+        subscription: entitlement,
+        userId: userDetails?.userId,
+        userEmail: userDetails?.userEmail,
+      }),
     });
     return res.ok;
   } catch (err) {
     // Silent fail in offline/degraded mode
     return false;
+  }
+}
+
+/**
+ * Checks the backend ledger for an active subscription associated with a Google user account.
+ * Enables automatic restore across devices and after cache clearing.
+ */
+export async function fetchAccountEntitlementFromBackend(
+  userId: string,
+  userEmail?: string
+): Promise<Subscription | null> {
+  if (!userId && !userEmail) return null;
+  try {
+    const query = new URLSearchParams();
+    if (userId) query.set('userId', userId);
+    if (userEmail) query.set('userEmail', userEmail);
+
+    const res = await fetch(`/api/subscription/account-status?${query.toString()}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.hasActiveSubscription && data.subscription) {
+      return data.subscription as Subscription;
+    }
+    return null;
+  } catch (err) {
+    console.warn('[Entitlement] Error querying account status from backend:', err);
+    return null;
   }
 }

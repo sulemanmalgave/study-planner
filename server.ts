@@ -78,7 +78,7 @@ function getGeminiClient(): GoogleGenAI {
     console.error(
       '[Gemini AI Config] GEMINI_API_KEY is not configured in the server environment. Please set GEMINI_API_KEY in the Settings > Secrets panel.'
     );
-    const err: any = new Error('AI processing is temporarily unavailable. Please try again later.');
+    const err: any = new Error('GEMINI_API_KEY is not configured on the server. Please configure your GEMINI_API_KEY in the Settings > Secrets panel.');
     err.code = 'GEMINI_NOT_CONFIGURED';
     err.isConfigError = true;
     throw err;
@@ -211,7 +211,7 @@ async function generateTextWithGemini(
   systemInstruction?: string
 ): Promise<string> {
   // Ordered by proven latency and availability in production testing
-  const models = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-flash-latest', 'gemini-3.8-flash'];
+  const models = ['gemini-3.6-flash', 'gemini-3.7-flash'];
   let lastError: any = null;
 
   for (const model of models) {
@@ -240,7 +240,7 @@ async function transcribeAudioWithGemini(
   promptText: string
 ): Promise<string> {
   // Production verified multimodal models capable of transcribing raw audio waveforms
-  const models = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.8-flash'];
+  const models = ['gemini-3.6-flash', 'gemini-3.7-flash'];
   let lastError: any = null;
 
   for (const model of models) {
@@ -407,6 +407,8 @@ const pendingOrders = new Map<string, {
   country: string;
   provider: 'razorpay' | 'paypal';
   createdAt: number;
+  userId?: string;
+  userEmail?: string;
 }>();
 
 const verifiedPayments = new Set<string>();
@@ -471,17 +473,23 @@ const getInitialDatabaseState = (): DatabaseSchema => {
   };
 };
 
-const getDbFilePath = () => {
-  if (process.env.VERCEL || process.env.TMPDIR) {
-    return path.join('/tmp', 'server_db.json');
+const getDbFilePath = (userId?: string) => {
+  const baseDir = (process.env.VERCEL || process.env.TMPDIR) ? '/tmp' : process.cwd();
+  if (userId) {
+    const sanitized = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (sanitized) {
+      return path.join(baseDir, `server_db_${sanitized}.json`);
+    }
   }
-  return DB_FILE;
+  return path.join(baseDir, 'server_db.json');
 };
 
 // --- Dedicated Subscriptions & Entitlements Ledger ---
 interface StoredSubscriptionLedgerEntry {
   transactionId: string;
   orderId?: string;
+  userId?: string;
+  userEmail?: string;
   plan: 'monthly' | 'quarterly' | 'yearly' | 'premium';
   paymentGateway: 'razorpay' | 'paypal';
   amount?: number;
@@ -528,20 +536,27 @@ const recordSubscriptionInLedger = (entry: StoredSubscriptionLedgerEntry) => {
   const ledger = readSubscriptionsLedger();
   const existingIdx = ledger.findIndex(e => e.transactionId === entry.transactionId);
   if (existingIdx >= 0) {
-    ledger[existingIdx] = entry;
+    ledger[existingIdx] = { ...ledger[existingIdx], ...entry };
   } else {
     ledger.push(entry);
   }
   writeSubscriptionsLedger(ledger);
 };
 
-const getActiveSubscriptionFromLedger = (): StoredSubscriptionLedgerEntry | null => {
+const getActiveSubscriptionFromLedger = (userId?: string, userEmail?: string): StoredSubscriptionLedgerEntry | null => {
   const ledger = readSubscriptionsLedger();
   const now = Date.now();
   const activeEntries = ledger.filter(e => {
     if (e.status !== 'active') return false;
     const expiry = new Date(e.expiryDate).getTime();
-    return !isNaN(expiry) && expiry > now;
+    if (isNaN(expiry) || expiry <= now) return false;
+
+    if (userId || userEmail) {
+      const matchesUser = userId && e.userId === userId;
+      const matchesEmail = userEmail && e.userEmail && e.userEmail.toLowerCase() === userEmail.toLowerCase();
+      return Boolean(matchesUser || matchesEmail);
+    }
+    return true;
   });
 
   if (activeEntries.length === 0) return null;
@@ -556,16 +571,19 @@ const normalizePlanType = (plan: string): 'monthly' | 'yearly' | 'quarterly' => 
   return 'yearly';
 };
 
-let inMemoryDb: DatabaseSchema | null = null;
+let inMemoryDbMap = new Map<string, DatabaseSchema>();
 
-// Database utility helpers
-const readDB = (): DatabaseSchema => {
+// Database utility helpers with account isolation support
+const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
+  const memKey = userId ? `user_${userId}` : 'default';
   try {
-    const filePath = getDbFilePath();
+    const filePath = getDbFilePath(userId);
     if (!fs.existsSync(filePath)) {
+      // If user specific file does not exist, seed from initial database state
       const defaultState = getInitialDatabaseState();
-      // Ensure ledger entitlement is not lost on initial creation
-      const activeFromLedger = getActiveSubscriptionFromLedger();
+      
+      // If the user already has an active subscription in the ledger, preserve it!
+      const activeFromLedger = getActiveSubscriptionFromLedger(userId, userEmail);
       if (activeFromLedger) {
         defaultState.profile.subscription = {
           subscriptionStatus: 'premium',
@@ -583,7 +601,7 @@ const readDB = (): DatabaseSchema => {
       try {
         fs.writeFileSync(filePath, JSON.stringify(defaultState, null, 2));
       } catch (e) {
-        inMemoryDb = defaultState;
+        inMemoryDbMap.set(memKey, defaultState);
       }
       return defaultState;
     }
@@ -607,7 +625,7 @@ const readDB = (): DatabaseSchema => {
 
     // Protect subscription entitlement: If state has free but ledger has active subscription, reconcile
     if (!isSubscriptionActive(parsed.profile?.subscription)) {
-      const activeFromLedger = getActiveSubscriptionFromLedger();
+      const activeFromLedger = getActiveSubscriptionFromLedger(userId, userEmail);
       if (activeFromLedger) {
         parsed.profile.subscription = {
           subscriptionStatus: 'premium',
@@ -626,20 +644,22 @@ const readDB = (): DatabaseSchema => {
 
     return parsed;
   } catch (err) {
-    console.error('Error reading database file, using fallback state:', err);
-    if (!inMemoryDb) {
-      inMemoryDb = getInitialDatabaseState();
+    console.error(`Error reading database file for user ${userId || 'default'}, using fallback state:`, err);
+    let fallback = inMemoryDbMap.get(memKey);
+    if (!fallback) {
+      fallback = getInitialDatabaseState();
+      inMemoryDbMap.set(memKey, fallback);
     }
-    if (!inMemoryDb.audioLectures) {
-      inMemoryDb.audioLectures = [];
+    if (!fallback.audioLectures) {
+      fallback.audioLectures = [];
     }
-    if (!inMemoryDb.studyMaterials) {
-      inMemoryDb.studyMaterials = [];
+    if (!fallback.studyMaterials) {
+      fallback.studyMaterials = [];
     }
-    if (!isSubscriptionActive(inMemoryDb.profile?.subscription)) {
-      const activeFromLedger = getActiveSubscriptionFromLedger();
+    if (!isSubscriptionActive(fallback.profile?.subscription)) {
+      const activeFromLedger = getActiveSubscriptionFromLedger(userId, userEmail);
       if (activeFromLedger) {
-        inMemoryDb.profile.subscription = {
+        fallback.profile.subscription = {
           subscriptionStatus: 'premium',
           plan: activeFromLedger.plan,
           paymentGateway: activeFromLedger.paymentGateway,
@@ -653,14 +673,15 @@ const readDB = (): DatabaseSchema => {
         };
       }
     }
-    return inMemoryDb;
+    return fallback;
   }
 };
 
-const writeDB = (data: DatabaseSchema) => {
+const writeDB = (data: DatabaseSchema, userId?: string, userEmail?: string) => {
+  const memKey = userId ? `user_${userId}` : 'default';
   // Entitlement protection: Prevent accidental downgrade if ledger has active subscription
   if (!isSubscriptionActive(data.profile?.subscription)) {
-    const activeFromLedger = getActiveSubscriptionFromLedger();
+    const activeFromLedger = getActiveSubscriptionFromLedger(userId, userEmail);
     if (activeFromLedger) {
       data.profile.subscription = {
         subscriptionStatus: 'premium',
@@ -677,13 +698,22 @@ const writeDB = (data: DatabaseSchema) => {
     }
   }
 
-  inMemoryDb = data;
+  inMemoryDbMap.set(memKey, data);
   try {
-    const filePath = getDbFilePath();
+    const filePath = getDbFilePath(userId);
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
   } catch (err) {
-    console.warn('Could not write database file to disk (in-memory state updated):', err);
+    console.warn(`Could not write database file for user ${userId || 'default'} to disk (in-memory state updated):`, err);
   }
+};
+
+const getEffectiveUser = (req: express.Request): { userId?: string; userEmail?: string } => {
+  const userId = (req.headers['x-user-id'] || req.query.userId || req.body?.userId || '') as string;
+  const userEmail = (req.headers['x-user-email'] || req.query.userEmail || req.body?.userEmail || '') as string;
+  return {
+    userId: userId ? String(userId).trim() : undefined,
+    userEmail: userEmail ? String(userEmail).trim() : undefined,
+  };
 };
 
 // AI Usage Tracking & Limits Check Helper
@@ -735,7 +765,8 @@ app.use('/api', (req, res, next) => {
 // 1. Get entire state
 app.get('/api/state', (req, res) => {
   try {
-    const db = readDB();
+    const { userId, userEmail } = getEffectiveUser(req);
+    const db = readDB(userId, userEmail);
     res.json(db);
   } catch (error) {
     res.status(500).json({ error: 'Failed to read database state' });
@@ -745,9 +776,10 @@ app.get('/api/state', (req, res) => {
   // 2. Update user profile
   app.put('/api/profile', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       db.profile = { ...db.profile, ...req.body };
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(db.profile);
     } catch (error) {
       res.status(500).json({ error: 'Failed to update profile' });
@@ -757,7 +789,8 @@ app.get('/api/state', (req, res) => {
   // 3. Courses CRUD with limit check
   app.post('/api/courses', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       if (!isSubscriptionActive(db.profile.subscription) && db.courses.length >= FREE_PLAN_LIMITS.courses) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
@@ -784,7 +817,7 @@ app.get('/api/state', (req, res) => {
         code: (req.body.code || '').trim(),
       };
       db.courses.push(newCourse);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(newCourse);
     } catch (error) {
       res.status(500).json({ error: 'Failed to create course' });
@@ -793,7 +826,8 @@ app.get('/api/state', (req, res) => {
 
   app.put('/api/courses/:id', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       const index = db.courses.findIndex((c) => c.id === req.params.id);
       if (index === -1) return res.status(404).json({ error: 'Course not found' });
 
@@ -813,7 +847,7 @@ app.get('/api/state', (req, res) => {
       }
 
       db.courses[index] = { ...db.courses[index], ...req.body };
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(db.courses[index]);
     } catch (error) {
       res.status(500).json({ error: 'Failed to update course' });
@@ -822,10 +856,11 @@ app.get('/api/state', (req, res) => {
 
   app.delete('/api/courses/:id', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       // Safe deletion: remove course from courses list but keep user assignments, timetable, exams & notes intact
       db.courses = db.courses.filter((c) => c.id !== req.params.id);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete course' });
@@ -2146,11 +2181,9 @@ ${payload.text}`
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('[Gemini AI] Error generating document summary with Gemini:', error);
-      res.status(500).json({
-        error: 'GEMINI_ERROR',
-        message: 'AI processing is temporarily unavailable. Please try again later.',
-      });
+      const errData = parseGeminiError(error);
+      console.error('[Gemini AI] Error generating document summary with Gemini:', errData);
+      res.status(errData.code).json(errData);
     } finally {
       activeAiOperations.delete(opKey);
     }
@@ -2195,9 +2228,11 @@ ${payload.text}`
       try {
         ai = getGeminiClient();
       } catch (e: any) {
-        return res.status(500).json({
+        return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'AI processing is temporarily unavailable. Please try again later.',
+          code: 503,
+          provider: 'google-gemini',
+          message: 'GEMINI_API_KEY is not configured on the server. Please configure your key in Settings > Secrets.',
         });
       }
 
@@ -2254,11 +2289,9 @@ ${payload.text}`
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('[Gemini AI] Error generating study notes with Gemini:', error);
-      res.status(500).json({
-        error: 'GEMINI_ERROR',
-        message: 'AI processing is temporarily unavailable. Please try again later.',
-      });
+      const errData = parseGeminiError(error);
+      console.error('[Gemini AI] Error generating study notes with Gemini:', errData);
+      res.status(errData.code).json(errData);
     } finally {
       activeAiOperations.delete(opKey);
     }
@@ -2303,9 +2336,11 @@ ${payload.text}`
       try {
         ai = getGeminiClient();
       } catch (e: any) {
-        return res.status(500).json({
+        return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'AI processing is temporarily unavailable. Please try again later.',
+          code: 503,
+          provider: 'google-gemini',
+          message: 'GEMINI_API_KEY is not configured on the server. Please configure your key in Settings > Secrets.',
         });
       }
 
@@ -2356,11 +2391,9 @@ ${payload.text}`
         aiUsage: db.profile.aiUsage,
       });
     } catch (error: any) {
-      console.error('[Gemini AI] Error generating key points with Gemini:', error);
-      res.status(500).json({
-        error: 'GEMINI_ERROR',
-        message: 'AI processing is temporarily unavailable. Please try again later.',
-      });
+      const errData = parseGeminiError(error);
+      console.error('[Gemini AI] Error generating key points with Gemini:', errData);
+      res.status(errData.code).json(errData);
     } finally {
       activeAiOperations.delete(opKey);
     }
@@ -2628,6 +2661,16 @@ ${payload.text}`
         });
       }
 
+      // Enforce Google Sign-In prior to purchase
+      const { userId, userEmail } = getEffectiveUser(req);
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'GOOGLE_SIGNIN_REQUIRED',
+          message: 'Please sign in with your Google account before purchasing a subscription so your entitlement is permanently preserved.'
+        });
+      }
+
       // Strictly enforce server-side geolocation detection from request headers/IP.
       // Do NOT trust any country parameter supplied by the frontend.
       const selectedCountry = detectCountryFromRequest(req);
@@ -2674,6 +2717,8 @@ ${payload.text}`
             notes: {
               planType,
               country: selectedCountry,
+              userId,
+              userEmail: userEmail || '',
             },
           });
 
@@ -2686,6 +2731,8 @@ ${payload.text}`
             country: selectedCountry,
             provider: 'razorpay',
             createdAt: Date.now(),
+            userId,
+            userEmail,
           });
 
           return res.json({
@@ -2792,6 +2839,8 @@ ${payload.text}`
             country: selectedCountry,
             provider: 'paypal',
             createdAt: Date.now(),
+            userId,
+            userEmail,
           });
 
           return res.json({
@@ -2957,7 +3006,19 @@ ${payload.text}`
       // Record transaction to prevent replay
       verifiedPayments.add(transactionIdentifier);
 
-      const db = readDB();
+      // Account-level identity verification
+      const reqUser = getEffectiveUser(req);
+      const effectiveUserId = reqUser.userId || originalOrder.userId;
+      const effectiveUserEmail = reqUser.userEmail || originalOrder.userEmail;
+
+      if (!effectiveUserId) {
+        return res.status(400).json({
+          error: 'GOOGLE_SIGNIN_REQUIRED',
+          message: 'A verified Google Account is required to associate and activate your Premium subscription.',
+        });
+      }
+
+      const db = readDB(effectiveUserId, effectiveUserEmail);
       const purchaseDate = new Date();
       const expiryDate = new Date();
 
@@ -2984,10 +3045,12 @@ ${payload.text}`
         paymentId: transactionIdentifier,
       };
 
-      // Record in persistent subscriptions ledger
+      // Record in persistent subscriptions ledger linked to Google Account ID
       recordSubscriptionInLedger({
         transactionId: transactionIdentifier,
         orderId,
+        userId: effectiveUserId,
+        userEmail: effectiveUserEmail,
         plan: originalOrder.planType,
         paymentGateway: originalOrder.provider,
         amount: originalOrder.amount,
@@ -2999,7 +3062,7 @@ ${payload.text}`
         status: 'active',
       });
 
-      writeDB(db);
+      writeDB(db, effectiveUserId, effectiveUserEmail);
       pendingOrders.delete(orderId); // Clean up cache
 
       res.json({
@@ -3013,25 +3076,67 @@ ${payload.text}`
     }
   });
 
+  // Account Entitlement Query Endpoint
+  app.get('/api/subscription/account-status', (req, res) => {
+    try {
+      const { userId, userEmail } = getEffectiveUser(req);
+      if (!userId && !userEmail) {
+        return res.json({ hasActiveSubscription: false, subscription: null });
+      }
+
+      const activeEntry = getActiveSubscriptionFromLedger(userId, userEmail);
+      if (activeEntry) {
+        return res.json({
+          hasActiveSubscription: true,
+          subscription: {
+            subscriptionStatus: 'premium',
+            plan: activeEntry.plan,
+            paymentGateway: activeEntry.paymentGateway,
+            transactionId: activeEntry.transactionId,
+            purchaseDate: activeEntry.purchaseDate,
+            expiryDate: activeEntry.expiryDate,
+            billingCountry: activeEntry.billingCountry,
+            type: normalizePlanType(activeEntry.plan),
+            paymentProvider: activeEntry.paymentGateway,
+            paymentId: activeEntry.transactionId,
+          },
+        });
+      }
+
+      res.json({ hasActiveSubscription: false, subscription: null });
+    } catch (err: any) {
+      console.error('Error querying account subscription status:', err);
+      res.status(500).json({ error: 'Failed to query account subscription status' });
+    }
+  });
+
   // Secure Subscription Restoration Endpoint
   app.post('/api/subscription/restore', async (req, res) => {
     try {
-      const rawId = req.body?.identifier || req.body?.transactionId || req.body?.paymentId || req.body?.orderId;
+      const { userId, userEmail } = getEffectiveUser(req);
+      const rawId = req.body?.identifier || req.body?.transactionId || req.body?.paymentId || req.body?.orderId || req.body?.email || userEmail || userId;
       if (!rawId || typeof rawId !== 'string') {
         return res.status(400).json({
           error: 'ID_REQUIRED',
-          message: 'Payment ID or Order ID is required for verification.',
+          message: 'Payment ID, Order ID, or signed-in account is required for subscription restoration.',
         });
       }
 
       const cleanId = rawId.trim();
 
-      // 1. Check persistent server subscriptions ledger
+      // 1. Check persistent server subscriptions ledger (supports transactionId, orderId, userId, or userEmail)
       const ledger = readSubscriptionsLedger();
-      const ledgerEntry = ledger.find(e =>
-        e.transactionId.toLowerCase() === cleanId.toLowerCase() ||
-        (e.orderId && e.orderId.toLowerCase() === cleanId.toLowerCase())
-      );
+      const ledgerEntry = ledger.find(e => {
+        if (cleanId) {
+          if (e.transactionId && e.transactionId.toLowerCase() === cleanId.toLowerCase()) return true;
+          if (e.orderId && e.orderId.toLowerCase() === cleanId.toLowerCase()) return true;
+          if (e.userId && e.userId.toLowerCase() === cleanId.toLowerCase()) return true;
+          if (e.userEmail && e.userEmail.toLowerCase() === cleanId.toLowerCase()) return true;
+        }
+        if (userId && e.userId === userId) return true;
+        if (userEmail && e.userEmail && e.userEmail.toLowerCase() === userEmail.toLowerCase()) return true;
+        return false;
+      });
 
       if (ledgerEntry) {
         const expiryTime = new Date(ledgerEntry.expiryDate).getTime();
@@ -3043,7 +3148,9 @@ ${payload.text}`
           });
         }
 
-        const db = readDB();
+        const effectiveUser = userId || ledgerEntry.userId;
+        const effectiveEmail = userEmail || ledgerEntry.userEmail;
+        const db = readDB(effectiveUser, effectiveEmail);
         db.profile.subscription = {
           subscriptionStatus: 'premium',
           plan: ledgerEntry.plan,
@@ -3056,7 +3163,7 @@ ${payload.text}`
           paymentProvider: ledgerEntry.paymentGateway,
           paymentId: ledgerEntry.transactionId,
         };
-        writeDB(db);
+        writeDB(db, effectiveUser, effectiveEmail);
 
         return res.json({
           success: true,
@@ -3244,6 +3351,10 @@ ${payload.text}`
   // Entitlement Synchronization Endpoint (Allows client to sync active entitlement to backend ledger)
   app.post('/api/subscription/sync-entitlement', (req, res) => {
     try {
+      const { userId, userEmail } = getEffectiveUser(req);
+      const effectiveUserId = userId || req.body.userId;
+      const effectiveUserEmail = userEmail || req.body.userEmail;
+
       const { subscription } = req.body;
       if (!subscription || !isSubscriptionActive(subscription)) {
         return res.status(400).json({ error: 'Invalid or inactive subscription payload' });
@@ -3256,13 +3367,15 @@ ${payload.text}`
         }
       }
 
-      const db = readDB();
+      const db = readDB(effectiveUserId, effectiveUserEmail);
       db.profile.subscription = { ...subscription };
-      writeDB(db);
+      writeDB(db, effectiveUserId, effectiveUserEmail);
 
       if (subscription.transactionId) {
         recordSubscriptionInLedger({
           transactionId: subscription.transactionId,
+          userId: effectiveUserId,
+          userEmail: effectiveUserEmail,
           plan: subscription.plan || 'premium',
           paymentGateway: subscription.paymentGateway || 'razorpay',
           purchaseDate: subscription.purchaseDate || new Date().toISOString(),

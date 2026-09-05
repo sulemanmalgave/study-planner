@@ -1,25 +1,102 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, RotateCcw, ShieldCheck, Check, AlertCircle, Loader2, Sparkles, Receipt, HelpCircle } from 'lucide-react';
+import { X, RotateCcw, ShieldCheck, Check, AlertCircle, Loader2, Sparkles, Receipt, HelpCircle, LogIn } from 'lucide-react';
 import { Subscription } from '../types';
 import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
 import { getStoredEntitlement, isEntitlementActive, saveStoredEntitlement } from '../lib/entitlement';
+import { AuthUserProfile, signInWithGoogle } from '../lib/firebase';
 
 interface RestoreSubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (restoredSubscription: Subscription) => void;
+  authUser?: AuthUserProfile | null;
+  onSignInWithGoogle?: () => Promise<AuthUserProfile>;
 }
 
 export default function RestoreSubscriptionModal({
   isOpen,
   onClose,
   onSuccess,
+  authUser,
+  onSignInWithGoogle,
 }: RestoreSubscriptionModalProps) {
   const [identifier, setIdentifier] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const handleGoogleAccountRestore = async () => {
+    setIsLoading(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      let activeUser = authUser;
+      if (!activeUser) {
+        if (onSignInWithGoogle) {
+          activeUser = await onSignInWithGoogle();
+        } else {
+          activeUser = await signInWithGoogle();
+        }
+      }
+
+      if (!activeUser) {
+        throw new Error('Please sign in with your Google account to restore purchases.');
+      }
+
+      const res = await fetch('/api/subscription/account-status', {
+        headers: {
+          'x-user-id': activeUser.uid,
+          'x-user-email': activeUser.email || '',
+        },
+      });
+
+      const data = await res.json();
+      if (res.ok && data.hasActiveSubscription && data.subscription) {
+        saveStoredEntitlement(data.subscription, 'restored');
+        setSuccessMessage(`Restored active ${data.subscription.plan || 'Premium'} subscription linked to ${activeUser.email}!`);
+        onSuccess(data.subscription);
+        setTimeout(() => {
+          setIsLoading(false);
+          onClose();
+        }, 1200);
+        return;
+      }
+
+      // Check restore endpoint with email / uid
+      const restoreRes = await fetch('/api/subscription/restore', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': activeUser.uid,
+          'x-user-email': activeUser.email || '',
+        },
+        body: JSON.stringify({
+          identifier: activeUser.email || activeUser.uid,
+        }),
+      });
+
+      const restoreData = await restoreRes.json();
+      if (restoreRes.ok && restoreData.success && restoreData.subscription) {
+        saveStoredEntitlement(restoreData.subscription, 'restored');
+        setSuccessMessage(`Restored subscription linked to ${activeUser.email}!`);
+        onSuccess(restoreData.subscription);
+        setTimeout(() => {
+          setIsLoading(false);
+          onClose();
+        }, 1200);
+        return;
+      }
+
+      setError(`No active Premium subscription was found for Google account (${activeUser.email}). If you used a different payment ID, please enter it below.`);
+    } catch (err: any) {
+      console.error('[Google Restore Error]', err);
+      setError(err.message || 'Unable to restore with Google account. Please try entering your Payment ID.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleDeviceCheck = async () => {
     setIsLoading(true);
@@ -166,6 +243,47 @@ export default function RestoreSubscriptionModal({
                 <span>{successMessage}</span>
               </div>
             )}
+
+            {/* Google Account Instant Restore */}
+            <div className="p-4 bg-purple-50/60 border border-purple-200/80 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-purple-950">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                  </svg>
+                  <span>Restore via Google Account</span>
+                </div>
+                {authUser && (
+                  <span className="text-[10px] font-semibold text-purple-700 bg-purple-100/80 px-2 py-0.5 rounded-full">
+                    Signed in
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-purple-900/80 leading-relaxed">
+                {authUser 
+                  ? `Check purchases linked to ${authUser.email}`
+                  : 'If you purchased Premium while signed into Google, sign in to restore your access instantly.'}
+              </p>
+              <button
+                onClick={handleGoogleAccountRestore}
+                disabled={isLoading}
+                type="button"
+                className="w-full py-2 bg-white hover:bg-purple-50/50 border border-purple-200 text-purple-950 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                id="restore-with-google-btn"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#6750A4]" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
+                )}
+                <span>
+                  {authUser ? `Check Purchases for ${authUser.email}` : 'Sign in with Google to Restore'}
+                </span>
+              </button>
+            </div>
 
             {/* Device Quick Check Button */}
             <div className="p-4 bg-[#F7F9FC] border border-[#E1E3E1] rounded-2xl space-y-2">

@@ -33,6 +33,11 @@ export interface UserProfile {
   email: string;
   initials: string;
   subscription: Subscription;
+  id?: string;
+  userId?: string;
+  googleUid?: string;
+  photoURL?: string | null;
+  isGoogleLinked?: boolean;
   mobileDevice?: MobileDevice | null;
   aiUsage?: AiUsage;
 }
