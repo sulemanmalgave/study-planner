@@ -16,6 +16,16 @@ export const GOOGLE_CLIENT_ID =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) ||
   '446581031176-sp43qc7tblt9n8u8a4hrj1h05rtparor.apps.googleusercontent.com';
 
+/**
+ * Returns the exact runtime origin of the application
+ */
+export function getCurrentRuntimeOrigin(): string {
+  if (typeof window !== 'undefined' && window.location) {
+    return window.location.origin;
+  }
+  return '';
+}
+
 declare global {
   interface Window {
     google?: {
@@ -117,8 +127,9 @@ export async function initGoogleIdentityServices(onSuccess?: AuthSuccessCallback
   }
 
   try {
+    const currentOrigin = getCurrentRuntimeOrigin();
+    console.log('[Google Auth] Initializing GIS for origin:', currentOrigin);
     console.log('[Google Auth] Google client ID detected:', GOOGLE_CLIENT_ID.slice(0, 16) + '...');
-    console.log('[Google Auth] Google initialization started');
 
     window.google.accounts.id.initialize({
       client_id: GOOGLE_CLIENT_ID,
@@ -178,8 +189,17 @@ export async function renderGoogleButton(
       width: options?.width || Math.min(container.clientWidth || 280, 320),
       logo_alignment: options?.logo_alignment || 'left',
     });
-    console.log('[Google Auth] Google button rendered successfully');
-    return true;
+
+    // Verify GIS actually rendered an element into container (not blocked by origin mismatch)
+    await new Promise(r => setTimeout(r, 60));
+    const hasElements = container.children.length > 0;
+    if (hasElements) {
+      console.log('[Google Auth] Google button rendered successfully');
+      return true;
+    } else {
+      console.warn('[Google Auth] Google button container empty. The origin may need to be added to Authorized JavaScript origins in Google Cloud Console:', getCurrentRuntimeOrigin());
+      return false;
+    }
   } catch (err) {
     console.error('[Google Auth] Error rendering Google button:', err);
     return false;

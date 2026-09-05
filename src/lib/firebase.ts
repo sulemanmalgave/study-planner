@@ -96,6 +96,10 @@ export async function signInWithGoogle(): Promise<AuthUserProfile> {
     if (err.code === 'auth/popup-closed-by-user') {
       throw new Error('Sign-in cancelled. Please complete the Google sign-in prompt to continue.');
     }
+    if (err.code === 'auth/unauthorized-domain') {
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'this domain';
+      throw new Error(`Domain not authorized for Firebase Google Sign-In (${currentOrigin}). Please ensure ${currentOrigin} is added to Firebase Authentication Authorized Domains.`);
+    }
     throw new Error(err.message || 'Failed to sign in with Google.');
   }
 }
