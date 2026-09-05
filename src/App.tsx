@@ -1207,7 +1207,13 @@ export default function App() {
         onSuccess={handleUpgradeSuccess}
         onOpenRestore={() => setIsRestoreOpen(true)}
         authUser={authUser}
-        onSignInWithGoogle={triggerInteractiveGoogleLogin}
+        onSignInWithGoogle={async () => {
+          const user = await triggerInteractiveGoogleLogin(12000);
+          if (user) {
+            setAuthUser(user);
+          }
+          return user;
+        }}
       />
 
       <RestoreSubscriptionModal
@@ -1215,7 +1221,13 @@ export default function App() {
         onClose={() => setIsRestoreOpen(false)}
         onSuccess={handleUpgradeSuccess}
         authUser={authUser}
-        onSignInWithGoogle={triggerInteractiveGoogleLogin}
+        onSignInWithGoogle={async () => {
+          const user = await triggerInteractiveGoogleLogin(12000);
+          if (user) {
+            setAuthUser(user);
+          }
+          return user;
+        }}
       />
 
       <QuickAddModal 
