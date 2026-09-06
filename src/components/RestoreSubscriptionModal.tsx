@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, RotateCcw, ShieldCheck, Check, AlertCircle, Loader2, Sparkles, Receipt, HelpCircle, LogIn } from 'lucide-react';
+import { X, RotateCcw, ShieldCheck, Check, AlertCircle, Loader2, Sparkles, Receipt, HelpCircle, Mail } from 'lucide-react';
 import { Subscription } from '../types';
 import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
 import { getStoredEntitlement, isEntitlementActive, saveStoredEntitlement } from '../lib/entitlement';
 import { AuthUserProfile } from '../lib/firebase';
-import { triggerInteractiveGoogleLogin } from '../lib/googleAuth';
-import { triggerInteractiveMicrosoftLogin } from '../lib/microsoftAuth';
+import EmailAuthCard from './EmailAuthCard';
 
 interface RestoreSubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (restoredSubscription: Subscription) => void;
   authUser?: AuthUserProfile | null;
+  onAuthSuccess?: (user: AuthUserProfile, hasActiveSubscription?: boolean, subscription?: any) => void;
+  onSignOut?: () => void;
   onSignInWithMicrosoft?: () => Promise<AuthUserProfile>;
   onSignInWithGoogle?: () => Promise<AuthUserProfile>;
 }
@@ -22,47 +23,36 @@ export default function RestoreSubscriptionModal({
   onClose,
   onSuccess,
   authUser,
-  onSignInWithMicrosoft,
-  onSignInWithGoogle,
+  onAuthSuccess,
+  onSignOut,
 }: RestoreSubscriptionModalProps) {
   const [identifier, setIdentifier] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Check account purchases if user is already signed in
   const handleAccountRestore = async () => {
-    if (isLoading) return;
+    if (isLoading || !authUser) return;
     setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      let activeUser = authUser;
-      if (!activeUser) {
-        if (onSignInWithMicrosoft) {
-          activeUser = await onSignInWithMicrosoft();
-        } else if (onSignInWithGoogle) {
-          activeUser = await onSignInWithGoogle();
-        } else {
-          activeUser = await triggerInteractiveMicrosoftLogin(45000);
-        }
-      }
-
-      if (!activeUser) {
-        throw new Error('Please sign in with your account to restore purchases.');
-      }
-
       const res = await fetch('/api/subscription/account-status', {
         headers: {
-          'x-user-id': activeUser.uid,
-          'x-user-email': activeUser.email || '',
+          'x-user-id': authUser.uid,
+          'x-user-email': authUser.email || '',
         },
       });
 
       const data = await res.json();
       if (res.ok && data.hasActiveSubscription && data.subscription) {
-        saveStoredEntitlement(data.subscription, 'restored');
-        setSuccessMessage(`Restored active ${data.subscription.plan || 'Premium'} subscription linked to ${activeUser.email}!`);
+        saveStoredEntitlement(data.subscription, 'restored', {
+          userId: authUser.uid,
+          userEmail: authUser.email || undefined,
+        });
+        setSuccessMessage(`Restored active ${data.subscription.plan || 'Premium'} subscription linked to ${authUser.email}!`);
         onSuccess(data.subscription);
         setTimeout(() => {
           setIsLoading(false);
@@ -71,23 +61,26 @@ export default function RestoreSubscriptionModal({
         return;
       }
 
-      // Check restore endpoint with email / uid
+      // Check restore endpoint with authenticated headers
       const restoreRes = await fetch('/api/subscription/restore', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': activeUser.uid,
-          'x-user-email': activeUser.email || '',
+          'x-user-id': authUser.uid,
+          'x-user-email': authUser.email || '',
         },
         body: JSON.stringify({
-          identifier: activeUser.email || activeUser.uid,
+          identifier: authUser.email || authUser.uid,
         }),
       });
 
       const restoreData = await restoreRes.json();
       if (restoreRes.ok && restoreData.success && restoreData.subscription) {
-        saveStoredEntitlement(restoreData.subscription, 'restored');
-        setSuccessMessage(`Restored subscription linked to ${activeUser.email}!`);
+        saveStoredEntitlement(restoreData.subscription, 'restored', {
+          userId: authUser.uid,
+          userEmail: authUser.email || undefined,
+        });
+        setSuccessMessage(`Restored subscription linked to ${authUser.email}!`);
         onSuccess(restoreData.subscription);
         setTimeout(() => {
           setIsLoading(false);
@@ -96,82 +89,42 @@ export default function RestoreSubscriptionModal({
         return;
       }
 
-      setError(`No active Premium subscription was found for account (${activeUser.email}). If you used a different payment ID, please enter it below.`);
+      setError(`No active Premium subscription found for ${authUser.email}. If you have your Razorpay/PayPal Payment ID, enter it below.`);
     } catch (err: any) {
       console.error('[Account Restore Error]', err);
-      const isCancelled = err?.code === 'auth/cancelled-popup-request' ||
-                          err?.code === 'auth/popup-closed-by-user' ||
-                          err?.message?.includes('cancelled-popup-request') ||
-                          err?.message?.includes('popup-closed-by-user') ||
-                          err?.message?.includes('cancelled or closed');
-      if (isCancelled) {
-        setError('Sign-in prompt was closed or cancelled. Click "Restore with Account" when ready.');
-      } else {
-        setError(err?.message || 'Unable to restore with account. Please try entering your Payment ID.');
-      }
+      setError(err?.message || 'Unable to restore with account. Please try entering your Payment ID.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDeviceCheck = async () => {
+  // Check local device storage
+  const handleDeviceCheck = () => {
     setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
 
-    try {
+    setTimeout(() => {
       const stored = getStoredEntitlement();
       if (stored && isEntitlementActive(stored)) {
-        // We have an active local entitlement record. Let's sync to server
-        const res = await fetch('/api/subscription/sync-entitlement', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subscription: stored }),
-        }).catch(() => null);
-
-        saveStoredEntitlement(stored, 'restored');
-        setSuccessMessage(`Verified active ${stored.plan || 'Premium'} subscription from device records.`);
+        setSuccessMessage(`Recovered active ${stored.plan || 'Premium'} subscription from device memory!`);
         onSuccess(stored);
         setTimeout(() => {
           setIsLoading(false);
           onClose();
-        }, 1200);
-        return;
+        }, 1000);
+      } else {
+        setError('No active Premium entitlement found in this browser. Please sign in or enter your Payment ID.');
+        setIsLoading(false);
       }
-
-      // Check if server ledger has an active record
-      if (stored?.transactionId) {
-        const response = await fetch('/api/subscription/restore', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: stored.transactionId }),
-        });
-        const data = await response.json();
-        if (response.ok && data.success && data.subscription) {
-          saveStoredEntitlement(data.subscription, 'restored');
-          setSuccessMessage(data.message || 'Subscription successfully restored!');
-          onSuccess(data.subscription);
-          setTimeout(() => {
-            setIsLoading(false);
-            onClose();
-          }, 1200);
-          return;
-        }
-      }
-
-      setError('No active subscription found stored on this device. Please enter your Payment ID or Order ID below from your receipt.');
-    } catch (e: any) {
-      setError(e.message || 'Verification failed. Please enter your Payment ID below.');
-    } finally {
-      setIsLoading(false);
-    }
+    }, 400);
   };
 
+  // Restore via Transaction / Order ID
   const handleRestoreWithId = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = identifier.trim();
-    if (!trimmed) {
-      setError('Please enter your Payment ID or Order ID.');
+    if (!identifier.trim()) {
+      setError('Please enter your Payment ID, Order ID, or Transaction ID.');
       return;
     }
 
@@ -180,22 +133,31 @@ export default function RestoreSubscriptionModal({
     setSuccessMessage(null);
 
     try {
-      const response = await fetch('/api/subscription/restore', {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (authUser?.uid) headers['x-user-id'] = authUser.uid;
+      if (authUser?.email) headers['x-user-email'] = authUser.email;
+
+      const res = await fetch('/api/subscription/restore', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: trimmed }),
+        headers,
+        body: JSON.stringify({ identifier: identifier.trim() }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || data.error || 'Unable to locate a valid subscription for this ID.');
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Unable to restore subscription with this identifier.');
       }
 
-      const subscription: Subscription = data.subscription;
-      saveStoredEntitlement(subscription, 'restored');
-      setSuccessMessage(data.message || 'Subscription restored successfully!');
-      onSuccess(subscription);
+      if (data.subscription) {
+        saveStoredEntitlement(data.subscription, 'restored', {
+          userId: authUser?.uid,
+          userEmail: authUser?.email || undefined,
+        });
+        setSuccessMessage(data.message || 'Subscription successfully verified and restored!');
+        onSuccess(data.subscription);
+      }
 
       setTimeout(() => {
         setIsLoading(false);
@@ -235,7 +197,7 @@ export default function RestoreSubscriptionModal({
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-[#1D1B20] tracking-tight">Restore Premium Subscription</h3>
-                  <p className="text-[11px] text-[#49454F]">Verify past purchase securely via payment records</p>
+                  <p className="text-[11px] text-[#49454F]">Verify past purchase securely via email or receipt</p>
                 </div>
               </div>
               <button
@@ -260,51 +222,54 @@ export default function RestoreSubscriptionModal({
               </div>
             )}
 
-            {/* Account Instant Restore */}
-            <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 21 21">
-                    <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                    <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                    <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                    <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-                  </svg>
-                  <span>Restore via Account</span>
-                </div>
-                {authUser && (
-                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
-                    Signed in
+            {/* Email Account Verification & Restoration */}
+            {authUser ? (
+              <div className="p-4 bg-emerald-50/80 border border-emerald-200/90 rounded-2xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-950">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Signed in as {authUser.email}</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                    Verified
                   </span>
-                )}
+                </div>
+                <button
+                  onClick={handleAccountRestore}
+                  disabled={isLoading}
+                  type="button"
+                  className="w-full py-2.5 bg-[#6750A4] hover:bg-[#523d8c] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                  id="restore-with-account-btn"
+                >
+                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                  <span>Check Purchases for {authUser.email}</span>
+                </button>
               </div>
-              <p className="text-[11px] text-slate-600 leading-relaxed">
-                {authUser 
-                  ? `Check purchases linked to ${authUser.email}`
-                  : 'If you purchased Premium while signed in, sign in to restore your access instantly.'}
-              </p>
-              <button
-                onClick={handleAccountRestore}
-                disabled={isLoading}
-                type="button"
-                className="w-full py-2.5 bg-[#2F2F2F] hover:bg-[#1B1B1B] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs disabled:opacity-50"
-                id="restore-with-account-btn"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                ) : (
-                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 21 21">
-                    <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                    <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                    <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                    <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-                  </svg>
-                )}
-                <span>
-                  {authUser ? `Check Purchases for ${authUser.email}` : 'Sign in with Microsoft to Restore'}
-                </span>
-              </button>
-            </div>
+            ) : (
+              <EmailAuthCard
+                authUser={authUser}
+                title="Verify Email to Restore Purchases"
+                onAuthSuccess={(user, hasActiveSubscription, sub) => {
+                  if (onAuthSuccess) {
+                    onAuthSuccess(user, hasActiveSubscription, sub);
+                  }
+                  if (hasActiveSubscription && sub) {
+                    saveStoredEntitlement(sub, 'restored', {
+                      userId: user.uid,
+                      userEmail: user.email || undefined,
+                    });
+                    setSuccessMessage(`Restored active ${sub.plan || 'Premium'} subscription linked to ${user.email}!`);
+                    onSuccess(sub);
+                    setTimeout(() => {
+                      onClose();
+                    }, 1200);
+                  } else {
+                    handleAccountRestore();
+                  }
+                }}
+                onSignOut={onSignOut}
+              />
+            )}
 
             {/* Device Quick Check Button */}
             <div className="p-4 bg-[#F7F9FC] border border-[#E1E3E1] rounded-2xl space-y-2">
@@ -333,53 +298,30 @@ export default function RestoreSubscriptionModal({
               </span>
             </div>
 
-            {/* Restore with ID Form */}
-            <form onSubmit={handleRestoreWithId} className="space-y-4">
-              <div className="space-y-1.5">
+            {/* Restore with Receipt / Payment ID Form */}
+            <form onSubmit={handleRestoreWithId} className="space-y-3">
+              <div className="space-y-1">
                 <label className="text-xs font-bold text-[#1D1B20] flex items-center gap-1.5">
                   <Receipt className="w-3.5 h-3.5 text-[#6750A4]" />
-                  <span>Payment / Transaction ID</span>
+                  <span>Restore via Payment ID or Order ID</span>
                 </label>
                 <input
                   type="text"
+                  placeholder="e.g. pay_Nabc12345 or sim_..."
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="e.g., pay_Qz123... or PayPal Order ID"
-                  disabled={isLoading}
-                  className="w-full px-3.5 py-2.5 text-xs text-[#1D1B20] bg-white border border-[#E1E3E1] rounded-xl focus:ring-1 focus:ring-[#6750A4] focus:border-[#6750A4] outline-none font-mono"
+                  className="w-full px-3 py-2 border border-[#E1E3E1] rounded-xl text-xs text-[#1D1B20] focus:outline-none focus:border-[#6750A4]"
                 />
-                <div className="flex items-start gap-1 text-[10px] text-[#49454F] mt-1">
-                  <HelpCircle className="w-3 h-3 text-[#79747E] shrink-0 mt-0.5" />
-                  <span>
-                    Found in your Razorpay or PayPal payment confirmation email receipt (e.g., <code>pay_...</code> or Order ID).
-                  </span>
-                </div>
               </div>
 
-              <div className="pt-2 flex gap-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  disabled={isLoading}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-xs font-bold text-[#49454F] rounded-xl transition-all cursor-pointer disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading || !identifier.trim()}
-                  className="flex-1 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm disabled:opacity-50"
-                >
-                  {isLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Verify &amp; Restore</span>
-                    </>
-                  )}
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={isLoading || !identifier.trim()}
+                className="w-full py-2.5 bg-[#6750A4] hover:bg-[#523d8c] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                <span>Restore with Payment ID</span>
+              </button>
             </form>
           </motion.div>
         </div>

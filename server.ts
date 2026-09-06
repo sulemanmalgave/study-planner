@@ -543,6 +543,83 @@ const recordSubscriptionInLedger = (entry: StoredSubscriptionLedgerEntry) => {
   writeSubscriptionsLedger(ledger);
 };
 
+// --- Authoritative Simple Email User System ---
+interface StoredUserRecord {
+  userId: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
+  verificationCode?: string;
+  verificationCodeExpires?: number;
+  verificationAttempts?: number;
+}
+
+const getUsersFilePath = () => {
+  if (process.env.VERCEL || process.env.TMPDIR) {
+    return path.join('/tmp', 'users_db.json');
+  }
+  return path.join(process.cwd(), 'users_db.json');
+};
+
+let inMemoryUsersList: StoredUserRecord[] = [];
+
+const readUsers = (): StoredUserRecord[] => {
+  try {
+    const filePath = getUsersFilePath();
+    if (!fs.existsSync(filePath)) {
+      return inMemoryUsersList;
+    }
+    const data = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(data);
+    const result = Array.isArray(parsed) ? parsed : [];
+    inMemoryUsersList = result;
+    return result;
+  } catch (err) {
+    console.warn('[Users] Could not read users db:', err);
+    return inMemoryUsersList;
+  }
+};
+
+const writeUsers = (users: StoredUserRecord[]) => {
+  inMemoryUsersList = users;
+  try {
+    const filePath = getUsersFilePath();
+    fs.writeFileSync(filePath, JSON.stringify(users, null, 2));
+  } catch (err) {
+    console.warn('[Users] Could not write users db:', err);
+  }
+};
+
+const findUserByEmail = (email: string): StoredUserRecord | undefined => {
+  const users = readUsers();
+  const normalized = email.trim().toLowerCase();
+  return users.find(u => u.email.trim().toLowerCase() === normalized);
+};
+
+const findUserById = (userId: string): StoredUserRecord | undefined => {
+  const users = readUsers();
+  return users.find(u => u.userId === userId);
+};
+
+const upsertUser = (user: StoredUserRecord): StoredUserRecord => {
+  const users = readUsers();
+  const idx = users.findIndex(
+    u => u.userId === user.userId || u.email.trim().toLowerCase() === user.email.trim().toLowerCase()
+  );
+  if (idx >= 0) {
+    users[idx] = { ...users[idx], ...user, updatedAt: new Date().toISOString() };
+    writeUsers(users);
+    return users[idx];
+  } else {
+    users.push(user);
+    writeUsers(users);
+    return user;
+  }
+};
+
+
 const getActiveSubscriptionFromLedger = (userId?: string, userEmail?: string): StoredSubscriptionLedgerEntry | null => {
   const ledger = readSubscriptionsLedger();
   const now = Date.now();
@@ -2735,6 +2812,370 @@ ${payload.text}`
     }
   });
 
+  // ==========================================
+  // Simple Email Authentication & Account Endpoints
+  // ==========================================
+
+  // 1. Send One-Time 6-Digit Email Verification Code
+  app.post('/api/auth/email/send-code', async (req, res) => {
+    try {
+      const { email, name, mode } = req.body || {};
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({
+          success: false,
+          error: 'INVALID_EMAIL',
+          message: 'Please provide a valid email address.',
+        });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(cleanEmail)) {
+        return res.status(400).json({
+          success: false,
+          error: 'INVALID_EMAIL_FORMAT',
+          message: 'The email address provided is not in a valid format.',
+        });
+      }
+
+      const existingUser = findUserByEmail(cleanEmail);
+
+      // Generate secure 6-digit numeric verification code
+      const verificationCode = String(Math.floor(100000 + Math.random() * 900000));
+      const verificationCodeExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+      if (existingUser) {
+        existingUser.verificationCode = verificationCode;
+        existingUser.verificationCodeExpires = verificationCodeExpires;
+        existingUser.verificationAttempts = 0;
+        if (name && (!existingUser.name || existingUser.name === existingUser.email.split('@')[0])) {
+          existingUser.name = name.trim();
+        }
+        upsertUser(existingUser);
+      } else {
+        const newUserId = `usr_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+        const newUser: StoredUserRecord = {
+          userId: newUserId,
+          name: name?.trim() || cleanEmail.split('@')[0],
+          email: cleanEmail,
+          emailVerified: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          verificationCode,
+          verificationCodeExpires,
+          verificationAttempts: 0,
+        };
+        upsertUser(newUser);
+      }
+
+      // Log verification code clearly for visibility and testing
+      console.log(`[Email Auth] 🔑 One-Time Verification Code for ${cleanEmail}: ${verificationCode} (Valid for 15 minutes)`);
+
+      return res.json({
+        success: true,
+        message: `A 6-digit verification code has been generated for ${cleanEmail}.`,
+        isExistingUser: Boolean(existingUser),
+        demoCode: verificationCode,
+      });
+    } catch (err: any) {
+      console.error('[Email Auth] Error sending verification code:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'SEND_CODE_FAILED',
+        message: 'Could not send verification code. Please try again.',
+      });
+    }
+  });
+
+  // 2. Verify 6-Digit Email Verification Code
+  app.post('/api/auth/email/verify-code', async (req, res) => {
+    try {
+      const { email, code, name } = req.body || {};
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'EMAIL_REQUIRED',
+          message: 'Email address is required.',
+        });
+      }
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'CODE_REQUIRED',
+          message: '6-digit verification code is required.',
+        });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanCode = code.trim();
+
+      const user = findUserByEmail(cleanEmail);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: 'USER_NOT_FOUND',
+          message: 'No pending verification was found for this email. Please request a new code.',
+        });
+      }
+
+      if ((user.verificationAttempts || 0) >= 5) {
+        return res.status(400).json({
+          success: false,
+          error: 'TOO_MANY_ATTEMPTS',
+          message: 'Too many incorrect attempts. Please request a new verification code.',
+        });
+      }
+
+      if (!user.verificationCodeExpires || Date.now() > user.verificationCodeExpires) {
+        return res.status(400).json({
+          success: false,
+          error: 'CODE_EXPIRED',
+          message: 'Verification code has expired. Please request a new code.',
+        });
+      }
+
+      if (user.verificationCode !== cleanCode) {
+        user.verificationAttempts = (user.verificationAttempts || 0) + 1;
+        upsertUser(user);
+        return res.status(400).json({
+          success: false,
+          error: 'INVALID_CODE',
+          message: 'Invalid verification code. Please verify the 6-digit code and try again.',
+        });
+      }
+
+      // Verification succeeded!
+      user.emailVerified = true;
+      user.verificationCode = undefined;
+      user.verificationCodeExpires = undefined;
+      user.verificationAttempts = 0;
+      if (name && (!user.name || user.name === user.email.split('@')[0])) {
+        user.name = name.trim();
+      }
+      upsertUser(user);
+
+      console.log(`[Email Auth] ✅ Verified account for ${cleanEmail} (UID: ${user.userId})`);
+
+      // Safe non-destructive subscription link
+      const activeEntry = getActiveSubscriptionFromLedger(user.userId, user.email);
+      if (activeEntry && (!activeEntry.userId || activeEntry.userId !== user.userId)) {
+        activeEntry.userId = user.userId;
+        const ledger = readSubscriptionsLedger();
+        const lIdx = ledger.findIndex(e => e.transactionId === activeEntry.transactionId);
+        if (lIdx >= 0) {
+          ledger[lIdx].userId = user.userId;
+          writeSubscriptionsLedger(ledger);
+        }
+      }
+
+      return res.json({
+        success: true,
+        user: {
+          uid: user.userId,
+          userId: user.userId,
+          email: user.email,
+          displayName: user.name,
+          emailVerified: true,
+          photoURL: null,
+        },
+        hasActiveSubscription: Boolean(activeEntry),
+        subscription: activeEntry
+          ? {
+              subscriptionStatus: 'premium',
+              plan: activeEntry.plan,
+              paymentGateway: activeEntry.paymentGateway,
+              transactionId: activeEntry.transactionId,
+              purchaseDate: activeEntry.purchaseDate,
+              expiryDate: activeEntry.expiryDate,
+              billingCountry: activeEntry.billingCountry,
+              type: normalizePlanType(activeEntry.plan),
+              paymentProvider: activeEntry.paymentGateway,
+              paymentId: activeEntry.transactionId,
+            }
+          : null,
+      });
+    } catch (err: any) {
+      console.error('[Email Auth] Error verifying code:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'VERIFICATION_FAILED',
+        message: 'Internal error while verifying code. Please try again.',
+      });
+    }
+  });
+
+  // 3. Resend One-Time Verification Code
+  app.post('/api/auth/email/resend-code', async (req, res) => {
+    try {
+      const { email } = req.body || {};
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'EMAIL_REQUIRED',
+          message: 'Email address is required.',
+        });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      let user = findUserByEmail(cleanEmail);
+
+      const verificationCode = String(Math.floor(100000 + Math.random() * 900000));
+      const verificationCodeExpires = Date.now() + 15 * 60 * 1000;
+
+      if (!user) {
+        const newUserId = `usr_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+        user = {
+          userId: newUserId,
+          name: cleanEmail.split('@')[0],
+          email: cleanEmail,
+          emailVerified: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          verificationCode,
+          verificationCodeExpires,
+          verificationAttempts: 0,
+        };
+      } else {
+        user.verificationCode = verificationCode;
+        user.verificationCodeExpires = verificationCodeExpires;
+        user.verificationAttempts = 0;
+      }
+
+      upsertUser(user);
+      console.log(`[Email Auth] 🔑 Resent Verification Code for ${cleanEmail}: ${verificationCode}`);
+
+      return res.json({
+        success: true,
+        message: `A new 6-digit verification code has been generated for ${cleanEmail}.`,
+        demoCode: verificationCode,
+      });
+    } catch (err: any) {
+      console.error('[Email Auth] Error resending code:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'RESEND_FAILED',
+        message: 'Could not resend verification code.',
+      });
+    }
+  });
+
+  // 4. Safe, non-destructive associate local Study Planner data with user account
+  app.post('/api/auth/associate-data', (req, res) => {
+    try {
+      const { userId, userEmail } = getEffectiveUser(req);
+      const effectiveUserId = userId || req.body?.userId;
+      const effectiveUserEmail = userEmail || req.body?.userEmail;
+      const clientState = req.body?.state as DatabaseSchema;
+
+      if (!effectiveUserId) {
+        return res.status(400).json({
+          error: 'USER_ID_REQUIRED',
+          message: 'User ID is required to associate data.',
+        });
+      }
+
+      // Read current authoritative user db
+      const existingDb = readDB(effectiveUserId, effectiveUserEmail);
+
+      if (clientState) {
+        // Safe, non-destructive, idempotent merge of all entities:
+        // Merge courses
+        const courseMap = new Map<string, any>();
+        (existingDb.courses || []).forEach(c => courseMap.set(c.id, c));
+        (clientState.courses || []).forEach(c => {
+          if (!courseMap.has(c.id)) {
+            courseMap.set(c.id, c);
+          }
+        });
+        existingDb.courses = Array.from(courseMap.values());
+
+        // Merge timetable
+        const timetableMap = new Map<string, any>();
+        (existingDb.timetable || []).forEach(t => timetableMap.set(t.id, t));
+        (clientState.timetable || []).forEach(t => {
+          if (!timetableMap.has(t.id)) {
+            timetableMap.set(t.id, t);
+          }
+        });
+        existingDb.timetable = Array.from(timetableMap.values());
+
+        // Merge assignments
+        const assignmentMap = new Map<string, any>();
+        (existingDb.assignments || []).forEach(a => assignmentMap.set(a.id, a));
+        (clientState.assignments || []).forEach(a => {
+          if (!assignmentMap.has(a.id)) {
+            assignmentMap.set(a.id, a);
+          }
+        });
+        existingDb.assignments = Array.from(assignmentMap.values());
+
+        // Merge exams
+        const examMap = new Map<string, any>();
+        (existingDb.exams || []).forEach(e => examMap.set(e.id, e));
+        (clientState.exams || []).forEach(e => {
+          if (!examMap.has(e.id)) {
+            examMap.set(e.id, e);
+          }
+        });
+        existingDb.exams = Array.from(examMap.values());
+
+        // Merge notes
+        const notesMap = new Map<string, any>();
+        (existingDb.notes || []).forEach(n => notesMap.set(n.id, n));
+        (clientState.notes || []).forEach(n => {
+          if (!notesMap.has(n.id)) {
+            notesMap.set(n.id, n);
+          }
+        });
+        existingDb.notes = Array.from(notesMap.values());
+
+        // Merge studySessions
+        const sessionMap = new Map<string, any>();
+        (existingDb.studySessions || []).forEach(s => sessionMap.set(s.id, s));
+        (clientState.studySessions || []).forEach(s => {
+          if (!sessionMap.has(s.id)) {
+            sessionMap.set(s.id, s);
+          }
+        });
+        existingDb.studySessions = Array.from(sessionMap.values());
+
+        // Merge studyMaterials
+        const materialMap = new Map<string, any>();
+        (existingDb.studyMaterials || []).forEach(m => materialMap.set(m.id, m));
+        (clientState.studyMaterials || []).forEach(m => {
+          if (!materialMap.has(m.id)) {
+            materialMap.set(m.id, m);
+          }
+        });
+        existingDb.studyMaterials = Array.from(materialMap.values());
+
+        // Merge audioLectures
+        const audioMap = new Map<string, any>();
+        (existingDb.audioLectures || []).forEach(a => audioMap.set(a.id, a));
+        (clientState.audioLectures || []).forEach(a => {
+          if (!audioMap.has(a.id)) {
+            audioMap.set(a.id, a);
+          }
+        });
+        existingDb.audioLectures = Array.from(audioMap.values());
+
+        // Update profile identity safely
+        if (clientState.profile) {
+          existingDb.profile.name = clientState.profile.name || existingDb.profile.name;
+          existingDb.profile.email = effectiveUserEmail || clientState.profile.email || existingDb.profile.email;
+          existingDb.profile.userId = effectiveUserId;
+        }
+      }
+
+      // Write merged state
+      writeDB(existingDb, effectiveUserId, effectiveUserEmail);
+      return res.json({ success: true, message: 'Local data associated successfully.' });
+    } catch (err: any) {
+      console.error('[Email Auth] Error associating data:', err);
+      return res.status(500).json({ error: 'FAILED_TO_ASSOCIATE', message: err.message });
+    }
+  });
+
   // Server-side country detection endpoint
   app.get('/api/subscription/detect-country', (req, res) => {
     const country = detectCountryFromRequest(req);
@@ -2753,13 +3194,13 @@ ${payload.text}`
         });
       }
 
-      // Enforce Google Sign-In prior to purchase
+      // Enforce verified Account prior to purchase
       const { userId, userEmail } = getEffectiveUser(req);
       if (!userId) {
         return res.status(401).json({
           success: false,
-          error: 'GOOGLE_SIGNIN_REQUIRED',
-          message: 'Please sign in with your Google account before purchasing a subscription so your entitlement is permanently preserved.'
+          error: 'ACCOUNT_REQUIRED',
+          message: 'Please create or sign in to your Study Planner account before purchasing a subscription so your entitlement is permanently preserved.'
         });
       }
 
@@ -3105,8 +3546,8 @@ ${payload.text}`
 
       if (!effectiveUserId) {
         return res.status(400).json({
-          error: 'GOOGLE_SIGNIN_REQUIRED',
-          message: 'A verified Google Account is required to associate and activate your Premium subscription.',
+          error: 'ACCOUNT_REQUIRED',
+          message: 'A verified Study Planner account is required to associate and activate your Premium subscription.',
         });
       }
 
@@ -3215,6 +3656,14 @@ ${payload.text}`
       }
 
       const cleanId = rawId.trim();
+
+      // Guard: Do not automatically trust a typed email alone without verification
+      if (cleanId.includes('@') && (!userEmail || userEmail.toLowerCase() !== cleanId.toLowerCase())) {
+        return res.status(401).json({
+          error: 'VERIFICATION_REQUIRED',
+          message: 'To restore subscriptions linked to an email address, please sign in or verify your email with a one-time code.',
+        });
+      }
 
       // 1. Check persistent server subscriptions ledger (supports transactionId, orderId, userId, or userEmail)
       const ledger = readSubscriptionsLedger();

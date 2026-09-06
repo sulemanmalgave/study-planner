@@ -53,9 +53,13 @@ import {
   FREE_PLAN_LIMITS
 } from './types';
 import { getInitialClientState } from './defaultState';
-import { db, isFirebaseConfigured, onAuthUserChange, signInWithGoogle, signInWithMicrosoft, signOutUser, AuthUserProfile } from './lib/firebase';
-import { initGoogleIdentityServices, triggerInteractiveGoogleLogin } from './lib/googleAuth';
-import { triggerInteractiveMicrosoftLogin, associateLocalDataWithMicrosoftAccount } from './lib/microsoftAuth';
+import { db, isFirebaseConfigured, AuthUserProfile } from './lib/firebase';
+import { 
+  getLocalAuthUser, 
+  clearLocalAuthUser, 
+  associateLocalDataWithEmailAccount 
+} from './lib/emailAuth';
+import EmailAuthModal from './components/EmailAuthModal';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   getStoredEntitlement,
@@ -93,71 +97,47 @@ export default function App() {
   const [dbState, setDbState] = useState<DatabaseSchema | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [authUser, setAuthUser] = useState<AuthUserProfile | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUserProfile | null>(() => getLocalAuthUser());
+  const [isEmailAuthOpen, setIsEmailAuthOpen] = useState<boolean>(false);
 
-  // Listen to Google authentication changes
+  // Check and query active subscriptions linked to authenticated email account
   useEffect(() => {
-    // Initialize Google Identity Services once at app root
-    initGoogleIdentityServices((gisUser, linkedSubscription) => {
-      setAuthUser(gisUser);
-      if (linkedSubscription) {
-        saveStoredEntitlement(linkedSubscription, 'restored');
-        setDbState((prev) => {
-          if (!prev) return prev;
-          const next = {
-            ...prev,
-            profile: {
-              ...prev.profile,
-              subscription: linkedSubscription,
-            },
-          };
-          try {
-            localStorage.setItem('studyflow_db_state', JSON.stringify(next));
-          } catch (e) {
-            // ignore
-          }
-          return next;
-        });
-      }
-    });
-
-    const unsubscribe = onAuthUserChange((user) => {
+    const user = getLocalAuthUser();
+    if (user) {
       setAuthUser(user);
-      if (user) {
-        // Query server for any subscriptions linked to this Google account
-        fetch('/api/subscription/account-status', {
-          headers: {
-            'x-user-id': user.uid,
-            'x-user-email': user.email || '',
-          },
+      fetch('/api/subscription/account-status', {
+        headers: {
+          'x-user-id': user.uid,
+          'x-user-email': user.email || '',
+        },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.hasActiveSubscription && data?.subscription) {
+            saveStoredEntitlement(data.subscription, 'restored', {
+              userId: user.uid,
+              userEmail: user.email || undefined,
+            });
+            setDbState((prev) => {
+              if (!prev) return prev;
+              const next = {
+                ...prev,
+                profile: {
+                  ...prev.profile,
+                  subscription: data.subscription,
+                },
+              };
+              try {
+                localStorage.setItem('studyflow_db_state', JSON.stringify(next));
+              } catch (e) {
+                // ignore
+              }
+              return next;
+            });
+          }
         })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data?.hasActiveSubscription && data?.subscription) {
-              saveStoredEntitlement(data.subscription, 'restored');
-              setDbState((prev) => {
-                if (!prev) return prev;
-                const next = {
-                  ...prev,
-                  profile: {
-                    ...prev.profile,
-                    subscription: data.subscription,
-                  },
-                };
-                try {
-                  localStorage.setItem('studyflow_db_state', JSON.stringify(next));
-                } catch (e) {
-                  // ignore
-                }
-                return next;
-              });
-            }
-          })
-          .catch((err) => console.warn('[Auth] Error querying linked subscription:', err));
-      }
-    });
-
-    return () => unsubscribe();
+        .catch((err) => console.warn('[Auth] Error querying linked subscription:', err));
+    }
   }, []);
 
   // Sync route and document title
@@ -173,22 +153,60 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const handleSignInWithMicrosoft = async (): Promise<AuthUserProfile> => {
-    try {
-      const user = await triggerInteractiveMicrosoftLogin(45000);
-      if (user) {
-        setAuthUser(user);
-        // Non-destructively associate local workspace data with the authenticated Microsoft account
-        setDbState((prev) => {
-          if (!prev) return prev;
-          return associateLocalDataWithMicrosoftAccount(user, prev);
-        });
-      }
-      return user;
-    } catch (err) {
-      console.warn('[Microsoft Auth Flow Error]', err);
-      throw err;
+  const handleAuthSuccess = async (user: AuthUserProfile, hasActiveSubscription?: boolean, subscription?: any) => {
+    setAuthUser(user);
+    if (hasActiveSubscription && subscription) {
+      saveStoredEntitlement(subscription, 'restored', {
+        userId: user.uid,
+        userEmail: user.email || undefined,
+      });
+      setDbState((prev) => {
+        if (!prev) return prev;
+        const next = {
+          ...prev,
+          profile: {
+            ...prev.profile,
+            name: user.displayName || prev.profile.name,
+            email: user.email || prev.profile.email,
+            subscription: subscription,
+          },
+        };
+        try {
+          localStorage.setItem('studyflow_db_state', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+    } else {
+      setDbState((prev) => {
+        if (!prev) return prev;
+        const next = {
+          ...prev,
+          profile: {
+            ...prev.profile,
+            name: user.displayName || prev.profile.name,
+            email: user.email || prev.profile.email,
+          },
+        };
+        try {
+          localStorage.setItem('studyflow_db_state', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
     }
+
+    // Non-destructively associate local workspace records with server
+    if (dbState) {
+      try {
+        await associateLocalDataWithEmailAccount(user, dbState);
+      } catch (err) {
+        console.warn('[Data Association Warning]', err);
+      }
+    }
+  };
+
+  const handleSignOut = async () => {
+    clearLocalAuthUser();
+    setAuthUser(null);
   };
 
   const handleNavigateToPrivacy = () => {
@@ -949,8 +967,8 @@ export default function App() {
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
         authUser={authUser}
-        onSignIn={signInWithGoogle}
-        onSignOut={signOutUser}
+        onSignIn={() => setIsEmailAuthOpen(true)}
+        onSignOut={handleSignOut}
       />
 
       {/* 2. Main Workspace (Right Panel) */}
@@ -1188,9 +1206,8 @@ export default function App() {
               onRefreshState={fetchState}
               onOpenRestore={() => setIsRestoreOpen(true)}
               authUser={authUser}
-              onSignInWithMicrosoft={handleSignInWithMicrosoft}
-              onSignInWithGoogle={signInWithGoogle}
-              onSignOut={signOutUser}
+              onAuthSuccess={handleAuthSuccess}
+              onSignOut={handleSignOut}
             />
           )}
 
@@ -1221,20 +1238,22 @@ export default function App() {
       </div>
 
       {/* 3. Global Action Modal Overlays */}
+      <EmailAuthModal
+        isOpen={isEmailAuthOpen}
+        onClose={() => setIsEmailAuthOpen(false)}
+        authUser={authUser}
+        onAuthSuccess={handleAuthSuccess}
+        onSignOut={handleSignOut}
+      />
+
       <UpgradeModal 
         isOpen={isUpgradeOpen} 
         onClose={() => setIsUpgradeOpen(false)} 
         onSuccess={handleUpgradeSuccess}
         onOpenRestore={() => setIsRestoreOpen(true)}
         authUser={authUser}
-        onSignInWithMicrosoft={handleSignInWithMicrosoft}
-        onSignInWithGoogle={async () => {
-          const user = await triggerInteractiveGoogleLogin(45000);
-          if (user) {
-            setAuthUser(user);
-          }
-          return user;
-        }}
+        onAuthSuccess={handleAuthSuccess}
+        onSignOut={handleSignOut}
       />
 
       <RestoreSubscriptionModal
@@ -1242,14 +1261,8 @@ export default function App() {
         onClose={() => setIsRestoreOpen(false)}
         onSuccess={handleUpgradeSuccess}
         authUser={authUser}
-        onSignInWithMicrosoft={handleSignInWithMicrosoft}
-        onSignInWithGoogle={async () => {
-          const user = await triggerInteractiveGoogleLogin(45000);
-          if (user) {
-            setAuthUser(user);
-          }
-          return user;
-        }}
+        onAuthSuccess={handleAuthSuccess}
+        onSignOut={handleSignOut}
       />
 
       <QuickAddModal 

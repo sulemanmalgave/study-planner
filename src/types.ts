@@ -1,12 +1,12 @@
 export interface Subscription {
-  subscriptionStatus: 'free' | 'premium';
-  plan: 'free' | 'premium' | 'monthly' | 'yearly' | 'quarterly' | null;
-  paymentGateway: 'razorpay' | 'paypal' | null;
+  subscriptionStatus: 'free' | 'premium' | 'expired';
+  plan: 'free' | 'premium' | 'monthly' | 'yearly' | 'quarterly' | string | null;
+  paymentGateway: 'razorpay' | 'paypal' | string | null;
   transactionId: string | null;
   purchaseDate: string | null;
   expiryDate: string | null;
   billingCountry: string;
-  type?: 'monthly' | 'yearly' | 'quarterly' | null; // For legacy compatibility
+  type?: 'monthly' | 'yearly' | 'quarterly' | string | null; // For legacy compatibility
   paymentProvider?: string | null;
   paymentId?: string | null;
 }

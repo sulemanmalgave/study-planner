@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Check, Sparkles, ShieldCheck, Zap, CreditCard, ArrowRight, Loader2, AlertCircle, Globe, UserCheck, LogIn, RefreshCw } from 'lucide-react';
+import { X, Check, Sparkles, ShieldCheck, Zap, CreditCard, ArrowRight, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { Subscription } from '../types';
 import { 
   getCountryConfig, 
@@ -10,8 +10,7 @@ import {
 } from '../lib/paymentConfig';
 import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
 import { AuthUserProfile } from '../lib/firebase';
-import { triggerInteractiveMicrosoftLogin } from '../lib/microsoftAuth';
-import OAuthDiagnosticPanel from './OAuthDiagnosticPanel';
+import EmailAuthCard from './EmailAuthCard';
 
 interface UpgradeModalProps {
   isOpen: boolean;
@@ -21,6 +20,8 @@ interface UpgradeModalProps {
   limitReason?: string;
   onOpenRestore?: () => void;
   authUser?: AuthUserProfile | null;
+  onAuthSuccess?: (user: AuthUserProfile, hasActiveSubscription?: boolean, subscription?: any) => void;
+  onSignOut?: () => void;
   onSignInWithMicrosoft?: () => Promise<AuthUserProfile>;
   onSignInWithGoogle?: () => Promise<AuthUserProfile>;
 }
@@ -85,13 +86,12 @@ export default function UpgradeModal({
   limitReason,
   onOpenRestore,
   authUser,
-  onSignInWithMicrosoft,
-  onSignInWithGoogle,
+  onAuthSuccess,
+  onSignOut,
 }: UpgradeModalProps) {
   const [billingCountry, setBillingCountry] = useState<string>('US');
   const [selectedPlanId, setSelectedPlanId] = useState<'monthly' | 'quarterly' | 'yearly'>('yearly');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isSigningIn, setIsSigningIn] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
 
@@ -118,64 +118,21 @@ export default function UpgradeModal({
   // Selected plan object
   const activePlan = plans.find(p => p.id === selectedPlanId) || plans[0];
 
-  const handleCancelSignIn = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setIsSigningIn(false);
-    setError(null);
-  };
-
-  const handleMicrosoftSignIn = async () => {
-    if (isSigningIn) return; // Prevent duplicate popup requests
-    setError(null);
-    setIsSigningIn(true);
-    try {
-      if (onSignInWithMicrosoft) {
-        await onSignInWithMicrosoft();
-      } else if (onSignInWithGoogle) {
-        // Backward-compat fallback if legacy prop passed
-        await onSignInWithGoogle();
-      } else {
-        await triggerInteractiveMicrosoftLogin(45000);
-      }
-    } catch (err: any) {
-      console.error('[Microsoft Sign-In Error]', err);
-      const isCancelled = err?.code === 'auth/cancelled-popup-request' ||
-                          err?.code === 'auth/popup-closed-by-user' ||
-                          err?.message?.includes('cancelled-popup-request') ||
-                          err?.message?.includes('popup-closed-by-user') ||
-                          err?.message?.includes('cancelled or closed') ||
-                          err?.message?.includes('cancelled or interrupted');
-      const isTimeout = err?.message?.includes('timed out');
-      const isBlocked = err?.code === 'auth/popup-blocked' || err?.message?.includes('popup-blocked') || err?.message?.includes('blocked');
-      const isUnauthorizedDomain = err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain');
-      const isNotAllowed = err?.code === 'auth/operation-not-allowed' || err?.message?.includes('operation-not-allowed');
-
-      let message = err?.message || 'Microsoft sign-in could not be completed. Please try again.';
-      if (isCancelled) {
-        message = 'Sign-in prompt was closed or cancelled. Click "Continue with Microsoft" when ready.';
-      } else if (isUnauthorizedDomain) {
-        message = 'Firebase Error: study-planner-tool.vercel.app must be added to Authorized domains in Firebase Authentication settings.';
-      } else if (isNotAllowed) {
-        message = 'Microsoft sign-in is not enabled in Firebase Console. Please enable Microsoft under Firebase Authentication > Sign-in method.';
-      } else if (isBlocked) {
-        message = 'Sign-in popup was blocked by browser. Please allow popups for this site and click Continue with Microsoft again.';
-      } else if (isTimeout) {
-        message = 'Microsoft sign-in timed out. Please click "Try Again" below to reconnect.';
-      }
-      setError(message);
-    } finally {
-      setIsSigningIn(false);
-    }
-  };
-
-  // Load Razorpay Checkout SDK dynamically
+  // Helper to load Razorpay SDK dynamically
   const loadRazorpayScript = (): Promise<boolean> => {
     return new Promise((resolve) => {
       if (window.Razorpay) {
         resolve(true);
         return;
       }
+      const existingScript = document.getElementById('razorpay-checkout-js');
+      if (existingScript) {
+        existingScript.addEventListener('load', () => resolve(true));
+        existingScript.addEventListener('error', () => resolve(false));
+        return;
+      }
       const script = document.createElement('script');
+      script.id = 'razorpay-checkout-js';
       script.src = 'https://checkout.razorpay.com/v1/checkout.js';
       script.onload = () => resolve(true);
       script.onerror = () => resolve(false);
@@ -183,7 +140,7 @@ export default function UpgradeModal({
     });
   };
 
-  // Load PayPal SDK dynamically
+  // Helper to load PayPal SDK dynamically
   const loadPaypalScript = (clientId: string): Promise<boolean> => {
     return new Promise((resolve) => {
       if (window.paypal) {
@@ -192,10 +149,6 @@ export default function UpgradeModal({
       }
       const existingScript = document.getElementById('paypal-sdk-script');
       if (existingScript) {
-        if (window.paypal) {
-          resolve(true);
-          return;
-        }
         existingScript.addEventListener('load', () => resolve(true));
         existingScript.addEventListener('error', () => resolve(false));
         return;
@@ -235,7 +188,7 @@ export default function UpgradeModal({
         }),
       });
 
-      setPaymentSuccessMessage('🎉 Payment verified successfully! Welcome to Study Planner Premium.');
+      setPaymentSuccessMessage('Payment verified successfully! Welcome to Study Planner Premium.');
       if (onSuccess && data.subscription) {
         onSuccess(data.subscription);
       }
@@ -254,9 +207,12 @@ export default function UpgradeModal({
 
   // Execute checkout
   const handleCheckout = async () => {
-    if (!authUser) {
-      setError('Please sign in with Microsoft first so your Premium subscription is securely linked to your account.');
-      await handleMicrosoftSignIn();
+    if (!authUser || !authUser.uid) {
+      setError('Please create or sign in to your Study Planner account first so your Premium subscription is securely linked to your account.');
+      const authElem = document.getElementById('email-account-auth-container');
+      if (authElem) {
+        authElem.scrollIntoView({ behavior: 'smooth' });
+      }
       return;
     }
 
@@ -298,23 +254,23 @@ export default function UpgradeModal({
             name: 'Study Planner Premium',
             description: `${activePlan.title} (${activePlan.formattedPrice})`,
             order_id: orderId,
-            handler: async function (response: any) {
+            prefill: {
+              name: authUser.displayName || 'Student',
+              email: authUser.email || '',
+            },
+            theme: {
+              color: '#6750A4',
+            },
+            handler: async (response: any) => {
               await handleVerifyPaymentOnBackend({
-                orderId,
+                orderId: response.razorpay_order_id || orderId,
                 paymentId: response.razorpay_payment_id,
                 signature: response.razorpay_signature,
                 provider: 'razorpay',
               });
             },
-            prefill: {
-              name: authUser.displayName || 'Student User',
-              email: authUser.email || 'student@studyplanner.app',
-            },
-            theme: {
-              color: '#6750A4',
-            },
             modal: {
-              ondismiss: function () {
+              ondismiss: () => {
                 setIsLoading(false);
               },
             },
@@ -421,82 +377,67 @@ export default function UpgradeModal({
                 </div>
               </div>
               <button 
-                onClick={onClose} 
-                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors btn-press cursor-pointer"
+                onClick={onClose}
+                className="w-8 h-8 rounded-full bg-white border border-slate-200/70 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
                 id="close-upgrade-modal-btn"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-5 text-left">
-              
-              {/* Limit Notice if triggered by feature cap */}
+            {/* Scrollable Content Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+
+              {/* Limit Context Notification (if triggered by user hitting a free cap) */}
               {limitReason && (
-                <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-start gap-3 text-amber-900 animate-slide-down">
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5 text-xs">
-                    <span className="font-bold">Free Plan Limit Reached</span>
-                    <p className="text-[#49454F] leading-relaxed">{limitReason}</p>
+                <div className="p-3.5 bg-amber-50 border border-amber-200/90 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900" id="limit-reason-banner">
+                  <Zap className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Free Plan Limit Reached: </span>
+                    <span>{limitReason}</span>
                   </div>
                 </div>
               )}
 
-              {/* Billing Region Information (Non-interactive) */}
-              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1 text-xs" id="billing-region-info">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 font-bold text-[#1D1B20]">
-                    <Globe className="w-4 h-4 text-[#6750A4]" />
-                    <span>Billing Region:</span>
-                  </div>
-                  <span className="font-extrabold text-[#1D1B20] bg-white px-2.5 py-1 rounded-lg border border-slate-200/60 shadow-2xs">
-                    {isIndia ? '🇮🇳 India (₹ INR)' : '🌎 International ($ USD)'}
-                  </span>
+              {/* Pricing Cards Selection */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                  <span>Select Subscription Plan</span>
+                  <span className="text-[10px] text-slate-400 font-medium">Billed in {countryConfig.currency}</span>
                 </div>
-                <p className="text-[11px] text-slate-500 font-medium">
-                  Prices are automatically determined based on your location.
-                </p>
-              </div>
 
-              {/* Plan Duration Cards */}
-              <div className="space-y-2.5">
-                <label className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">Choose Subscription Plan</label>
-                <div className="grid grid-cols-2 gap-3" id="plan-selection-cards">
-                  
+                <div className="grid grid-cols-1 gap-2.5">
                   {plans.map((plan: PlanOption) => {
                     const isSelected = selectedPlanId === plan.id;
                     return (
                       <div
                         key={plan.id}
                         onClick={() => setSelectedPlanId(plan.id)}
-                        className={`p-4 rounded-2xl border cursor-pointer transition-all relative space-y-2 card-interactive ${
+                        className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                           isSelected
-                            ? 'border-[#6750A4] bg-[#F3EDF7]/80 ring-2 ring-[#6750A4]/20 shadow-sm'
-                            : 'border-slate-200 bg-white hover:border-slate-300'
+                            ? 'border-[#6750A4] bg-[#6750A4]/5 shadow-sm'
+                            : 'border-slate-200/80 bg-white hover:border-slate-300'
                         }`}
-                        id={`select-plan-${plan.id}-card`}
+                        id={`plan-card-${plan.id}`}
                       >
-                        {plan.badge && (
-                          <span className="absolute -top-2.5 right-3 px-2 py-0.5 text-[9px] font-black bg-[#6750A4] text-white rounded-full uppercase shadow-sm tracking-wider">
-                            {plan.badge} • {plan.savingsText}
-                          </span>
-                        )}
-
-                        <div className="flex justify-between items-start">
-                          <span className="text-xs font-bold text-[#1D1B20]">{plan.title}</span>
-                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${
-                            isSelected ? 'border-[#6750A4] bg-[#6750A4]' : 'border-slate-300'
-                          }`}>
-                            {isSelected && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-[#1D1B20]">{plan.title}</span>
+                            {plan.badge && (
+                              <span className="text-[9px] font-bold bg-[#6750A4] text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                {plan.badge}
+                              </span>
+                            )}
                           </div>
+                          <p className="text-[11px] text-[#49454F]">{plan.savingsText || plan.billingText || 'Full uninterrupted access'}</p>
                         </div>
 
-                        <div>
-                          <div className="text-lg font-black text-[#1D1B20]">{plan.formattedPrice}</div>
-                          <div className="text-[10px] text-[#49454F] font-medium">{plan.billingText}</div>
+                        <div className="text-right">
+                          <div className="text-sm font-extrabold text-[#1D1B20]">
+                            {plan.formattedPrice}
+                          </div>
                           {plan.monthlyEquivalent && (
-                            <div className="text-[10px] text-[#0f5132] font-semibold mt-0.5">
+                            <div className="text-[10px] text-[#6750A4] font-medium">
                               {plan.monthlyEquivalent} equivalent
                             </div>
                           )}
@@ -504,116 +445,29 @@ export default function UpgradeModal({
                       </div>
                     );
                   })}
-
                 </div>
               </div>
 
-              {/* Account Association Section - Required for Premium */}
+              {/* Simple Email Account & Verification Section */}
               <div className="space-y-1.5">
                 <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                  <span>Microsoft Account Requirement</span>
-                  <span className="text-[10px] text-slate-400 font-medium">Permanent Protection</span>
+                  <span>Account &amp; Entitlement Protection</span>
+                  <span className="text-[10px] text-slate-400 font-medium">Verified Email</span>
                 </div>
 
-                {authUser ? (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs" id="signed-in-account-card">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      {authUser.photoURL ? (
-                        <img 
-                          src={authUser.photoURL} 
-                          alt={authUser.displayName || 'User'} 
-                          className="w-7 h-7 rounded-full border border-emerald-300 shrink-0" 
-                          referrerPolicy="no-referrer" 
-                        />
-                      ) : (
-                        <div className="w-7 h-7 rounded-full bg-[#00A4EF] text-white font-bold text-xs flex items-center justify-center shrink-0">
-                          {(authUser.displayName || authUser.email || 'M')[0].toUpperCase()}
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <div className="font-bold text-emerald-950 truncate flex items-center gap-1">
-                          <span>{authUser.displayName || 'Microsoft Account'}</span>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        </div>
-                        <div className="text-[11px] text-emerald-700/80 truncate">{authUser.email}</div>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full shrink-0">
-                      Signed in account
-                    </span>
-                  </div>
-                ) : (
-                  <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-3" id="microsoft-requirement-card">
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-white shadow-xs border border-slate-200 flex items-center justify-center shrink-0 mt-0.5">
-                        {/* Official Microsoft 4-Color Icon */}
-                        <svg className="w-3.5 h-3.5" viewBox="0 0 21 21">
-                          <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                          <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                          <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                          <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-                        </svg>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h6 className="text-xs font-bold text-slate-900">Sign in to protect your Premium account</h6>
-                        <p className="text-[11px] text-slate-600 leading-snug mt-0.5">
-                          Sign in with Microsoft before purchasing Premium so your subscription can be securely associated with your account.
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Official Microsoft Sign-In Button */}
-                    <div className="space-y-1.5 w-full">
-                      <button
-                        type="button"
-                        onClick={handleMicrosoftSignIn}
-                        disabled={isSigningIn}
-                        className="w-full py-2.5 px-3 bg-[#2F2F2F] hover:bg-[#1B1B1B] text-white text-xs font-bold rounded-xl shadow-xs flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-75"
-                        id="microsoft-signin-upgrade-card-btn"
-                      >
-                        {isSigningIn ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                            <span>Signing in...</span>
-                          </>
-                        ) : error ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 text-white" />
-                            <span>Try again: Sign in with Microsoft</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 21 21">
-                              <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                              <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                              <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                              <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-                            </svg>
-                            <span>Continue with Microsoft</span>
-                          </>
-                        )}
-                      </button>
-
-                      {isSigningIn && (
-                        <div className="flex items-center justify-between text-[11px] px-1 text-slate-600">
-                          <span>Waiting for Microsoft login...</span>
-                          <button
-                            type="button"
-                            onClick={handleCancelSignIn}
-                            className="font-bold text-slate-900 underline hover:text-slate-700 cursor-pointer"
-                            id="cancel-microsoft-signin-link"
-                          >
-                            Cancel / Try Again
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                <EmailAuthCard
+                  authUser={authUser}
+                  onAuthSuccess={(user, hasActiveSubscription, sub) => {
+                    if (onAuthSuccess) {
+                      onAuthSuccess(user, hasActiveSubscription, sub);
+                    }
+                    if (hasActiveSubscription && sub && onSuccess) {
+                      onSuccess(sub);
+                    }
+                  }}
+                  onSignOut={onSignOut}
+                />
               </div>
-
-              {/* OAuth Domain Diagnostic Tool */}
-              <OAuthDiagnosticPanel defaultExpanded={false} compact={true} />
 
               {/* Premium Features Included */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
@@ -637,7 +491,7 @@ export default function UpgradeModal({
                   </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Unlimited Notes & Pages</span>
+                    <span>Unlimited Notes &amp; Pages</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -650,13 +504,9 @@ export default function UpgradeModal({
                 </div>
               </div>
 
-              {/* Dedicated PayPal Button Mount Container for International Checkout */}
+              {/* Dynamic PayPal Gateway Container (Rendered when PayPal is active) */}
               {!isIndia && (
-                <div className="space-y-1.5">
-                  <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center justify-between">
-                    <span>PayPal Express Checkout Container</span>
-                    <span className="text-[10px] text-slate-400 font-medium">Official PayPal Smart Buttons</span>
-                  </div>
+                <div className="space-y-2">
                   <div 
                     id="paypal-button-container" 
                     className="w-full min-h-[45px] empty:hidden transition-all"
@@ -674,7 +524,7 @@ export default function UpgradeModal({
 
               {/* Success Message */}
               {paymentSuccessMessage && (
-                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-bold flex items-center gap-2 animate-bounce">
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-bold flex items-center gap-2">
                   <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
                   <span>{paymentSuccessMessage}</span>
                 </div>
@@ -686,11 +536,11 @@ export default function UpgradeModal({
             <div className="p-5 border-t border-slate-100 bg-slate-50/70 shrink-0 space-y-2">
               <button
                 onClick={handleCheckout}
-                disabled={isLoading || isSigningIn || !!paymentSuccessMessage}
-                className={`w-full py-3.5 px-4 text-xs font-bold rounded-2xl shadow-lg flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer btn-press ${
+                disabled={isLoading || !!paymentSuccessMessage}
+                className={`w-full py-3.5 px-4 text-xs font-bold rounded-2xl shadow-lg flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer ${
                   authUser 
                     ? 'text-white bg-[#6750A4] hover:bg-[#503E84] shadow-[#6750A4]/20' 
-                    : 'text-slate-900 bg-white hover:bg-slate-50 border border-slate-300 shadow-sm'
+                    : 'text-white bg-[#6750A4] hover:bg-[#503E84] shadow-[#6750A4]/20'
                 }`}
                 id="pay-now-btn"
               >
@@ -699,20 +549,9 @@ export default function UpgradeModal({
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span>Securing Payment Connection...</span>
                   </>
-                ) : isSigningIn ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-slate-700" />
-                    <span>Signing in with Microsoft...</span>
-                  </>
                 ) : !authUser ? (
                   <>
-                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 21 21">
-                      <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                      <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                      <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                      <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-                    </svg>
-                    <span>Sign in with Microsoft to Purchase ({activePlan.formattedPrice})</span>
+                    <span>Verify Account to Continue ({activePlan.formattedPrice})</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 ) : (
@@ -728,23 +567,18 @@ export default function UpgradeModal({
 
               <div className="flex items-center justify-center gap-2 text-[10px] text-[#49454F]">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>256-bit SSL Encrypted • Verified Backend Processing • Cancel Anytime</span>
-              </div>
-
-              {onOpenRestore && (
-                <div className="pt-1 text-center">
+                <span>Encrypted 256-bit bank grade transaction</span>
+                <span>•</span>
+                {onOpenRestore && (
                   <button
                     type="button"
-                    onClick={() => {
-                      onClose();
-                      onOpenRestore();
-                    }}
-                    className="text-[11px] font-semibold text-[#6750A4] hover:underline cursor-pointer inline-flex items-center gap-1"
+                    onClick={onOpenRestore}
+                    className="text-[#6750A4] hover:underline font-semibold cursor-pointer"
                   >
-                    <span>Already paid? Restore your subscription</span>
+                    Restore purchase
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
           </motion.div>

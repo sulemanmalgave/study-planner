@@ -226,7 +226,7 @@ export default function Sidebar({
                 <button
                   type="button"
                   onClick={onSignOut}
-                  title="Sign out of Google"
+                  title="Sign out of account"
                   className="text-[10px] text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                 >
                   Sign out
@@ -235,7 +235,7 @@ export default function Sidebar({
                 <button
                   type="button"
                   onClick={onSignIn}
-                  title="Sign in with Google"
+                  title="Create or sign in to account"
                   className="text-[10px] text-[#6750A4] hover:underline font-semibold cursor-pointer"
                 >
                   Sign in
