@@ -53,8 +53,9 @@ import {
   FREE_PLAN_LIMITS
 } from './types';
 import { getInitialClientState } from './defaultState';
-import { db, isFirebaseConfigured, onAuthUserChange, signInWithGoogle, signOutUser, AuthUserProfile } from './lib/firebase';
+import { db, isFirebaseConfigured, onAuthUserChange, signInWithGoogle, signInWithMicrosoft, signOutUser, AuthUserProfile } from './lib/firebase';
 import { initGoogleIdentityServices, triggerInteractiveGoogleLogin } from './lib/googleAuth';
+import { triggerInteractiveMicrosoftLogin, associateLocalDataWithMicrosoftAccount } from './lib/microsoftAuth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   getStoredEntitlement,
@@ -171,6 +172,24 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  const handleSignInWithMicrosoft = async (): Promise<AuthUserProfile> => {
+    try {
+      const user = await triggerInteractiveMicrosoftLogin(45000);
+      if (user) {
+        setAuthUser(user);
+        // Non-destructively associate local workspace data with the authenticated Microsoft account
+        setDbState((prev) => {
+          if (!prev) return prev;
+          return associateLocalDataWithMicrosoftAccount(user, prev);
+        });
+      }
+      return user;
+    } catch (err) {
+      console.warn('[Microsoft Auth Flow Error]', err);
+      throw err;
+    }
+  };
 
   const handleNavigateToPrivacy = () => {
     if (window.location.pathname !== '/privacy') {
@@ -1169,6 +1188,7 @@ export default function App() {
               onRefreshState={fetchState}
               onOpenRestore={() => setIsRestoreOpen(true)}
               authUser={authUser}
+              onSignInWithMicrosoft={handleSignInWithMicrosoft}
               onSignInWithGoogle={signInWithGoogle}
               onSignOut={signOutUser}
             />
@@ -1207,6 +1227,7 @@ export default function App() {
         onSuccess={handleUpgradeSuccess}
         onOpenRestore={() => setIsRestoreOpen(true)}
         authUser={authUser}
+        onSignInWithMicrosoft={handleSignInWithMicrosoft}
         onSignInWithGoogle={async () => {
           const user = await triggerInteractiveGoogleLogin(45000);
           if (user) {
@@ -1221,6 +1242,7 @@ export default function App() {
         onClose={() => setIsRestoreOpen(false)}
         onSuccess={handleUpgradeSuccess}
         authUser={authUser}
+        onSignInWithMicrosoft={handleSignInWithMicrosoft}
         onSignInWithGoogle={async () => {
           const user = await triggerInteractiveGoogleLogin(45000);
           if (user) {

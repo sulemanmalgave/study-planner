@@ -36,8 +36,10 @@ export interface UserProfile {
   id?: string;
   userId?: string;
   googleUid?: string;
+  microsoftUid?: string;
   photoURL?: string | null;
   isGoogleLinked?: boolean;
+  isMicrosoftLinked?: boolean;
   mobileDevice?: MobileDevice | null;
   aiUsage?: AiUsage;
 }
