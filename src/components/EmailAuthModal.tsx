@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Sparkles } from 'lucide-react';
 import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
-import { AuthUserProfile } from '../lib/firebase';
+import { AuthUserProfile } from '../lib/emailAuth';
 import EmailAuthCard from './EmailAuthCard';
 
 interface EmailAuthModalProps {

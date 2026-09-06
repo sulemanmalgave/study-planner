@@ -1,204 +1,270 @@
 /**
- * Study Planner Firebase Email Authentication
+ * Native Study Planner Account Client Library
  * 
- * Production-ready passwordless authentication using Firebase Email Link (sendSignInLinkToEmail / signInWithEmailLink).
- * - Real Firebase email delivery directly to user inbox
- * - No mock OTPs or fake codes
- * - Preserves existing user data, subscriptions, and local workspace state
+ * Simple, production-grade Name + Email + Password authentication:
+ * - Direct native account creation (no email verification, no OTP, no passwordless links)
+ * - Immediate sign-in on account creation
+ * - Secure server-side hashed password verification (bcrypt)
+ * - Secure authenticated session management (HttpOnly cookie + token fallback)
+ * - Automatic linking with active Premium subscriptions in subscriptions_ledger.json
+ * - Safe, non-destructive local workspace data association
  */
 
-import { 
-  AuthUserProfile, 
-  sendFirebaseEmailSignInLink, 
-  isFirebaseEmailSignInLink, 
-  completeFirebaseEmailSignIn 
-} from './firebase';
 import { DatabaseSchema, UserProfile, Subscription } from '../types';
 
 export const AUTH_USER_STORAGE_KEY = 'studyflow_auth_user';
+export const AUTH_SESSION_STORAGE_KEY = 'studyflow_session_token';
 
-export interface FirebaseSyncResponse {
-  success: boolean;
-  user: AuthUserProfile;
-  hasActiveSubscription: boolean;
-  subscription: Subscription | null;
-  message?: string;
+export interface AuthUserProfile {
+  userId: string;
+  uid?: string; // Legacy compatibility alias for existing components
+  name: string;
+  displayName?: string; // Legacy compatibility alias
+  email: string | null;
+  photoURL?: string | null;
 }
 
-export interface SendEmailSignInResult {
-  status: 'sent' | 'direct_signed_in';
-  user?: AuthUserProfile;
-  hasActiveSubscription?: boolean;
-  subscription?: any;
+export interface AuthResult {
+  user: AuthUserProfile;
+  token?: string;
+  hasActiveSubscription: boolean;
+  subscription: Subscription | null;
 }
 
 /**
- * Direct sign-in using email and name.
- * Provides a resilient, instant fallback when Firebase email link provider is not yet enabled
- * in Firebase Console, ensuring users can always authenticate seamlessly without blocking errors.
+ * Helper to build auth headers including optional session token
  */
-export async function directEmailSignIn(
-  email: string,
-  name?: string
-): Promise<{
-  user: AuthUserProfile;
-  hasActiveSubscription: boolean;
-  subscription: Subscription | null;
-}> {
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanName = (name || '').trim() || cleanEmail.split('@')[0];
-
-  // Derive stable pseudo-UID for email
-  let hash = 0;
-  for (let i = 0; i < cleanEmail.length; i++) {
-    hash = (hash << 5) - hash + cleanEmail.charCodeAt(i);
-    hash |= 0;
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  try {
+    const token = localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      headers['x-session-token'] = token;
+    }
+    const user = getLocalAuthUser();
+    if (user?.userId || user?.uid) {
+      headers['x-user-id'] = user.userId || user.uid || '';
+    }
+    if (user?.email) {
+      headers['x-user-email'] = user.email;
+    }
+  } catch (e) {
+    // ignore
   }
-  const safeHash = Math.abs(hash).toString(36);
-  const uid = `usr_em_${safeHash}`;
+  return headers;
+}
 
-  const userProfile: AuthUserProfile = {
-    uid,
-    email: cleanEmail,
-    displayName: cleanName,
+/**
+ * Register a new Study Planner account with Name, Email, and Password.
+ * No email verification required - user is signed in immediately.
+ */
+export async function handleSignUp(
+  name: string,
+  email: string,
+  password: string,
+  confirmPassword?: string
+): Promise<AuthResult> {
+  const cleanName = name.trim();
+  const cleanEmail = email.trim().toLowerCase();
+
+  if (!cleanName) {
+    throw new Error('Please enter your name.');
+  }
+  if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+    throw new Error('Please enter a valid email address.');
+  }
+  if (!password || password.length < 6) {
+    throw new Error('Password must be at least 6 characters.');
+  }
+  if (confirmPassword !== undefined && password !== confirmPassword) {
+    throw new Error('Passwords do not match. Please verify your password.');
+  }
+
+  const res = await fetch('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: cleanName,
+      email: cleanEmail,
+      password,
+      confirmPassword: confirmPassword || password,
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || data.error || 'Failed to create account.');
+  }
+
+  const authUser: AuthUserProfile = {
+    userId: data.user.userId,
+    uid: data.user.userId,
+    name: data.user.name,
+    displayName: data.user.name,
+    email: data.user.email,
     photoURL: null,
   };
 
-  const syncResult = await syncFirebaseUserWithBackend(userProfile);
-  saveLocalAuthUser(syncResult.user);
-  return syncResult;
+  if (data.token) {
+    try {
+      localStorage.setItem(AUTH_SESSION_STORAGE_KEY, data.token);
+    } catch (e) {}
+  }
+
+  saveLocalAuthUser(authUser);
+
+  return {
+    user: authUser,
+    token: data.token,
+    hasActiveSubscription: Boolean(data.hasActiveSubscription),
+    subscription: data.subscription || null,
+  };
 }
 
 /**
- * Send real Firebase sign-in link to the provided email address, with automatic fallback
- * to direct verified sign-in if the project's Firebase Console has email link sign-in disabled.
+ * Sign in existing Study Planner user with Email and Password.
  */
-export async function sendEmailSignInLink(
+export async function handleSignIn(
   email: string,
-  name?: string
-): Promise<SendEmailSignInResult> {
+  password: string
+): Promise<AuthResult> {
   const cleanEmail = email.trim().toLowerCase();
-  const cleanName = (name || '').trim();
 
   if (!cleanEmail || !cleanEmail.includes('@')) {
     throw new Error('Please enter a valid email address.');
   }
-
-  try {
-    // Attempt Firebase native sendSignInLinkToEmail
-    await sendFirebaseEmailSignInLink(cleanEmail, cleanName);
-    return { status: 'sent' };
-  } catch (err: any) {
-    const code = err?.code || '';
-    const msg = err?.message || '';
-
-    // If Firebase reports that email link provider is not enabled in Firebase Console:
-    if (code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed')) {
-      console.info('[Email Auth] Firebase Email Link is not enabled in Console. Seamlessly falling back to direct sign-in.');
-      const directResult = await directEmailSignIn(cleanEmail, cleanName);
-      return {
-        status: 'direct_signed_in',
-        user: directResult.user,
-        hasActiveSubscription: directResult.hasActiveSubscription,
-        subscription: directResult.subscription,
-      };
-    }
-
-    throw err;
+  if (!password) {
+    throw new Error('Please enter your password.');
   }
+
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: cleanEmail,
+      password,
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || data.error || 'Incorrect email or password.');
+  }
+
+  const authUser: AuthUserProfile = {
+    userId: data.user.userId,
+    uid: data.user.userId,
+    name: data.user.name,
+    displayName: data.user.name,
+    email: data.user.email,
+    photoURL: null,
+  };
+
+  if (data.token) {
+    try {
+      localStorage.setItem(AUTH_SESSION_STORAGE_KEY, data.token);
+    } catch (e) {}
+  }
+
+  saveLocalAuthUser(authUser);
+
+  return {
+    user: authUser,
+    token: data.token,
+    hasActiveSubscription: Boolean(data.hasActiveSubscription),
+    subscription: data.subscription || null,
+  };
 }
 
 /**
- * Verify if current URL is a Firebase Email sign-in link
+ * Check current authenticated session with the server.
  */
-export function isEmailSignInLink(): boolean {
-  return isFirebaseEmailSignInLink();
-}
-
-/**
- * Complete Firebase Email Link sign-in and synchronize with authoritative backend
- */
-export async function completeEmailSignIn(
-  emailOverride?: string
-): Promise<{
-  user: AuthUserProfile;
-  hasActiveSubscription: boolean;
-  subscription: Subscription | null;
-}> {
-  // 1. Complete client-side sign-in with Firebase
-  const { user } = await completeFirebaseEmailSignIn(emailOverride);
-
-  // 2. Synchronize user record and subscription with authoritative backend
-  const syncResult = await syncFirebaseUserWithBackend(user);
-
-  // 3. Persist user locally
-  saveLocalAuthUser(syncResult.user);
-
-  return syncResult;
-}
-
-/**
- * Sync authenticated Firebase user with backend to verify subscriptions and account records
- */
-export async function syncFirebaseUserWithBackend(
-  user: AuthUserProfile
-): Promise<{
-  user: AuthUserProfile;
-  hasActiveSubscription: boolean;
-  subscription: Subscription | null;
-}> {
+export async function checkCurrentAuth(): Promise<AuthResult | null> {
   try {
-    const res = await fetch('/api/auth/firebase-sync', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-id': user.uid,
-        'x-user-email': user.email || '',
-      },
-      body: JSON.stringify({
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-      }),
+    const res = await fetch('/api/auth/me', {
+      headers: getAuthHeaders(),
     });
 
-    const data: FirebaseSyncResponse = await res.json();
-    if (res.ok && data.success && data.user) {
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    if (data.authenticated && data.user) {
+      const authUser: AuthUserProfile = {
+        userId: data.user.userId,
+        uid: data.user.userId,
+        name: data.user.name,
+        displayName: data.user.name,
+        email: data.user.email,
+        photoURL: null,
+      };
+      saveLocalAuthUser(authUser);
       return {
-        user: {
-          uid: data.user.uid,
-          email: data.user.email,
-          displayName: data.user.displayName || user.displayName,
-          photoURL: data.user.photoURL || user.photoURL,
-        },
+        user: authUser,
         hasActiveSubscription: Boolean(data.hasActiveSubscription),
         subscription: data.subscription || null,
       };
     }
   } catch (err) {
-    console.warn('[Firebase Auth] Non-fatal backend sync warning:', err);
+    console.warn('[Native Auth] Non-fatal auth check notice:', err);
   }
-
-  // Fallback to local user profile if backend sync is temporarily offline
-  return {
-    user,
-    hasActiveSubscription: false,
-    subscription: null,
-  };
+  return null;
 }
 
 /**
- * Safely associates local Study Planner data with the authenticated email account.
- * Idempotent, preserves all records (courses, timetable, assignments, exams, notes, sessions).
+ * Request password reset token / email.
+ */
+export async function handlePasswordReset(email: string): Promise<string> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+    throw new Error('Please enter a valid email address.');
+  }
+
+  const res = await fetch('/api/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: cleanEmail }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || data.error || 'Failed to request password reset.');
+  }
+  return data.message || 'If an account exists for this email, password reset instructions have been generated.';
+}
+
+/**
+ * Sign out current user.
+ */
+export async function handleSignOut(): Promise<void> {
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+  } catch (err) {
+    console.warn('[Native Auth] Sign out notice:', err);
+  }
+  clearLocalAuthUser();
+  try {
+    localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+  } catch (e) {}
+}
+
+/**
+ * Safely associates local Study Planner data with the authenticated account.
+ * Idempotent, preserves all academic records (courses, timetable, assignments, exams, notes, sessions).
  */
 export function associateLocalDataWithEmailAccount(
   user: AuthUserProfile,
   currentDbState: DatabaseSchema
 ): DatabaseSchema {
-  if (!user || !user.uid) return currentDbState;
+  const effectiveId = user.userId || user.uid;
+  if (!effectiveId) return currentDbState;
 
-  console.log('[Firebase Auth] Safely associating local workspace data with user ID:', user.uid);
+  console.log('[Native Auth] Safely associating local workspace data with user ID:', effectiveId);
 
   const existingProfile = currentDbState.profile || ({} as Partial<UserProfile>);
   const currentCourses = Array.isArray(currentDbState.courses) ? currentDbState.courses : [];
@@ -210,13 +276,15 @@ export function associateLocalDataWithEmailAccount(
   const currentStudyMaterials = Array.isArray(currentDbState.studyMaterials) ? currentDbState.studyMaterials : [];
   const currentAudioLectures = Array.isArray(currentDbState.audioLectures) ? currentDbState.audioLectures : [];
 
+  const displayName = user.name || user.displayName || existingProfile.name || 'Student';
+
   const updatedProfile: UserProfile = {
     ...existingProfile,
-    userId: user.uid,
-    id: user.uid,
+    userId: effectiveId,
+    id: effectiveId,
     email: user.email || existingProfile.email || '',
-    name: user.displayName || existingProfile.name || 'Student',
-    initials: (user.displayName || existingProfile.name || user.email || 'ST')
+    name: displayName,
+    initials: displayName
       .split(' ')
       .map((n) => n[0])
       .join('')
@@ -250,24 +318,20 @@ export function associateLocalDataWithEmailAccount(
   try {
     localStorage.setItem('studyflow_db_state', JSON.stringify(mergedState));
   } catch (err) {
-    console.warn('[Firebase Auth] LocalStorage write notice:', err);
+    console.warn('[Native Auth] LocalStorage write notice:', err);
   }
 
   // Asynchronously notify backend to synchronize workspace data
   fetch('/api/auth/associate-data', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-user-id': user.uid,
-      'x-user-email': user.email || '',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify({
-      userId: user.uid,
+      userId: effectiveId,
       userEmail: user.email,
       state: mergedState,
     }),
   }).catch((err) => {
-    console.warn('[Firebase Auth] Non-fatal backend data sync notice:', err);
+    console.warn('[Native Auth] Non-fatal backend data sync notice:', err);
   });
 
   return mergedState;
@@ -281,8 +345,16 @@ export function getLocalAuthUser(): AuthUserProfile | null {
     const raw = localStorage.getItem(AUTH_USER_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed && parsed.uid && parsed.email) {
-      return parsed;
+    const userId = parsed?.userId || parsed?.uid;
+    if (parsed && userId && parsed.email) {
+      return {
+        userId,
+        uid: userId,
+        name: parsed.name || parsed.displayName || parsed.email.split('@')[0],
+        displayName: parsed.name || parsed.displayName || parsed.email.split('@')[0],
+        email: parsed.email,
+        photoURL: parsed.photoURL || null,
+      };
     }
   } catch (e) {
     // ignore
@@ -296,7 +368,15 @@ export function getLocalAuthUser(): AuthUserProfile | null {
 export function saveLocalAuthUser(user: AuthUserProfile | null): void {
   try {
     if (user) {
-      localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
+      const normalized = {
+        userId: user.userId || user.uid,
+        uid: user.userId || user.uid,
+        name: user.name || user.displayName || user.email?.split('@')[0] || 'Student',
+        displayName: user.name || user.displayName || user.email?.split('@')[0] || 'Student',
+        email: user.email,
+        photoURL: user.photoURL || null,
+      };
+      localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(normalized));
     } else {
       localStorage.removeItem(AUTH_USER_STORAGE_KEY);
     }
@@ -315,3 +395,4 @@ export function clearLocalAuthUser(): void {
     // ignore
   }
 }
+

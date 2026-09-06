@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { drawerVariants, modalBackdropVariants } from '../lib/animations';
-import { AuthUserProfile } from '../lib/firebase';
+import { AuthUserProfile } from '../lib/emailAuth';
 
 interface SidebarProps {
   activeTab: string;

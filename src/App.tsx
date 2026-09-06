@@ -53,14 +53,16 @@ import {
   FREE_PLAN_LIMITS
 } from './types';
 import { getInitialClientState } from './defaultState';
-import { db, isFirebaseConfigured, AuthUserProfile } from './lib/firebase';
+import { db, isFirebaseConfigured } from './lib/firebase';
 import { 
+  AuthUserProfile,
   getLocalAuthUser, 
   clearLocalAuthUser, 
-  associateLocalDataWithEmailAccount 
+  associateLocalDataWithEmailAccount,
+  checkCurrentAuth,
+  handleSignOut as performSignOut
 } from './lib/emailAuth';
 import EmailAuthModal from './components/EmailAuthModal';
-import EmailLinkAuthHandler from './components/EmailLinkAuthHandler';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   getStoredEntitlement,
@@ -101,23 +103,16 @@ export default function App() {
   const [authUser, setAuthUser] = useState<AuthUserProfile | null>(() => getLocalAuthUser());
   const [isEmailAuthOpen, setIsEmailAuthOpen] = useState<boolean>(false);
 
-  // Check and query active subscriptions linked to authenticated email account
+  // Check and query active session and subscription linked to authenticated Study Planner account
   useEffect(() => {
-    const user = getLocalAuthUser();
-    if (user) {
-      setAuthUser(user);
-      fetch('/api/subscription/account-status', {
-        headers: {
-          'x-user-id': user.uid,
-          'x-user-email': user.email || '',
-        },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.hasActiveSubscription && data?.subscription) {
-            saveStoredEntitlement(data.subscription, 'restored', {
-              userId: user.uid,
-              userEmail: user.email || undefined,
+    checkCurrentAuth()
+      .then((authResult) => {
+        if (authResult?.user) {
+          setAuthUser(authResult.user);
+          if (authResult.hasActiveSubscription && authResult.subscription) {
+            saveStoredEntitlement(authResult.subscription, 'restored', {
+              userId: authResult.user.userId || authResult.user.uid,
+              userEmail: authResult.user.email || undefined,
             });
             setDbState((prev) => {
               if (!prev) return prev;
@@ -125,20 +120,56 @@ export default function App() {
                 ...prev,
                 profile: {
                   ...prev.profile,
-                  subscription: data.subscription,
+                  name: authResult.user.name || authResult.user.displayName || prev.profile.name,
+                  email: authResult.user.email || prev.profile.email,
+                  subscription: authResult.subscription,
                 },
               };
               try {
                 localStorage.setItem('studyflow_db_state', JSON.stringify(next));
-              } catch (e) {
-                // ignore
-              }
+              } catch (e) {}
               return next;
             });
           }
-        })
-        .catch((err) => console.warn('[Auth] Error querying linked subscription:', err));
-    }
+        } else {
+          // Fallback to local cached user if offline
+          const user = getLocalAuthUser();
+          if (user) {
+            setAuthUser(user);
+            fetch('/api/subscription/account-status', {
+              headers: {
+                'x-user-id': user.userId || user.uid || '',
+                'x-user-email': user.email || '',
+              },
+            })
+              .then((res) => res.json())
+              .then((data) => {
+                if (data?.hasActiveSubscription && data?.subscription) {
+                  saveStoredEntitlement(data.subscription, 'restored', {
+                    userId: user.userId || user.uid,
+                    userEmail: user.email || undefined,
+                  });
+                  setDbState((prev) => {
+                    if (!prev) return prev;
+                    const next = {
+                      ...prev,
+                      profile: {
+                        ...prev.profile,
+                        subscription: data.subscription,
+                      },
+                    };
+                    try {
+                      localStorage.setItem('studyflow_db_state', JSON.stringify(next));
+                    } catch (e) {}
+                    return next;
+                  });
+                }
+              })
+              .catch((err) => console.warn('[Auth] Error querying linked subscription:', err));
+          }
+        }
+      })
+      .catch((err) => console.warn('[Auth] Initial session check notice:', err));
   }, []);
 
   // Sync route and document title
@@ -206,6 +237,9 @@ export default function App() {
   };
 
   const handleSignOut = async () => {
+    try {
+      await performSignOut();
+    } catch (e) {}
     clearLocalAuthUser();
     setAuthUser(null);
   };
@@ -1245,16 +1279,6 @@ export default function App() {
         authUser={authUser}
         onAuthSuccess={handleAuthSuccess}
         onSignOut={handleSignOut}
-      />
-
-      {/* Firebase Passwordless Email Link Return & Cross-Device Auth Handler */}
-      <EmailLinkAuthHandler
-        onAuthSuccess={(user, hasSub, sub) => {
-          handleAuthSuccess(user, hasSub, sub);
-        }}
-        onRequestNewLink={() => {
-          setIsEmailAuthOpen(true);
-        }}
       />
 
       <UpgradeModal 

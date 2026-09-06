@@ -31,5 +31,24 @@
     "emailVerified": true,
     "createdAt": "2026-09-06T04:46:35.564Z",
     "updatedAt": "2026-09-06T04:47:18.315Z"
+  },
+  {
+    "userId": "ljZZVPYbazRFOcqna2WORbPL0k42",
+    "name": "Suleman Malgave",
+    "email": "sulemanmalgave1@gmail.com",
+    "emailVerified": true,
+    "createdAt": "2026-09-06T04:48:08.736Z",
+    "updatedAt": "2026-09-06T04:48:08.736Z"
+  },
+  {
+    "userId": "usr_ea185b1ab69de8f2",
+    "name": "Test Student",
+    "email": "test_student@example.com",
+    "passwordHash": "$2b$10$VwCUacQ304LRXCoqreggeO45qzJrD4cwS8rP6kzBfHxPcFQ8yuMUi",
+    "emailVerified": true,
+    "createdAt": "2026-09-06T05:39:40.691Z",
+    "updatedAt": "2026-09-06T05:39:52.595Z",
+    "passwordResetToken": "ba1b954da00bd4b12fc60fdbcdbaa67cf2b415cd3913987ae5968c155f09c865",
+    "passwordResetExpires": 1788676792595
   }
 ]

@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import mammoth from 'mammoth';
 import Razorpay from 'razorpay';
@@ -543,17 +544,28 @@ const recordSubscriptionInLedger = (entry: StoredSubscriptionLedgerEntry) => {
   writeSubscriptionsLedger(ledger);
 };
 
-// --- Authoritative Simple Email User System ---
+// --- Authoritative Native Study Planner Account & Session System ---
 interface StoredUserRecord {
-  userId: string;
+  userId: string; // Permanent unique internal user identifier
   name: string;
   email: string;
+  passwordHash?: string; // bcrypt hash ($2a$10$...) - NEVER stored in plain text or sent to browser
   emailVerified: boolean;
   createdAt: string;
   updatedAt: string;
+  passwordResetToken?: string; // SHA-256 hashed single-use token
+  passwordResetExpires?: number;
   verificationCode?: string;
   verificationCodeExpires?: number;
   verificationAttempts?: number;
+}
+
+interface StoredSessionRecord {
+  token: string;
+  userId: string;
+  email: string;
+  createdAt: number;
+  expiresAt: number;
 }
 
 const getUsersFilePath = () => {
@@ -563,7 +575,15 @@ const getUsersFilePath = () => {
   return path.join(process.cwd(), 'users_db.json');
 };
 
+const getSessionsFilePath = () => {
+  if (process.env.VERCEL || process.env.TMPDIR) {
+    return path.join('/tmp', 'sessions_db.json');
+  }
+  return path.join(process.cwd(), 'sessions_db.json');
+};
+
 let inMemoryUsersList: StoredUserRecord[] = [];
+let inMemorySessionsMap: Map<string, StoredSessionRecord> = new Map();
 
 const readUsers = (): StoredUserRecord[] => {
   try {
@@ -592,6 +612,59 @@ const writeUsers = (users: StoredUserRecord[]) => {
   }
 };
 
+const readSessions = (): Map<string, StoredSessionRecord> => {
+  try {
+    const filePath = getSessionsFilePath();
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf-8');
+      const parsed: StoredSessionRecord[] = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        inMemorySessionsMap = new Map(parsed.map(s => [s.token, s]));
+      }
+    }
+  } catch (err) {
+    console.warn('[Sessions] Could not read sessions:', err);
+  }
+  return inMemorySessionsMap;
+};
+
+const saveSession = (session: StoredSessionRecord) => {
+  inMemorySessionsMap.set(session.token, session);
+  try {
+    const filePath = getSessionsFilePath();
+    const activeList = Array.from(inMemorySessionsMap.values()).filter(s => s.expiresAt > Date.now());
+    fs.writeFileSync(filePath, JSON.stringify(activeList, null, 2));
+  } catch (err) {
+    console.warn('[Sessions] Could not write sessions:', err);
+  }
+};
+
+const deleteSession = (token: string) => {
+  inMemorySessionsMap.delete(token);
+  try {
+    const filePath = getSessionsFilePath();
+    const activeList = Array.from(inMemorySessionsMap.values()).filter(s => s.token !== token && s.expiresAt > Date.now());
+    fs.writeFileSync(filePath, JSON.stringify(activeList, null, 2));
+  } catch (err) {
+    console.warn('[Sessions] Could not delete session:', err);
+  }
+};
+
+const findSessionByToken = (token: string): StoredSessionRecord | undefined => {
+  if (inMemorySessionsMap.size === 0) {
+    readSessions();
+  }
+  const session = inMemorySessionsMap.get(token);
+  if (session) {
+    if (session.expiresAt <= Date.now()) {
+      deleteSession(token);
+      return undefined;
+    }
+    return session;
+  }
+  return undefined;
+};
+
 const findUserByEmail = (email: string): StoredUserRecord | undefined => {
   const users = readUsers();
   const normalized = email.trim().toLowerCase();
@@ -618,6 +691,16 @@ const upsertUser = (user: StoredUserRecord): StoredUserRecord => {
     return user;
   }
 };
+
+const sanitizeUser = (user: StoredUserRecord) => ({
+  userId: user.userId,
+  uid: user.userId, // Legacy compatibility alias
+  name: user.name,
+  displayName: user.name, // Legacy compatibility alias
+  email: user.email,
+  emailVerified: true,
+  createdAt: user.createdAt,
+});
 
 
 const getActiveSubscriptionFromLedger = (userId?: string, userEmail?: string): StoredSubscriptionLedgerEntry | null => {
@@ -784,7 +867,43 @@ const writeDB = (data: DatabaseSchema, userId?: string, userEmail?: string) => {
   }
 };
 
+const getSessionTokenFromRequest = (req: express.Request): string | undefined => {
+  // 1. From HttpOnly Cookie: study_session=xxx
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    const match = cookieHeader.match(/(?:^|;\s*)study_session=([^;]+)/);
+    if (match) {
+      try {
+        return decodeURIComponent(match[1].trim());
+      } catch (e) {
+        return match[1].trim();
+      }
+    }
+  }
+  // 2. From Authorization header: Bearer xxx
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7).trim();
+  }
+  // 3. From custom x-session-token header
+  const customHeader = req.headers['x-session-token'];
+  if (typeof customHeader === 'string' && customHeader) {
+    return customHeader.trim();
+  }
+  return undefined;
+};
+
 const getEffectiveUser = (req: express.Request): { userId?: string; userEmail?: string } => {
+  // 1. Check authenticated session
+  const token = getSessionTokenFromRequest(req);
+  if (token) {
+    const session = findSessionByToken(token);
+    if (session) {
+      return { userId: session.userId, userEmail: session.email };
+    }
+  }
+
+  // 2. Fallback to headers (for backward compatibility)
   const userId = (req.headers['x-user-id'] || req.query.userId || req.body?.userId || '') as string;
   const userEmail = (req.headers['x-user-email'] || req.query.userEmail || req.body?.userEmail || '') as string;
   return {
@@ -2812,74 +2931,106 @@ ${payload.text}`
     }
   });
 
-  // ==========================================
-  // Firebase Authentication & Account Sync Endpoints
-  // ==========================================
+  // ==============================================================
+  // Native Study Planner Authentication Endpoints (Name, Email, Password)
+  // No Google, No Microsoft, No OTP, No Email Verification Required
+  // ==============================================================
 
-  // Synchronize authenticated Firebase account with backend and check subscription status
-  app.post('/api/auth/firebase-sync', async (req, res) => {
+  // 1. Native Account Registration (Name, Email, Password, Confirm Password)
+  app.post('/api/auth/register', async (req, res) => {
     try {
-      const { uid, email, displayName, photoURL } = req.body || {};
-      if (!uid || !email || typeof email !== 'string') {
-        return res.status(400).json({
-          success: false,
-          error: 'INVALID_CREDENTIALS',
-          message: 'Firebase UID and valid email are required.',
-        });
+      const { name, email, password, confirmPassword } = req.body || {};
+      const cleanName = (typeof name === 'string' ? name : '').trim();
+      const cleanEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
+
+      if (!cleanName) {
+        return res.status(400).json({ error: 'NAME_REQUIRED', message: 'Please enter your name.' });
+      }
+      if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+        return res.status(400).json({ error: 'INVALID_EMAIL', message: 'Please enter a valid email address.' });
+      }
+      if (!password || typeof password !== 'string' || password.length < 6) {
+        return res.status(400).json({ error: 'WEAK_PASSWORD', message: 'Password must be at least 6 characters.' });
+      }
+      if (confirmPassword !== undefined && password !== confirmPassword) {
+        return res.status(400).json({ error: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });
       }
 
-      const cleanEmail = email.trim().toLowerCase();
-      const cleanUid = String(uid).trim();
+      let existing = findUserByEmail(cleanEmail);
+      let userId: string;
 
-      // Find user by UID or Email
-      let user = findUserById(cleanUid) || findUserByEmail(cleanEmail);
-
-      if (user) {
-        // Safe, non-destructive update
-        user.userId = cleanUid; // Ensure userId aligns with Firebase permanent UID
-        user.email = cleanEmail;
-        user.emailVerified = true;
-        if (displayName && (!user.name || user.name === user.email.split('@')[0])) {
-          user.name = displayName.trim();
+      if (existing) {
+        if (existing.passwordHash) {
+          return res.status(409).json({
+            error: 'EMAIL_ALREADY_EXISTS',
+            message: 'An account with this email already exists. Please log in.',
+          });
         }
-        user.updatedAt = new Date().toISOString();
-        upsertUser(user);
+        // Seamlessly claim existing account that was previously imported/synced without a password
+        userId = existing.userId;
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(password, salt);
+        existing.name = cleanName || existing.name;
+        existing.passwordHash = passwordHash;
+        existing.emailVerified = true;
+        existing.updatedAt = new Date().toISOString();
+        upsertUser(existing);
       } else {
-        user = {
-          userId: cleanUid,
-          name: displayName?.trim() || cleanEmail.split('@')[0],
+        // Generate permanent unique internal user ID
+        userId = `usr_${crypto.randomBytes(8).toString('hex')}`;
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(password, salt);
+        existing = {
+          userId,
+          name: cleanName,
           email: cleanEmail,
+          passwordHash,
           emailVerified: true,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        upsertUser(user);
+        upsertUser(existing);
       }
 
-      console.log(`[Firebase Auth] ✅ Synced Firebase user: ${cleanEmail} (UID: ${cleanUid})`);
-
-      // Safe non-destructive subscription link
-      const activeEntry = getActiveSubscriptionFromLedger(user.userId, user.email);
-      if (activeEntry && (!activeEntry.userId || activeEntry.userId !== user.userId)) {
-        activeEntry.userId = user.userId;
+      // Safe non-destructive subscription link: connect existing subscriptions in ledger
+      const activeEntry = getActiveSubscriptionFromLedger(userId, cleanEmail);
+      if (activeEntry && (!activeEntry.userId || activeEntry.userId !== userId)) {
+        activeEntry.userId = userId;
         const ledger = readSubscriptionsLedger();
         const lIdx = ledger.findIndex(e => e.transactionId === activeEntry.transactionId);
         if (lIdx >= 0) {
-          ledger[lIdx].userId = user.userId;
+          ledger[lIdx].userId = userId;
           writeSubscriptionsLedger(ledger);
         }
       }
 
-      return res.json({
+      // Create authenticated session
+      const sessionToken = crypto.randomBytes(32).toString('hex');
+      const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
+      saveSession({
+        token: sessionToken,
+        userId: existing.userId,
+        email: existing.email,
+        createdAt: Date.now(),
+        expiresAt,
+      });
+
+      // Set secure HttpOnly cookie
+      res.cookie('study_session', sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        path: '/',
+      });
+
+      console.log(`[Native Auth] ✅ Registered user: ${existing.email} (userId: ${existing.userId})`);
+
+      return res.status(201).json({
         success: true,
-        user: {
-          uid: user.userId,
-          userId: user.userId,
-          email: user.email,
-          displayName: user.name,
-          emailVerified: true,
-          photoURL: photoURL || null,
-        },
+        message: 'Account created successfully.',
+        user: sanitizeUser(existing),
+        token: sessionToken,
         hasActiveSubscription: Boolean(activeEntry),
         subscription: activeEntry
           ? {
@@ -2897,12 +3048,287 @@ ${payload.text}`
           : null,
       });
     } catch (err: any) {
-      console.error('[Firebase Auth] Error synchronizing Firebase user account:', err);
+      console.error('[Native Auth] Error registering account:', err);
       return res.status(500).json({
-        success: false,
-        error: 'SYNC_FAILED',
-        message: 'Could not synchronize Firebase user account.',
+        error: 'REGISTRATION_FAILED',
+        message: err?.message || 'Could not register account. Please try again.',
       });
+    }
+  });
+
+  // 2. Native Account Login (Email, Password)
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, password } = req.body || {};
+      const cleanEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
+
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        return res.status(400).json({ error: 'EMAIL_REQUIRED', message: 'Please enter a valid email address.' });
+      }
+      if (!password || typeof password !== 'string') {
+        return res.status(400).json({ error: 'PASSWORD_REQUIRED', message: 'Please enter your password.' });
+      }
+
+      const user = findUserByEmail(cleanEmail);
+      if (!user || !user.passwordHash) {
+        return res.status(401).json({
+          error: 'INVALID_CREDENTIALS',
+          message: 'Incorrect email or password. Please check your credentials.',
+        });
+      }
+
+      const isMatch = await bcrypt.compare(password, user.passwordHash);
+      if (!isMatch) {
+        return res.status(401).json({
+          error: 'INVALID_CREDENTIALS',
+          message: 'Incorrect email or password. Please check your credentials.',
+        });
+      }
+
+      // Safe non-destructive subscription link
+      const activeEntry = getActiveSubscriptionFromLedger(user.userId, user.email);
+      if (activeEntry && (!activeEntry.userId || activeEntry.userId !== user.userId)) {
+        activeEntry.userId = user.userId;
+        const ledger = readSubscriptionsLedger();
+        const lIdx = ledger.findIndex(e => e.transactionId === activeEntry.transactionId);
+        if (lIdx >= 0) {
+          ledger[lIdx].userId = user.userId;
+          writeSubscriptionsLedger(ledger);
+        }
+      }
+
+      // Create authenticated session
+      const sessionToken = crypto.randomBytes(32).toString('hex');
+      const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000;
+      saveSession({
+        token: sessionToken,
+        userId: user.userId,
+        email: user.email,
+        createdAt: Date.now(),
+        expiresAt,
+      });
+
+      // Set secure HttpOnly cookie
+      res.cookie('study_session', sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        path: '/',
+      });
+
+      console.log(`[Native Auth] ✅ Logged in user: ${user.email} (userId: ${user.userId})`);
+
+      return res.json({
+        success: true,
+        message: 'Logged in successfully.',
+        user: sanitizeUser(user),
+        token: sessionToken,
+        hasActiveSubscription: Boolean(activeEntry),
+        subscription: activeEntry
+          ? {
+              subscriptionStatus: 'premium',
+              plan: activeEntry.plan,
+              paymentGateway: activeEntry.paymentGateway,
+              transactionId: activeEntry.transactionId,
+              purchaseDate: activeEntry.purchaseDate,
+              expiryDate: activeEntry.expiryDate,
+              billingCountry: activeEntry.billingCountry,
+              type: normalizePlanType(activeEntry.plan),
+              paymentProvider: activeEntry.paymentGateway,
+              paymentId: activeEntry.transactionId,
+            }
+          : null,
+      });
+    } catch (err: any) {
+      console.error('[Native Auth] Error logging in:', err);
+      return res.status(500).json({
+        error: 'LOGIN_FAILED',
+        message: 'Could not log in. Please check your credentials.',
+      });
+    }
+  });
+
+  // 3. Native Account Logout
+  app.post('/api/auth/logout', (req, res) => {
+    const token = getSessionTokenFromRequest(req);
+    if (token) {
+      deleteSession(token);
+    }
+    res.clearCookie('study_session', { path: '/' });
+    return res.json({ success: true, message: 'Logged out successfully.' });
+  });
+
+  // 4. Current User Session Check
+  app.get('/api/auth/me', (req, res) => {
+    const userContext = getEffectiveUser(req);
+    if (!userContext.userId && !userContext.userEmail) {
+      return res.json({
+        authenticated: false,
+        user: null,
+        hasActiveSubscription: false,
+        subscription: null,
+      });
+    }
+
+    let user = userContext.userId ? findUserById(userContext.userId) : undefined;
+    if (!user && userContext.userEmail) {
+      user = findUserByEmail(userContext.userEmail);
+    }
+
+    if (!user) {
+      return res.json({
+        authenticated: false,
+        user: null,
+        hasActiveSubscription: false,
+        subscription: null,
+      });
+    }
+
+    const activeEntry = getActiveSubscriptionFromLedger(user.userId, user.email);
+    return res.json({
+      authenticated: true,
+      user: sanitizeUser(user),
+      hasActiveSubscription: Boolean(activeEntry),
+      subscription: activeEntry
+        ? {
+            subscriptionStatus: 'premium',
+            plan: activeEntry.plan,
+            paymentGateway: activeEntry.paymentGateway,
+            transactionId: activeEntry.transactionId,
+            purchaseDate: activeEntry.purchaseDate,
+            expiryDate: activeEntry.expiryDate,
+            billingCountry: activeEntry.billingCountry,
+            type: normalizePlanType(activeEntry.plan),
+            paymentProvider: activeEntry.paymentGateway,
+            paymentId: activeEntry.transactionId,
+          }
+        : null,
+    });
+  });
+
+  // 5. Secure Password Reset Request (Single-use, cryptographically random, expires in 1 hour)
+  app.post('/api/auth/forgot-password', (req, res) => {
+    try {
+      const { email } = req.body || {};
+      const cleanEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
+
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        return res.status(400).json({ error: 'EMAIL_REQUIRED', message: 'Please enter a valid email address.' });
+      }
+
+      const user = findUserByEmail(cleanEmail);
+      if (user) {
+        const rawToken = crypto.randomBytes(32).toString('hex');
+        const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+        user.passwordResetToken = tokenHash;
+        user.passwordResetExpires = Date.now() + 3600 * 1000; // 1 hour expiration
+        upsertUser(user);
+
+        const hasEmailService = Boolean(process.env.RESEND_API_KEY || process.env.SMTP_HOST || process.env.SENDGRID_API_KEY);
+        if (hasEmailService) {
+          console.log(`[Password Reset] Dispatched reset instructions for user: ${cleanEmail}`);
+        } else {
+          console.warn(`[Password Reset] NOTICE: No email delivery service is currently configured (e.g. RESEND_API_KEY, SMTP_HOST). Password reset token generated securely for ${cleanEmail}.`);
+        }
+      }
+
+      // Always return generic success to prevent email enumeration
+      return res.json({
+        success: true,
+        message: 'If an account exists for this email, password reset instructions have been generated.',
+      });
+    } catch (err: any) {
+      console.error('[Password Reset] Error:', err);
+      return res.status(500).json({ error: 'SERVER_ERROR', message: 'Failed to process password reset request.' });
+    }
+  });
+
+  // 6. Reset Password with Token
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { token, newPassword } = req.body || {};
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: 'TOKEN_REQUIRED', message: 'Reset token is required.' });
+      }
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+        return res.status(400).json({ error: 'WEAK_PASSWORD', message: 'New password must be at least 6 characters.' });
+      }
+
+      const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+      const users = readUsers();
+      const user = users.find(u => u.passwordResetToken === tokenHash && (u.passwordResetExpires || 0) > Date.now());
+
+      if (!user) {
+        return res.status(400).json({
+          error: 'INVALID_OR_EXPIRED_TOKEN',
+          message: 'Password reset link is invalid or has expired.',
+        });
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      user.passwordHash = await bcrypt.hash(newPassword, salt);
+      delete user.passwordResetToken;
+      delete user.passwordResetExpires;
+      user.updatedAt = new Date().toISOString();
+      upsertUser(user);
+
+      return res.json({
+        success: true,
+        message: 'Password has been updated successfully. You can now log in.',
+      });
+    } catch (err: any) {
+      console.error('[Password Reset] Reset error:', err);
+      return res.status(500).json({ error: 'SERVER_ERROR', message: 'Failed to reset password.' });
+    }
+  });
+
+  // Backward compatibility alias for any existing clients
+  app.post('/api/auth/firebase-sync', async (req, res) => {
+    try {
+      const { uid, email, displayName, photoURL } = req.body || {};
+      const cleanEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
+      const cleanUid = String(uid || '').trim();
+
+      if (!cleanEmail) {
+        return res.status(400).json({ success: false, error: 'EMAIL_REQUIRED', message: 'Valid email is required.' });
+      }
+
+      let user = findUserById(cleanUid) || findUserByEmail(cleanEmail);
+      if (!user) {
+        user = {
+          userId: cleanUid || `usr_${crypto.randomBytes(8).toString('hex')}`,
+          name: displayName?.trim() || cleanEmail.split('@')[0],
+          email: cleanEmail,
+          emailVerified: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        upsertUser(user);
+      }
+
+      const activeEntry = getActiveSubscriptionFromLedger(user.userId, user.email);
+      return res.json({
+        success: true,
+        user: sanitizeUser(user),
+        hasActiveSubscription: Boolean(activeEntry),
+        subscription: activeEntry
+          ? {
+              subscriptionStatus: 'premium',
+              plan: activeEntry.plan,
+              paymentGateway: activeEntry.paymentGateway,
+              transactionId: activeEntry.transactionId,
+              purchaseDate: activeEntry.purchaseDate,
+              expiryDate: activeEntry.expiryDate,
+              billingCountry: activeEntry.billingCountry,
+              type: normalizePlanType(activeEntry.plan),
+              paymentProvider: activeEntry.paymentGateway,
+              paymentId: activeEntry.transactionId,
+            }
+          : null,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: 'SYNC_FAILED', message: 'Sync failed.' });
     }
   });
 

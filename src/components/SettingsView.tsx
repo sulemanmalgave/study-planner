@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { Settings, User, Sparkles, RefreshCw, Check, Loader2, AlertCircle, Lock, RotateCcw, ShieldCheck } from 'lucide-react';
 import { UserProfile } from '../types';
-import { AuthUserProfile } from '../lib/firebase';
+import { AuthUserProfile } from '../lib/emailAuth';
 import EmailAuthCard from './EmailAuthCard';
-import OAuthDiagnosticPanel from './OAuthDiagnosticPanel';
 
 interface SettingsViewProps {
   profile: UserProfile;
@@ -250,8 +249,6 @@ export default function SettingsView({
               </div>
             </form>
           </div>
-
-          <OAuthDiagnosticPanel className="mt-4" defaultExpanded={false} />
         </div>
 
         {/* Right: Subscription Detail Cards & Purge Resets */}

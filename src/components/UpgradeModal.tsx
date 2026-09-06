@@ -9,7 +9,7 @@ import {
   PlanOption 
 } from '../lib/paymentConfig';
 import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
-import { AuthUserProfile } from '../lib/firebase';
+import { AuthUserProfile } from '../lib/emailAuth';
 import EmailAuthCard from './EmailAuthCard';
 
 interface UpgradeModalProps {
