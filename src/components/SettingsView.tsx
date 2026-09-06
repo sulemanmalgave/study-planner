@@ -3,6 +3,7 @@ import { Settings, User, Sparkles, RefreshCw, Check, Loader2, AlertCircle, Lock,
 import { UserProfile } from '../types';
 import { AuthUserProfile } from '../lib/firebase';
 import EmailAuthCard from './EmailAuthCard';
+import OAuthDiagnosticPanel from './OAuthDiagnosticPanel';
 
 interface SettingsViewProps {
   profile: UserProfile;
@@ -18,8 +19,6 @@ interface SettingsViewProps {
   onOpenRestore?: () => void;
   authUser?: AuthUserProfile | null;
   onAuthSuccess?: (user: AuthUserProfile, hasActiveSubscription?: boolean, subscription?: any) => void;
-  onSignInWithMicrosoft?: () => Promise<AuthUserProfile>;
-  onSignInWithGoogle?: () => Promise<AuthUserProfile>;
   onSignOut?: () => Promise<void>;
 }
 
@@ -251,6 +250,8 @@ export default function SettingsView({
               </div>
             </form>
           </div>
+
+          <OAuthDiagnosticPanel className="mt-4" defaultExpanded={false} />
         </div>
 
         {/* Right: Subscription Detail Cards & Purge Resets */}

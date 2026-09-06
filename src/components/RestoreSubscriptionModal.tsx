@@ -14,8 +14,6 @@ interface RestoreSubscriptionModalProps {
   authUser?: AuthUserProfile | null;
   onAuthSuccess?: (user: AuthUserProfile, hasActiveSubscription?: boolean, subscription?: any) => void;
   onSignOut?: () => void;
-  onSignInWithMicrosoft?: () => Promise<AuthUserProfile>;
-  onSignInWithGoogle?: () => Promise<AuthUserProfile>;
 }
 
 export default function RestoreSubscriptionModal({

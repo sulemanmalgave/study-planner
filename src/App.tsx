@@ -60,6 +60,7 @@ import {
   associateLocalDataWithEmailAccount 
 } from './lib/emailAuth';
 import EmailAuthModal from './components/EmailAuthModal';
+import EmailLinkAuthHandler from './components/EmailLinkAuthHandler';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   getStoredEntitlement,
@@ -1244,6 +1245,16 @@ export default function App() {
         authUser={authUser}
         onAuthSuccess={handleAuthSuccess}
         onSignOut={handleSignOut}
+      />
+
+      {/* Firebase Passwordless Email Link Return & Cross-Device Auth Handler */}
+      <EmailLinkAuthHandler
+        onAuthSuccess={(user, hasSub, sub) => {
+          handleAuthSuccess(user, hasSub, sub);
+        }}
+        onRequestNewLink={() => {
+          setIsEmailAuthOpen(true);
+        }}
       />
 
       <UpgradeModal 

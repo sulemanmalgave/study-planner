@@ -22,8 +22,6 @@ interface UpgradeModalProps {
   authUser?: AuthUserProfile | null;
   onAuthSuccess?: (user: AuthUserProfile, hasActiveSubscription?: boolean, subscription?: any) => void;
   onSignOut?: () => void;
-  onSignInWithMicrosoft?: () => Promise<AuthUserProfile>;
-  onSignInWithGoogle?: () => Promise<AuthUserProfile>;
 }
 
 declare global {

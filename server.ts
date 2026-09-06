@@ -2813,148 +2813,50 @@ ${payload.text}`
   });
 
   // ==========================================
-  // Simple Email Authentication & Account Endpoints
+  // Firebase Authentication & Account Sync Endpoints
   // ==========================================
 
-  // 1. Send One-Time 6-Digit Email Verification Code
-  app.post('/api/auth/email/send-code', async (req, res) => {
+  // Synchronize authenticated Firebase account with backend and check subscription status
+  app.post('/api/auth/firebase-sync', async (req, res) => {
     try {
-      const { email, name, mode } = req.body || {};
-      if (!email || typeof email !== 'string' || !email.includes('@')) {
+      const { uid, email, displayName, photoURL } = req.body || {};
+      if (!uid || !email || typeof email !== 'string') {
         return res.status(400).json({
           success: false,
-          error: 'INVALID_EMAIL',
-          message: 'Please provide a valid email address.',
+          error: 'INVALID_CREDENTIALS',
+          message: 'Firebase UID and valid email are required.',
         });
       }
 
       const cleanEmail = email.trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(cleanEmail)) {
-        return res.status(400).json({
-          success: false,
-          error: 'INVALID_EMAIL_FORMAT',
-          message: 'The email address provided is not in a valid format.',
-        });
-      }
+      const cleanUid = String(uid).trim();
 
-      const existingUser = findUserByEmail(cleanEmail);
+      // Find user by UID or Email
+      let user = findUserById(cleanUid) || findUserByEmail(cleanEmail);
 
-      // Generate secure 6-digit numeric verification code
-      const verificationCode = String(Math.floor(100000 + Math.random() * 900000));
-      const verificationCodeExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
-
-      if (existingUser) {
-        existingUser.verificationCode = verificationCode;
-        existingUser.verificationCodeExpires = verificationCodeExpires;
-        existingUser.verificationAttempts = 0;
-        if (name && (!existingUser.name || existingUser.name === existingUser.email.split('@')[0])) {
-          existingUser.name = name.trim();
+      if (user) {
+        // Safe, non-destructive update
+        user.userId = cleanUid; // Ensure userId aligns with Firebase permanent UID
+        user.email = cleanEmail;
+        user.emailVerified = true;
+        if (displayName && (!user.name || user.name === user.email.split('@')[0])) {
+          user.name = displayName.trim();
         }
-        upsertUser(existingUser);
+        user.updatedAt = new Date().toISOString();
+        upsertUser(user);
       } else {
-        const newUserId = `usr_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
-        const newUser: StoredUserRecord = {
-          userId: newUserId,
-          name: name?.trim() || cleanEmail.split('@')[0],
+        user = {
+          userId: cleanUid,
+          name: displayName?.trim() || cleanEmail.split('@')[0],
           email: cleanEmail,
-          emailVerified: false,
+          emailVerified: true,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          verificationCode,
-          verificationCodeExpires,
-          verificationAttempts: 0,
         };
-        upsertUser(newUser);
-      }
-
-      // Log verification code clearly for visibility and testing
-      console.log(`[Email Auth] 🔑 One-Time Verification Code for ${cleanEmail}: ${verificationCode} (Valid for 15 minutes)`);
-
-      return res.json({
-        success: true,
-        message: `A 6-digit verification code has been generated for ${cleanEmail}.`,
-        isExistingUser: Boolean(existingUser),
-        demoCode: verificationCode,
-      });
-    } catch (err: any) {
-      console.error('[Email Auth] Error sending verification code:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'SEND_CODE_FAILED',
-        message: 'Could not send verification code. Please try again.',
-      });
-    }
-  });
-
-  // 2. Verify 6-Digit Email Verification Code
-  app.post('/api/auth/email/verify-code', async (req, res) => {
-    try {
-      const { email, code, name } = req.body || {};
-      if (!email || typeof email !== 'string') {
-        return res.status(400).json({
-          success: false,
-          error: 'EMAIL_REQUIRED',
-          message: 'Email address is required.',
-        });
-      }
-      if (!code || typeof code !== 'string') {
-        return res.status(400).json({
-          success: false,
-          error: 'CODE_REQUIRED',
-          message: '6-digit verification code is required.',
-        });
-      }
-
-      const cleanEmail = email.trim().toLowerCase();
-      const cleanCode = code.trim();
-
-      const user = findUserByEmail(cleanEmail);
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          error: 'USER_NOT_FOUND',
-          message: 'No pending verification was found for this email. Please request a new code.',
-        });
-      }
-
-      if ((user.verificationAttempts || 0) >= 5) {
-        return res.status(400).json({
-          success: false,
-          error: 'TOO_MANY_ATTEMPTS',
-          message: 'Too many incorrect attempts. Please request a new verification code.',
-        });
-      }
-
-      if (!user.verificationCodeExpires || Date.now() > user.verificationCodeExpires) {
-        return res.status(400).json({
-          success: false,
-          error: 'CODE_EXPIRED',
-          message: 'Verification code has expired. Please request a new code.',
-        });
-      }
-
-      if (user.verificationCode !== cleanCode) {
-        user.verificationAttempts = (user.verificationAttempts || 0) + 1;
         upsertUser(user);
-        return res.status(400).json({
-          success: false,
-          error: 'INVALID_CODE',
-          message: 'Invalid verification code. Please verify the 6-digit code and try again.',
-        });
       }
 
-      // Verification succeeded!
-      user.emailVerified = true;
-      user.verificationCode = undefined;
-      user.verificationCodeExpires = undefined;
-      user.verificationAttempts = 0;
-      if (name && (!user.name || user.name === user.email.split('@')[0])) {
-        user.name = name.trim();
-      }
-      upsertUser(user);
-
-      console.log(`[Email Auth] ✅ Verified account for ${cleanEmail} (UID: ${user.userId})`);
+      console.log(`[Firebase Auth] ✅ Synced Firebase user: ${cleanEmail} (UID: ${cleanUid})`);
 
       // Safe non-destructive subscription link
       const activeEntry = getActiveSubscriptionFromLedger(user.userId, user.email);
@@ -2976,7 +2878,7 @@ ${payload.text}`
           email: user.email,
           displayName: user.name,
           emailVerified: true,
-          photoURL: null,
+          photoURL: photoURL || null,
         },
         hasActiveSubscription: Boolean(activeEntry),
         subscription: activeEntry
@@ -2995,66 +2897,11 @@ ${payload.text}`
           : null,
       });
     } catch (err: any) {
-      console.error('[Email Auth] Error verifying code:', err);
+      console.error('[Firebase Auth] Error synchronizing Firebase user account:', err);
       return res.status(500).json({
         success: false,
-        error: 'VERIFICATION_FAILED',
-        message: 'Internal error while verifying code. Please try again.',
-      });
-    }
-  });
-
-  // 3. Resend One-Time Verification Code
-  app.post('/api/auth/email/resend-code', async (req, res) => {
-    try {
-      const { email } = req.body || {};
-      if (!email || typeof email !== 'string') {
-        return res.status(400).json({
-          success: false,
-          error: 'EMAIL_REQUIRED',
-          message: 'Email address is required.',
-        });
-      }
-
-      const cleanEmail = email.trim().toLowerCase();
-      let user = findUserByEmail(cleanEmail);
-
-      const verificationCode = String(Math.floor(100000 + Math.random() * 900000));
-      const verificationCodeExpires = Date.now() + 15 * 60 * 1000;
-
-      if (!user) {
-        const newUserId = `usr_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
-        user = {
-          userId: newUserId,
-          name: cleanEmail.split('@')[0],
-          email: cleanEmail,
-          emailVerified: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          verificationCode,
-          verificationCodeExpires,
-          verificationAttempts: 0,
-        };
-      } else {
-        user.verificationCode = verificationCode;
-        user.verificationCodeExpires = verificationCodeExpires;
-        user.verificationAttempts = 0;
-      }
-
-      upsertUser(user);
-      console.log(`[Email Auth] 🔑 Resent Verification Code for ${cleanEmail}: ${verificationCode}`);
-
-      return res.json({
-        success: true,
-        message: `A new 6-digit verification code has been generated for ${cleanEmail}.`,
-        demoCode: verificationCode,
-      });
-    } catch (err: any) {
-      console.error('[Email Auth] Error resending code:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'RESEND_FAILED',
-        message: 'Could not resend verification code.',
+        error: 'SYNC_FAILED',
+        message: 'Could not synchronize Firebase user account.',
       });
     }
   });
@@ -3661,7 +3508,7 @@ ${payload.text}`
       if (cleanId.includes('@') && (!userEmail || userEmail.toLowerCase() !== cleanId.toLowerCase())) {
         return res.status(401).json({
           error: 'VERIFICATION_REQUIRED',
-          message: 'To restore subscriptions linked to an email address, please sign in or verify your email with a one-time code.',
+          message: 'To restore subscriptions linked to an email address, please sign in with your verified email account.',
         });
       }
 

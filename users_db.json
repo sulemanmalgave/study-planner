@@ -1,0 +1,35 @@
+[
+  {
+    "userId": "test_firebase_uid_123",
+    "name": "Alex Taylor",
+    "email": "teststudent@example.com",
+    "emailVerified": true,
+    "createdAt": "2026-09-06T04:21:12.290Z",
+    "updatedAt": "2026-09-06T04:34:58.242Z",
+    "verificationAttempts": 0
+  },
+  {
+    "userId": "test_usr_123",
+    "name": "Student Test",
+    "email": "student@example.com",
+    "emailVerified": true,
+    "createdAt": "2026-09-06T04:40:43.827Z",
+    "updatedAt": "2026-09-06T04:40:43.827Z"
+  },
+  {
+    "userId": "usr_em_14q1jg",
+    "name": "suleman malgave",
+    "email": "malgavesuleman85@gmail.com",
+    "emailVerified": true,
+    "createdAt": "2026-09-06T04:42:51.248Z",
+    "updatedAt": "2026-09-06T04:43:07.831Z"
+  },
+  {
+    "userId": "usr_test_verification",
+    "name": "Test Verification",
+    "email": "test@example.com",
+    "emailVerified": true,
+    "createdAt": "2026-09-06T04:46:35.564Z",
+    "updatedAt": "2026-09-06T04:47:18.315Z"
+  }
+]

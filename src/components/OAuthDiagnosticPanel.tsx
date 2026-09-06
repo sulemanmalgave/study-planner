@@ -16,8 +16,10 @@ import {
 import { GOOGLE_CLIENT_ID } from '../lib/googleAuth';
 
 export const EXPECTED_PRODUCTION_DOMAIN = 'https://study-planner-tool.vercel.app';
+export const EXPECTED_PRODUCTION_HOST = 'study-planner-tool.vercel.app';
 export const GCP_PROJECT_ID = 'gen-lang-client-0198820455';
 export const GCP_PROJECT_NUMBER = '446581031176';
+export const FIREBASE_PROJECT_ID = 'ai-studio-digitalstudyplan';
 
 interface OAuthDiagnosticPanelProps {
   className?: string;
@@ -84,7 +86,8 @@ export default function OAuthDiagnosticPanel({
   };
 
   const cloudConsoleUrl = `https://console.cloud.google.com/apis/credentials?project=${GCP_PROJECT_ID}`;
-  const firebaseAuthUrl = `https://console.firebase.google.com/project/${GCP_PROJECT_ID}/authentication/settings`;
+  const firebaseAuthUrl = `https://console.firebase.google.com/project/${FIREBASE_PROJECT_ID}/authentication/settings`;
+  const firebaseProvidersUrl = `https://console.firebase.google.com/project/${FIREBASE_PROJECT_ID}/authentication/providers`;
 
   return (
     <div 
@@ -304,14 +307,82 @@ export default function OAuthDiagnosticPanel({
             </div>
           </div>
 
+          {/* Firebase Authentication Configuration Guide */}
+          <div className="border border-purple-200 rounded-xl p-3.5 bg-purple-50/40 space-y-3" id="firebase-auth-config-guide">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-purple-600" />
+                Firebase Auth &amp; Authorized Domains Setup
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                Project: {FIREBASE_PROJECT_ID}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-[11px]">
+              {/* Step 1: Enable Email Link */}
+              <div className="p-2.5 bg-white rounded-lg border border-purple-100 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 flex items-center gap-1">
+                    <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] inline-flex items-center justify-center font-bold">1</span>
+                    Enable Email Link (Passwordless)
+                  </span>
+                  <a
+                    href={firebaseProvidersUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] font-bold text-purple-600 hover:text-purple-800 inline-flex items-center gap-0.5"
+                  >
+                    <span>Open</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                </div>
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  Go to <strong>Authentication &gt; Sign-in method &gt; Email/Password</strong>. Toggle on <em>Email / Password</em> and check <strong>Email link (passwordless sign-in)</strong>, then Save.
+                </p>
+              </div>
+
+              {/* Step 2: Add Authorized Domain */}
+              <div className="p-2.5 bg-white rounded-lg border border-purple-100 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 flex items-center gap-1">
+                    <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] inline-flex items-center justify-center font-bold">2</span>
+                    Add Authorized Domain
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(EXPECTED_PRODUCTION_HOST, 'prodHost')}
+                    className="text-[10px] font-bold text-purple-600 hover:text-purple-800 inline-flex items-center gap-1 cursor-pointer"
+                    id="copy-prod-host-btn"
+                  >
+                    {copiedKey === 'prodHost' ? (
+                      <>
+                        <Check className="w-2.5 h-2.5 text-emerald-600" />
+                        <span className="text-emerald-600">Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-2.5 h-2.5" />
+                        <span>Copy Host</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  Go to <strong>Authentication &gt; Settings &gt; Authorized domains</strong>. Click <em>Add domain</em> and enter <code className="font-mono font-bold text-purple-900 bg-purple-50 px-1 py-0.5 rounded">{EXPECTED_PRODUCTION_HOST}</code>.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {!compact && (
             /* Direct Action Links */
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
               <a
                 href={cloudConsoleUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex-1 py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors text-center"
+                className="py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors text-center"
                 id="open-gcp-console-link"
               >
                 <span>Google Cloud Credentials</span>
@@ -319,13 +390,24 @@ export default function OAuthDiagnosticPanel({
               </a>
 
               <a
+                href={firebaseProvidersUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors text-center"
+                id="open-firebase-providers-link"
+              >
+                <span>Enable Email Link</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+
+              <a
                 href={firebaseAuthUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex-1 py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors text-center"
+                className="py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors text-center"
                 id="open-firebase-console-link"
               >
-                <span>Firebase Authorized Domains</span>
+                <span>Authorized Domains</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>

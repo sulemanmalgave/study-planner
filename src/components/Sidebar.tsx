@@ -198,7 +198,7 @@ export default function Sidebar({
           {authUser?.photoURL ? (
             <img 
               src={authUser.photoURL} 
-              alt={authUser.displayName || 'Google User'} 
+              alt={authUser.displayName || 'Student'} 
               className="w-8 h-8 rounded-full border border-purple-200 shadow-xs shrink-0 object-cover" 
               referrerPolicy="no-referrer" 
             />
