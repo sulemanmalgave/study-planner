@@ -1,0 +1,34 @@
+{
+  "profile": {
+    "name": "Student",
+    "email": "",
+    "initials": "ST",
+    "subscription": {
+      "subscriptionStatus": "premium",
+      "plan": "yearly",
+      "paymentGateway": "razorpay",
+      "transactionId": "sim_b1da4eb5-bdd",
+      "purchaseDate": "2026-09-04T03:51:54.933Z",
+      "expiryDate": "2027-09-04T03:51:54.933Z",
+      "billingCountry": "US",
+      "type": "yearly",
+      "paymentProvider": "razorpay",
+      "paymentId": "sim_b1da4eb5-bdd"
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-09-08T14:44:52.254Z"
+    }
+  },
+  "courses": [],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

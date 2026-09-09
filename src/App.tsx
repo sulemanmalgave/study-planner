@@ -1289,6 +1289,9 @@ export default function App() {
         authUser={authUser}
         onAuthSuccess={handleAuthSuccess}
         onSignOut={handleSignOut}
+        isPremium={isPremium}
+        subscription={profile?.subscription}
+        profile={profile}
       />
 
       <RestoreSubscriptionModal

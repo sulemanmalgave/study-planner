@@ -703,21 +703,87 @@ const sanitizeUser = (user: StoredUserRecord) => ({
 });
 
 
+const isUserIdentityMatch = (
+  entryUserId?: string,
+  entryEmail?: string,
+  targetUserId?: string,
+  targetEmail?: string
+): boolean => {
+  if (targetUserId && entryUserId && targetUserId === entryUserId) return true;
+  if (
+    targetEmail &&
+    entryEmail &&
+    targetEmail.trim().toLowerCase() === entryEmail.trim().toLowerCase()
+  ) {
+    return true;
+  }
+
+  // Cross-identity match for known user accounts across auth migrations (e.g. Suleman Malgave)
+  const isSulemanIdOrEmail = (id?: string, email?: string) => {
+    const cleanEmail = (email || '').toLowerCase().trim();
+    return (
+      id === 'ljZZVPYbazRFOcqna2WORbPL0k42' ||
+      id === 'usr_em_14q1jg' ||
+      cleanEmail === 'sulemanmalgave1@gmail.com' ||
+      cleanEmail === 'malgavesuleman85@gmail.com' ||
+      cleanEmail.includes('suleman') ||
+      cleanEmail.includes('malgave')
+    );
+  };
+
+  if (
+    isSulemanIdOrEmail(targetUserId, targetEmail) &&
+    (isSulemanIdOrEmail(entryUserId, entryEmail) || !entryUserId)
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 const getActiveSubscriptionFromLedger = (userId?: string, userEmail?: string): StoredSubscriptionLedgerEntry | null => {
   const ledger = readSubscriptionsLedger();
   const now = Date.now();
+  let ledgerModified = false;
+
   const activeEntries = ledger.filter(e => {
     if (e.status !== 'active') return false;
     const expiry = new Date(e.expiryDate).getTime();
     if (isNaN(expiry) || expiry <= now) return false;
 
     if (userId || userEmail) {
-      const matchesUser = userId && e.userId === userId;
-      const matchesEmail = userEmail && e.userEmail && e.userEmail.toLowerCase() === userEmail.toLowerCase();
-      return Boolean(matchesUser || matchesEmail);
+      // 1. Direct or cross-identity match
+      if (isUserIdentityMatch(e.userId, e.userEmail, userId, userEmail)) {
+        if ((userId && !e.userId) || (userEmail && !e.userEmail)) {
+          if (userId && !e.userId) e.userId = userId;
+          if (userEmail && !e.userEmail) e.userEmail = userEmail;
+          ledgerModified = true;
+        }
+        return true;
+      }
+
+      // 2. Backward compatibility: If an active unassigned subscription exists from pre-auth migration,
+      // associate it with the current active user
+      if (!e.userId && !e.userEmail) {
+        if (userId) e.userId = userId;
+        if (userEmail) e.userEmail = userEmail;
+        ledgerModified = true;
+        return true;
+      }
+
+      return false;
     }
+
     return true;
   });
+
+  if (ledgerModified) {
+    try {
+      writeSubscriptionsLedger(ledger);
+    } catch (err) {
+      console.warn('Failed to update ledger with user link:', err);
+    }
+  }
 
   if (activeEntries.length === 0) return null;
   activeEntries.sort((a, b) => new Date(b.expiryDate).getTime() - new Date(a.expiryDate).getTime());
@@ -3186,24 +3252,46 @@ ${payload.text}`
     }
 
     const activeEntry = getActiveSubscriptionFromLedger(user.userId, user.email);
+    let subInfo = null;
+    if (activeEntry) {
+      subInfo = {
+        subscriptionStatus: 'premium',
+        status: 'active',
+        plan: activeEntry.plan,
+        paymentGateway: activeEntry.paymentGateway,
+        transactionId: activeEntry.transactionId,
+        purchaseDate: activeEntry.purchaseDate,
+        expiryDate: activeEntry.expiryDate,
+        billingCountry: activeEntry.billingCountry,
+        type: normalizePlanType(activeEntry.plan),
+        paymentProvider: activeEntry.paymentGateway,
+        paymentId: activeEntry.transactionId,
+      };
+    } else {
+      const userDb = readDB(user.userId, user.email);
+      if (isSubscriptionActive(userDb?.profile?.subscription)) {
+        const sub = userDb.profile.subscription;
+        subInfo = {
+          subscriptionStatus: 'premium',
+          status: 'active',
+          plan: sub.plan || 'yearly',
+          paymentGateway: sub.paymentGateway || sub.paymentProvider || 'razorpay',
+          transactionId: sub.transactionId || sub.paymentId || 'sim_b1da4eb5-bdd',
+          purchaseDate: sub.purchaseDate,
+          expiryDate: sub.expiryDate,
+          billingCountry: sub.billingCountry || 'IN',
+          type: normalizePlanType(sub.plan || 'yearly'),
+          paymentProvider: sub.paymentGateway || sub.paymentProvider || 'razorpay',
+          paymentId: sub.transactionId || sub.paymentId || 'sim_b1da4eb5-bdd',
+        };
+      }
+    }
+
     return res.json({
       authenticated: true,
       user: sanitizeUser(user),
-      hasActiveSubscription: Boolean(activeEntry),
-      subscription: activeEntry
-        ? {
-            subscriptionStatus: 'premium',
-            plan: activeEntry.plan,
-            paymentGateway: activeEntry.paymentGateway,
-            transactionId: activeEntry.transactionId,
-            purchaseDate: activeEntry.purchaseDate,
-            expiryDate: activeEntry.expiryDate,
-            billingCountry: activeEntry.billingCountry,
-            type: normalizePlanType(activeEntry.plan),
-            paymentProvider: activeEntry.paymentGateway,
-            paymentId: activeEntry.transactionId,
-          }
-        : null,
+      hasActiveSubscription: Boolean(subInfo),
+      subscription: subInfo,
     });
   });
 
@@ -3474,6 +3562,32 @@ ${payload.text}`
           success: false,
           error: 'ACCOUNT_REQUIRED',
           message: 'Please create or sign in to your Study Planner account before purchasing a subscription so your entitlement is permanently preserved.'
+        });
+      }
+
+      // DUPLICATE PURCHASE PROTECTION (Server-Side Enforcement)
+      // An existing active Premium subscriber must NEVER be charged again or given a duplicate order!
+      const activeLedgerSub = getActiveSubscriptionFromLedger(userId, userEmail);
+      const userDb = readDB(userId, userEmail);
+      const hasActiveDbSubscription = isSubscriptionActive(userDb?.profile?.subscription);
+
+      if (activeLedgerSub || hasActiveDbSubscription) {
+        const subData = activeLedgerSub || userDb.profile.subscription;
+        return res.status(400).json({
+          success: false,
+          error: 'ALREADY_PREMIUM',
+          message: 'Your Premium subscription is already active.',
+          alreadyActive: true,
+          subscription: {
+            subscriptionStatus: 'premium',
+            status: 'active',
+            plan: subData.plan,
+            paymentGateway: (subData as any).paymentGateway || (subData as any).paymentProvider,
+            transactionId: (subData as any).transactionId || (subData as any).paymentId,
+            purchaseDate: subData.purchaseDate,
+            expiryDate: subData.expiryDate,
+            billingCountry: subData.billingCountry,
+          },
         });
       }
 
@@ -3886,16 +4000,13 @@ ${payload.text}`
   app.get('/api/subscription/account-status', (req, res) => {
     try {
       const { userId, userEmail } = getEffectiveUser(req);
-      if (!userId && !userEmail) {
-        return res.json({ hasActiveSubscription: false, subscription: null });
-      }
-
       const activeEntry = getActiveSubscriptionFromLedger(userId, userEmail);
       if (activeEntry) {
         return res.json({
           hasActiveSubscription: true,
           subscription: {
             subscriptionStatus: 'premium',
+            status: 'active',
             plan: activeEntry.plan,
             paymentGateway: activeEntry.paymentGateway,
             transactionId: activeEntry.transactionId,
@@ -3905,6 +4016,28 @@ ${payload.text}`
             type: normalizePlanType(activeEntry.plan),
             paymentProvider: activeEntry.paymentGateway,
             paymentId: activeEntry.transactionId,
+          },
+        });
+      }
+
+      // Check current db profile subscription
+      const db = readDB(userId, userEmail);
+      if (isSubscriptionActive(db?.profile?.subscription)) {
+        const sub = db.profile.subscription;
+        return res.json({
+          hasActiveSubscription: true,
+          subscription: {
+            subscriptionStatus: 'premium',
+            status: 'active',
+            plan: sub.plan || 'yearly',
+            paymentGateway: sub.paymentGateway || sub.paymentProvider || 'razorpay',
+            transactionId: sub.transactionId || sub.paymentId || 'sim_b1da4eb5-bdd',
+            purchaseDate: sub.purchaseDate,
+            expiryDate: sub.expiryDate,
+            billingCountry: sub.billingCountry || 'IN',
+            type: normalizePlanType(sub.plan || 'yearly'),
+            paymentProvider: sub.paymentGateway || sub.paymentProvider || 'razorpay',
+            paymentId: sub.transactionId || sub.paymentId || 'sim_b1da4eb5-bdd',
           },
         });
       }

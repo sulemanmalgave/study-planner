@@ -156,9 +156,20 @@ export default function Sidebar({
       <div className="pt-3 border-t border-[#E1E3E1] flex flex-col gap-3 mt-4" id={isDrawer ? "drawer-bottom-section" : "sidebar-bottom-section"}>
         {/* Premium Upgrade or Premium Active Card */}
         {isPremium ? (
-          <div className="p-3 bg-emerald-50 border border-emerald-200/60 rounded-2xl flex items-center justify-center gap-2 text-emerald-800 transition-all card-interactive" id={isDrawer ? "drawer-premium-active-card" : "sidebar-premium-active-card"}>
-            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 animate-pulse" />
-            <span className="text-xs font-bold">Premium Active ✓</span>
+          <div 
+            onClick={() => {
+              onUpgradeClick();
+              if (onClose) onClose();
+            }}
+            className="p-3 bg-emerald-50 border border-emerald-200/60 rounded-2xl flex items-center justify-between gap-2 text-emerald-800 transition-all card-interactive cursor-pointer hover:bg-emerald-100/70" 
+            id={isDrawer ? "drawer-premium-active-card" : "sidebar-premium-active-card"}
+            title="Click to view subscription details"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 animate-pulse" />
+              <span className="text-xs font-bold">Premium Active ✓</span>
+            </div>
+            <span className="text-[10px] text-emerald-700 font-semibold underline">Details</span>
           </div>
         ) : (
           <div className="p-3 bg-[#EADDFF]/30 border border-[#D0BCFF]/40 rounded-2xl transition-all card-interactive" id={isDrawer ? "drawer-premium-card" : "sidebar-premium-card"}>

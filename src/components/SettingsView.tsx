@@ -291,6 +291,15 @@ export default function SettingsView({
                 <div className="p-3 bg-emerald-50 border border-emerald-200/80 rounded-xl text-[11px] text-emerald-800">
                   Your academic workspace is upgraded to unlimited capacity across all subjects, notes, and timetable slots.
                 </div>
+
+                <button
+                  onClick={onTriggerUpgrade}
+                  className="w-full py-2 bg-emerald-100/70 hover:bg-emerald-200/80 text-emerald-900 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  id="settings-view-subscription-btn"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>View Subscription Details</span>
+                </button>
               </div>
             ) : isExpired ? (
               <div className="space-y-3" id="settings-expired-details">
