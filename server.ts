@@ -41,30 +41,22 @@ const sanitizeEnvVar = (val: string | undefined): string | undefined => {
   return clean || undefined;
 };
 
-// Check whether a Gemini API secret/environment variable exists under any standard name or request context
-const getGeminiApiKey = (req?: express.Request, db?: DatabaseSchema): string | undefined => {
-  return (
-    sanitizeEnvVar(process.env.GEMINI_API_KEY) ||
-    sanitizeEnvVar(process.env.GOOGLE_GEMINI_API_KEY) ||
-    sanitizeEnvVar(process.env.GOOGLE_AI_API_KEY) ||
-    sanitizeEnvVar(process.env.VITE_GEMINI_API_KEY) ||
-    sanitizeEnvVar(req?.headers?.['x-gemini-api-key'] as string) ||
-    sanitizeEnvVar(req?.body?.geminiApiKey) ||
-    sanitizeEnvVar(db?.profile?.geminiApiKey)
-  );
+// Check for the authoritative server-side GEMINI_API_KEY environment variable
+const getGeminiApiKey = (): string | undefined => {
+  return sanitizeEnvVar(process.env.GEMINI_API_KEY);
 };
 
-// Gemini Client Lazy Initializer supporting optional custom API key
+// Gemini Client Lazy Initializer
 let geminiClient: GoogleGenAI | null = null;
 let currentClientKey: string | null = null;
 
-function getGeminiClient(customApiKey?: string): GoogleGenAI {
-  const apiKey = customApiKey || getGeminiApiKey();
+function getGeminiClient(): GoogleGenAI {
+  const apiKey = getGeminiApiKey();
   if (!apiKey) {
     console.error(
-      '[Gemini AI Config] GEMINI_API_KEY is not configured in the server environment. Please set GEMINI_API_KEY in the Vercel Project Settings > Environment Variables or in Settings > Secrets.'
+      '[Gemini AI Config] GEMINI_API_KEY is not configured in the server environment.'
     );
-    const err: any = new Error('GEMINI_API_KEY is not configured on the server. Please set GEMINI_API_KEY in your Vercel Project Settings (Environment Variables) or in Settings > Secrets.');
+    const err: any = new Error('AI features are temporarily unavailable. Gemini is not configured for this deployment.');
     err.code = 'GEMINI_NOT_CONFIGURED';
     err.isConfigError = true;
     throw err;
@@ -1502,11 +1494,11 @@ app.get('/api/state', (req, res) => {
         });
       }
 
-      const apiKey = getGeminiApiKey(req, db);
+      const apiKey = getGeminiApiKey();
       if (!apiKey) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
@@ -1563,11 +1555,11 @@ app.get('/api/state', (req, res) => {
 
       let ai;
       try {
-        ai = getGeminiClient(apiKey);
+        ai = getGeminiClient();
       } catch (err: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
@@ -1622,11 +1614,11 @@ app.get('/api/state', (req, res) => {
         });
       }
 
-      const apiKey = getGeminiApiKey(req, db);
+      const apiKey = getGeminiApiKey();
       if (!apiKey) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
@@ -1666,11 +1658,11 @@ app.get('/api/state', (req, res) => {
 
       let ai;
       try {
-        ai = getGeminiClient(apiKey);
+        ai = getGeminiClient();
       } catch (err: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
@@ -1783,11 +1775,11 @@ Ensure clarity, rigor, and actionable revision value for students.`
         });
       }
 
-      const apiKey = getGeminiApiKey(req, db);
+      const apiKey = getGeminiApiKey();
       if (!apiKey) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
@@ -1827,11 +1819,11 @@ Ensure clarity, rigor, and actionable revision value for students.`
 
       let ai;
       try {
-        ai = getGeminiClient(apiKey);
+        ai = getGeminiClient();
       } catch (err: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
@@ -1939,11 +1931,11 @@ Format cleanly in Markdown with bullet points:
         });
       }
 
-      const apiKey = getGeminiApiKey(req, db);
+      const apiKey = getGeminiApiKey();
       if (!apiKey) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
@@ -1983,11 +1975,11 @@ Format cleanly in Markdown with bullet points:
 
       let ai;
       try {
-        ai = getGeminiClient(apiKey);
+        ai = getGeminiClient();
       } catch (err: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: err?.message || 'Gemini API client could not be initialized.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
@@ -2098,11 +2090,11 @@ Structure in clean Markdown:
     try {
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
-      const apiKey = getGeminiApiKey(req, db);
+      const apiKey = getGeminiApiKey();
       res.json({
         configured: !!apiKey,
         provider: 'google-gemini',
-        status: apiKey ? 'ready' : 'unconfigured',
+        status: apiKey ? 'ready' : 'not_configured',
         models: ['gemini-3.8-flash', 'gemini-flash-latest'],
         audioModels: ['gemini-3.5-transcribe', 'gemini-3.8-flash', 'gemini-flash-latest'],
         aiUsage: db.profile?.aiUsage || null,
@@ -2118,16 +2110,16 @@ Structure in clean Markdown:
     try {
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
-      const apiKey = getGeminiApiKey(req, db);
+      const apiKey = getGeminiApiKey();
       if (!apiKey) {
         return res.status(503).json({
           configured: false,
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'GEMINI_API_KEY is not configured on the server.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
-      const ai = getGeminiClient(apiKey);
+      const ai = getGeminiClient();
       const testResult = await generateTextWithGemini(ai, 'Reply with exactly: GEMINI_OK');
       res.json({
         configured: true,
@@ -2769,23 +2761,21 @@ Structure in clean Markdown:
         });
       }
 
-      const apiKey = getGeminiApiKey(req, targetDb);
+      const apiKey = getGeminiApiKey();
       if (!apiKey) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          code: 503,
-          provider: 'google-gemini',
-          message: 'GEMINI_API_KEY is not configured on the server. Please configure your key in Settings > Secrets.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
       let ai;
       try {
-        ai = getGeminiClient(apiKey);
+        ai = getGeminiClient();
       } catch (e: any) {
-        return res.status(500).json({
+        return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'AI processing is temporarily unavailable. Please try again later.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
@@ -2896,25 +2886,21 @@ ${payload.text}`
         });
       }
 
-      const apiKey = getGeminiApiKey(req, targetDb);
+      const apiKey = getGeminiApiKey();
       if (!apiKey) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          code: 503,
-          provider: 'google-gemini',
-          message: 'GEMINI_API_KEY is not configured on the server. Please configure your key in Settings > Secrets.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
       let ai;
       try {
-        ai = getGeminiClient(apiKey);
+        ai = getGeminiClient();
       } catch (e: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          code: 503,
-          provider: 'google-gemini',
-          message: 'GEMINI_API_KEY is not configured on the server. Please configure your key in Settings > Secrets.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
@@ -3025,25 +3011,21 @@ ${payload.text}`
         });
       }
 
-      const apiKey = getGeminiApiKey(req, targetDb);
+      const apiKey = getGeminiApiKey();
       if (!apiKey) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          code: 503,
-          provider: 'google-gemini',
-          message: 'GEMINI_API_KEY is not configured on the server. Please configure your key in Settings > Secrets.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
       let ai;
       try {
-        ai = getGeminiClient(apiKey);
+        ai = getGeminiClient();
       } catch (e: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          code: 503,
-          provider: 'google-gemini',
-          message: 'GEMINI_API_KEY is not configured on the server. Please configure your key in Settings > Secrets.',
+          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
         });
       }
 
