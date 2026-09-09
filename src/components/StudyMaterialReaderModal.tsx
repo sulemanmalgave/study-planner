@@ -113,16 +113,23 @@ export default function StudyMaterialReaderModal({
       const endpoint = `/api/ai/study-materials/${material.id}/${type}`;
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-subscription-status': isPremium ? 'active' : 'inactive',
+        },
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (data.error === 'GEMINI_NOT_CONFIGURED' || response.status === 503) {
+          setAiError('Gemini API key is not configured in production. Please set GEMINI_API_KEY in the Vercel environment variables.');
+          return;
+        }
         if (data.error === 'PREMIUM_REQUIRED' || data.error === 'PRO_FEATURE_REQUIRED' || response.status === 403) {
           onTriggerUpgrade();
           return;
         }
-        throw new Error(data.message || 'AI request failed');
+        throw new Error(data.message || data.error || 'AI request failed');
       }
 
       // Update local and parent state
@@ -170,7 +177,10 @@ export default function StudyMaterialReaderModal({
   };
 
   const getViewerUrl = () => {
-    if (material.storagePath) {
+    if (material.storageUrl) {
+      return material.storageUrl;
+    }
+    if (material.storagePath && material.storagePath.startsWith('http')) {
       return material.storagePath;
     }
     if (material.fileDataUrl) {
@@ -350,6 +360,21 @@ export default function StudyMaterialReaderModal({
                   src={getViewerUrl()}
                   title={material.name}
                   className="w-full h-full border-0 bg-slate-100"
+                />
+              ) : ['jpg', 'jpeg', 'png', 'webp'].includes(fileExt) ? (
+                <div className="w-full h-full overflow-auto flex items-center justify-center p-4 bg-[#F3EDF7]/20">
+                  <img
+                    src={getViewerUrl()}
+                    alt={material.name}
+                    className="max-w-full max-h-full object-contain rounded-xl shadow-md bg-white border border-[#E1E3E1]"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              ) : ['txt', 'csv'].includes(fileExt) ? (
+                <iframe
+                  src={getViewerUrl()}
+                  title={material.name}
+                  className="w-full h-full border-0 bg-white"
                 />
               ) : fileExt === 'docx' ? (
                 <div className="w-full h-full overflow-y-auto p-4 sm:p-8 bg-[#F3EDF7]/20">

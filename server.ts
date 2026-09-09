@@ -8,47 +8,26 @@ import multer from 'multer';
 import mammoth from 'mammoth';
 import Razorpay from 'razorpay';
 import { GoogleGenAI } from '@google/genai';
+import { put, del } from '@vercel/blob';
+import { handleUpload } from '@vercel/blob/client';
 import { FREE_PLAN_LIMITS, DatabaseSchema, UserProfile, StudyMaterial } from './src/types.js';
 
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
-const MATERIALS_DIR = path.join(process.cwd(), 'uploads', 'materials');
 
-// Ensure materials directory exists
-if (!fs.existsSync(MATERIALS_DIR)) {
-  try {
-    fs.mkdirSync(MATERIALS_DIR, { recursive: true });
-  } catch (e) {
-    console.warn('Could not create materials upload directory:', e);
-  }
-}
+// Supported file extensions for Study Materials (PDF, Word DOC/DOCX, Images, TXT, CSV up to 30MB)
+const ALLOWED_MATERIAL_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.webp', '.txt', '.csv'];
 
-// Multer storage configuration for PDF, DOC, DOCX
-const materialsStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (!fs.existsSync(MATERIALS_DIR)) {
-      fs.mkdirSync(MATERIALS_DIR, { recursive: true });
-    }
-    cb(null, MATERIALS_DIR);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const safeBase = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
-    const uniqueName = `mat_${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeBase}${ext}`;
-    cb(null, uniqueName);
-  },
-});
-
+// In-memory multer storage: files are buffered in memory and NEVER written to the serverless filesystem (/var/task or /tmp)
 const uploadMaterial = multer({
-  storage: materialsStorage,
-  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB limit
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB maximum limit
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const allowed = ['.pdf', '.doc', '.docx'];
-    if (allowed.includes(ext)) {
+    if (ALLOWED_MATERIAL_EXTENSIONS.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only PDF, DOC, and DOCX files are allowed.'));
+      cb(new Error(`Unsupported file format "${ext}". Supported formats: PDF, Word (DOC, DOCX), Images (JPG, PNG, WEBP), Text (TXT), and CSV.`));
     }
   },
 });
@@ -62,29 +41,35 @@ const sanitizeEnvVar = (val: string | undefined): string | undefined => {
   return clean || undefined;
 };
 
-// Check whether a Gemini API secret/environment variable exists under any standard name
-const getGeminiApiKey = (): string | undefined => {
+// Check whether a Gemini API secret/environment variable exists under any standard name or request context
+const getGeminiApiKey = (req?: express.Request, db?: DatabaseSchema): string | undefined => {
   return (
     sanitizeEnvVar(process.env.GEMINI_API_KEY) ||
     sanitizeEnvVar(process.env.GOOGLE_GEMINI_API_KEY) ||
-    sanitizeEnvVar(process.env.GOOGLE_AI_API_KEY)
+    sanitizeEnvVar(process.env.GOOGLE_AI_API_KEY) ||
+    sanitizeEnvVar(process.env.VITE_GEMINI_API_KEY) ||
+    sanitizeEnvVar(req?.headers?.['x-gemini-api-key'] as string) ||
+    sanitizeEnvVar(req?.body?.geminiApiKey) ||
+    sanitizeEnvVar(db?.profile?.geminiApiKey)
   );
 };
 
-// Gemini Client Lazy Initializer
+// Gemini Client Lazy Initializer supporting optional custom API key
 let geminiClient: GoogleGenAI | null = null;
-function getGeminiClient(): GoogleGenAI {
-  const apiKey = getGeminiApiKey();
+let currentClientKey: string | null = null;
+
+function getGeminiClient(customApiKey?: string): GoogleGenAI {
+  const apiKey = customApiKey || getGeminiApiKey();
   if (!apiKey) {
     console.error(
-      '[Gemini AI Config] GEMINI_API_KEY is not configured in the server environment. Please set GEMINI_API_KEY in the Settings > Secrets panel.'
+      '[Gemini AI Config] GEMINI_API_KEY is not configured in the server environment. Please set GEMINI_API_KEY in the Vercel Project Settings > Environment Variables or in Settings > Secrets.'
     );
-    const err: any = new Error('GEMINI_API_KEY is not configured on the server. Please configure your GEMINI_API_KEY in the Settings > Secrets panel.');
+    const err: any = new Error('GEMINI_API_KEY is not configured on the server. Please set GEMINI_API_KEY in your Vercel Project Settings (Environment Variables) or in Settings > Secrets.');
     err.code = 'GEMINI_NOT_CONFIGURED';
     err.isConfigError = true;
     throw err;
   }
-  if (!geminiClient) {
+  if (!geminiClient || currentClientKey !== apiKey) {
     geminiClient = new GoogleGenAI({
       apiKey,
       httpOptions: {
@@ -93,6 +78,7 @@ function getGeminiClient(): GoogleGenAI {
         },
       },
     });
+    currentClientKey = apiKey;
   }
   return geminiClient;
 }
@@ -209,10 +195,15 @@ function parseGeminiError(error: any): GeminiErrorResponse {
 async function generateTextWithGemini(
   ai: GoogleGenAI,
   promptOrContents: any,
-  systemInstruction?: string
+  systemInstruction?: string,
+  isAudioTask = false
 ): Promise<string> {
-  // Ordered by proven latency and availability in production testing
-  const models = ['gemini-3.6-flash', 'gemini-3.7-flash'];
+  // Official verified Gemini models:
+  // - Audio transcription: 'gemini-3.5-transcribe', with 'gemini-3.8-flash' fallback
+  // - General text & summarization: 'gemini-3.8-flash', with 'gemini-flash-latest' fallback
+  const models = isAudioTask
+    ? ['gemini-3.5-transcribe', 'gemini-3.8-flash', 'gemini-flash-latest']
+    : ['gemini-3.8-flash', 'gemini-flash-latest'];
   let lastError: any = null;
 
   for (const model of models) {
@@ -1500,14 +1491,6 @@ app.get('/api/state', (req, res) => {
 
     activeAiOperations.add(opKey);
     try {
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) {
-        return res.status(503).json({
-          error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
-        });
-      }
-
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
 
@@ -1516,6 +1499,14 @@ app.get('/api/state', (req, res) => {
         return res.status(403).json({
           error: 'PRO_FEATURE_REQUIRED',
           message: 'AI Audio Lecture features require an active Premium subscription.',
+        });
+      }
+
+      const apiKey = getGeminiApiKey(req, db);
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
         });
       }
 
@@ -1572,7 +1563,7 @@ app.get('/api/state', (req, res) => {
 
       let ai;
       try {
-        ai = getGeminiClient();
+        ai = getGeminiClient(apiKey);
       } catch (err: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
@@ -1582,7 +1573,7 @@ app.get('/api/state', (req, res) => {
 
       const prompt = `You are a high-accuracy academic transcription specialist. Transcribe this lecture audio cleanly and completely into English (or the spoken language of the lecture). Preserve technical vocabulary, subject definitions, and formula references precisely. Use paragraph breaks to separate thoughts and speakers where appropriate. Do not add conversational commentary, preface, or concluding remarks; output only the transcript text.`;
 
-      const transcript = await generateTextWithGemini(ai, [audioPart, prompt]);
+      const transcript = await generateTextWithGemini(ai, [audioPart, prompt], undefined, true);
 
       lecture.transcript = transcript;
       lecture.transcriptGeneratedAt = new Date().toISOString();
@@ -1620,14 +1611,6 @@ app.get('/api/state', (req, res) => {
 
     activeAiOperations.add(opKey);
     try {
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) {
-        return res.status(503).json({
-          error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
-        });
-      }
-
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
 
@@ -1636,6 +1619,14 @@ app.get('/api/state', (req, res) => {
         return res.status(403).json({
           error: 'PRO_FEATURE_REQUIRED',
           message: 'AI Audio Lecture features require an active Premium subscription.',
+        });
+      }
+
+      const apiKey = getGeminiApiKey(req, db);
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
         });
       }
 
@@ -1675,7 +1666,7 @@ app.get('/api/state', (req, res) => {
 
       let ai;
       try {
-        ai = getGeminiClient();
+        ai = getGeminiClient(apiKey);
       } catch (err: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
@@ -1781,14 +1772,6 @@ Ensure clarity, rigor, and actionable revision value for students.`
 
     activeAiOperations.add(opKey);
     try {
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) {
-        return res.status(503).json({
-          error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
-        });
-      }
-
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
 
@@ -1797,6 +1780,14 @@ Ensure clarity, rigor, and actionable revision value for students.`
         return res.status(403).json({
           error: 'PRO_FEATURE_REQUIRED',
           message: 'AI Audio Lecture features require an active Premium subscription.',
+        });
+      }
+
+      const apiKey = getGeminiApiKey(req, db);
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
         });
       }
 
@@ -1836,7 +1827,7 @@ Ensure clarity, rigor, and actionable revision value for students.`
 
       let ai;
       try {
-        ai = getGeminiClient();
+        ai = getGeminiClient(apiKey);
       } catch (err: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
@@ -1937,14 +1928,6 @@ Format cleanly in Markdown with bullet points:
 
     activeAiOperations.add(opKey);
     try {
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) {
-        return res.status(503).json({
-          error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
-        });
-      }
-
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
 
@@ -1953,6 +1936,14 @@ Format cleanly in Markdown with bullet points:
         return res.status(403).json({
           error: 'PRO_FEATURE_REQUIRED',
           message: 'AI Audio Lecture features require an active Premium subscription.',
+        });
+      }
+
+      const apiKey = getGeminiApiKey(req, db);
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
         });
       }
 
@@ -1992,11 +1983,11 @@ Format cleanly in Markdown with bullet points:
 
       let ai;
       try {
-        ai = getGeminiClient();
+        ai = getGeminiClient(apiKey);
       } catch (err: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
-          message: 'Gemini API key is not configured in the production environment.',
+          message: err?.message || 'Gemini API client could not be initialized.',
         });
       }
 
@@ -2105,16 +2096,17 @@ Structure in clean Markdown:
   // AI 6: Health & Configuration check (Safe - never exposes secrets)
   app.get('/api/ai/health', (req, res) => {
     try {
-      const apiKey = getGeminiApiKey();
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      const apiKey = getGeminiApiKey(req, db);
       res.json({
         configured: !!apiKey,
         provider: 'google-gemini',
         status: apiKey ? 'ready' : 'unconfigured',
-        models: ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-flash-latest', 'gemini-3.8-flash'],
-        audioModels: ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.8-flash'],
-        aiUsage: db.profile.aiUsage || null,
-        isPro: isSubscriptionActive(db.profile.subscription),
+        models: ['gemini-3.8-flash', 'gemini-flash-latest'],
+        audioModels: ['gemini-3.5-transcribe', 'gemini-3.8-flash', 'gemini-flash-latest'],
+        aiUsage: db.profile?.aiUsage || null,
+        isPro: checkUserHasActiveSubscription(req, db),
       });
     } catch (err: any) {
       res.status(500).json({ error: 'AI_HEALTH_CHECK_FAILED', message: err?.message || 'Failed to check AI health' });
@@ -2124,7 +2116,9 @@ Structure in clean Markdown:
   // AI 7: Diagnostic minimal server-side test (never exposes secrets or keys)
   app.get('/api/ai/diagnostic', async (req, res) => {
     try {
-      const apiKey = getGeminiApiKey();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      const apiKey = getGeminiApiKey(req, db);
       if (!apiKey) {
         return res.status(503).json({
           configured: false,
@@ -2133,7 +2127,7 @@ Structure in clean Markdown:
         });
       }
 
-      const ai = getGeminiClient();
+      const ai = getGeminiClient(apiKey);
       const testResult = await generateTextWithGemini(ai, 'Reply with exactly: GEMINI_OK');
       res.json({
         configured: true,
@@ -2169,38 +2163,96 @@ Structure in clean Markdown:
     }
   });
 
-  // 2. Serve material files statically with inline disposition
+  // 2. Serve legacy material files statically if available on local instance
   app.get('/api/study-materials/files/:filename', (req, res) => {
     try {
       const filename = path.basename(req.params.filename);
-      const filePath = path.join(MATERIALS_DIR, filename);
-      if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ error: 'File not found on server' });
+      const possiblePaths = [
+        path.join(process.cwd(), 'uploads', 'materials', filename),
+      ];
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          const ext = path.extname(filename).toLowerCase();
+          let contentType = 'application/octet-stream';
+          if (ext === '.pdf') contentType = 'application/pdf';
+          else if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          else if (ext === '.doc') contentType = 'application/msword';
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+          return fs.createReadStream(p).pipe(res);
+        }
       }
-
-      const ext = path.extname(filename).toLowerCase();
-      let contentType = 'application/octet-stream';
-      if (ext === '.pdf') contentType = 'application/pdf';
-      else if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      else if (ext === '.doc') contentType = 'application/msword';
-
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-      const stream = fs.createReadStream(filePath);
-      stream.pipe(res);
+      return res.status(404).json({
+        error: 'FILE_NOT_FOUND',
+        message: 'Legacy local file is no longer available on this serverless instance.',
+      });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to stream study material file' });
+      res.status(500).json({ error: 'Failed to access legacy file' });
     }
   });
 
-  // 3. Upload study material via multipart/form-data
+  // 3a. Generate client-side Vercel Blob upload token (bypasses Vercel 4.5MB serverless body limit)
+  app.post('/api/study-materials/upload-token', async (req, res) => {
+    try {
+      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        return res.status(503).json({
+          error: 'STORAGE_NOT_CONFIGURED',
+          message: 'Study Materials storage is not configured for production.',
+          hint: 'BLOB_READ_WRITE_TOKEN is not set in environment variables.',
+        });
+      }
+
+      const db = readDB();
+      if (!isSubscriptionActive(db.profile.subscription) && (db.studyMaterials || []).length >= FREE_PLAN_LIMITS.studyMaterials) {
+        return res.status(403).json({
+          error: 'LIMIT_REACHED',
+          message: `You have reached the free plan limit of ${FREE_PLAN_LIMITS.studyMaterials} Study Materials. Upgrade to Premium for unlimited storage.`,
+        });
+      }
+
+      const jsonResponse = await handleUpload({
+        body: req.body,
+        request: req,
+        onBeforeGenerateToken: async (pathname) => {
+          const ext = path.extname(pathname).toLowerCase();
+          if (!ALLOWED_MATERIAL_EXTENSIONS.includes(ext)) {
+            throw new Error(`Unsupported file type: ${ext}. Supported formats: PDF, Word, Images, TXT, CSV.`);
+          }
+
+          return {
+            allowedContentTypes: [
+              'application/pdf',
+              'application/msword',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'image/jpeg',
+              'image/png',
+              'image/webp',
+              'text/plain',
+              'text/csv',
+            ],
+            maximumSizeInBytes: 30 * 1024 * 1024, // 30 MB
+          };
+        },
+        onUploadCompleted: async ({ blob }) => {
+          console.log('[Vercel Blob] Upload completed:', blob.pathname, blob.url);
+        },
+      });
+
+      return res.json(jsonResponse);
+    } catch (error: any) {
+      console.error('[Upload Token Error]:', error);
+      return res.status(400).json({ error: error.message || 'Upload authorization failed' });
+    }
+  });
+
+  // 3b. Upload study material via multipart/form-data (in-memory buffer + Vercel Blob persistent storage)
   app.post('/api/study-materials/upload', (req, res) => {
     uploadMaterial.single('file')(req, res, async (err) => {
       if (err) {
-        console.error('Multer upload error:', err);
+        console.error('Upload validation error:', err);
         return res.status(400).json({
           error: 'UPLOAD_ERROR',
-          message: err.message || 'File upload failed. Only PDF, DOC, and DOCX files up to 30MB are supported.',
+          message: err.message || 'File upload failed. Supported formats: PDF, DOC, DOCX, Images, TXT, CSV up to 30MB.',
         });
       }
 
@@ -2210,10 +2262,6 @@ Structure in clean Markdown:
 
         // Check limits on free plan
         if (!isSubscriptionActive(db.profile.subscription) && db.studyMaterials.length >= FREE_PLAN_LIMITS.studyMaterials) {
-          // If a file was written to disk, clean it up
-          if (req.file?.path && fs.existsSync(req.file.path)) {
-            try { fs.unlinkSync(req.file.path); } catch (e) {}
-          }
           return res.status(403).json({
             error: 'LIMIT_REACHED',
             message: `You have reached the free plan limit of ${FREE_PLAN_LIMITS.studyMaterials} Study Materials. Upgrade to Premium for unlimited storage.`,
@@ -2223,7 +2271,7 @@ Structure in clean Markdown:
         if (!req.file) {
           return res.status(400).json({
             error: 'NO_FILE',
-            message: 'Please select a PDF, DOC, or DOCX file to upload.',
+            message: 'Please select a document or file to upload.',
           });
         }
 
@@ -2240,32 +2288,75 @@ Structure in clean Markdown:
         if (!subjectName) subjectName = 'General';
 
         const topic = (req.body.topic || '').trim();
-        const storagePath = `/api/study-materials/files/${req.file.filename}`;
+        let storagePath = '';
+        let storageKey = '';
+        let storageUrl = '';
+        let downloadUrl = '';
+        let fileDataUrl = '';
 
-        // Attempt DOCX initial text extraction for fast search
+        // Check persistent cloud storage configuration
+        if (process.env.BLOB_READ_WRITE_TOKEN) {
+          const safeBase = path.basename(req.file.originalname, `.${ext}`).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+          const blobPath = `materials/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeBase}.${ext}`;
+
+          const blob = await put(blobPath, req.file.buffer, {
+            access: 'public',
+            contentType: req.file.mimetype || 'application/octet-stream',
+          });
+
+          storagePath = blob.url;
+          storageKey = blob.pathname;
+          storageUrl = blob.url;
+          downloadUrl = blob.downloadUrl;
+        } else {
+          // If in production environment without storage configured, error explicitly
+          if (process.env.VERCEL === '1' || process.env.NODE_ENV === 'production') {
+            return res.status(503).json({
+              error: 'STORAGE_NOT_CONFIGURED',
+              message: 'Study Materials storage is not configured for production.',
+            });
+          }
+          // For local development / preview fallback without BLOB_READ_WRITE_TOKEN
+          fileDataUrl = `data:${req.file.mimetype || 'application/octet-stream'};base64,${req.file.buffer.toString('base64')}`;
+          storagePath = fileDataUrl;
+        }
+
+        // In-memory text extraction for fast searching without disk writes
         let extractedText = '';
         if (ext === 'docx') {
           try {
-            const mammothResult = await mammoth.extractRawText({ path: req.file.path });
+            const mammothResult = await mammoth.extractRawText({ buffer: req.file.buffer });
             extractedText = mammothResult.value?.slice(0, 50000) || '';
           } catch (mErr) {
-            console.warn('Could not extract raw text from docx:', mErr);
+            console.warn('Could not extract raw text from docx buffer:', mErr);
+          }
+        } else if (ext === 'txt' || ext === 'csv') {
+          try {
+            extractedText = req.file.buffer.toString('utf-8').slice(0, 50000);
+          } catch (tErr) {
+            console.warn('Could not extract text from buffer:', tErr);
           }
         }
 
         const newMaterial: StudyMaterial = {
           id: 'mat_' + crypto.randomUUID().slice(0, 8),
+          materialId: 'mat_' + crypto.randomUUID().slice(0, 8),
           userId: req.body.userId || 'default',
           subjectId,
           subjectName,
           topic,
           name: displayName,
+          documentTitle: displayName,
           originalFileName: req.file.originalname,
+          fileName: req.file.originalname,
           fileType: ext,
           mimeType: req.file.mimetype || 'application/octet-stream',
           fileSize: req.file.size,
           storagePath,
-          fileDataUrl: req.body.fileDataUrl || '',
+          storageKey,
+          storageUrl,
+          downloadUrl,
+          fileDataUrl: fileDataUrl || undefined,
           extractedText: extractedText || undefined,
           uploadedAt: new Date().toISOString(),
           createdAt: new Date().toISOString(),
@@ -2286,7 +2377,7 @@ Structure in clean Markdown:
     });
   });
 
-  // 4. JSON upload / manual metadata create fallback
+  // 4. Save metadata after client-side upload or data URL upload
   app.post('/api/study-materials', async (req, res) => {
     try {
       const db = readDB();
@@ -2299,33 +2390,58 @@ Structure in clean Markdown:
         });
       }
 
-      const { name, subjectId, subjectName, topic, originalFileName, fileType, mimeType, fileSize, fileBase64, fileDataUrl } = req.body;
-      const matId = 'mat_' + crypto.randomUUID().slice(0, 8);
-      let storagePath = req.body.storagePath || '';
+      const {
+        name,
+        subjectId,
+        subjectName,
+        topic,
+        originalFileName,
+        fileType,
+        mimeType,
+        fileSize,
+        storagePath,
+        storageKey,
+        storageUrl,
+        downloadUrl,
+        fileBase64,
+        fileDataUrl,
+        extractedText,
+      } = req.body;
 
-      // If base64 data was supplied, write to disk
-      if (fileBase64 && !storagePath) {
-        const ext = fileType ? `.${fileType.replace('.', '')}` : '.pdf';
-        const filename = `mat_${Date.now()}_${crypto.randomUUID().slice(0, 8)}${ext}`;
-        const filePath = path.join(MATERIALS_DIR, filename);
-        const cleanB64 = fileBase64.replace(/^data:[^;]+;base64,/, '');
-        fs.writeFileSync(filePath, Buffer.from(cleanB64, 'base64'));
-        storagePath = `/api/study-materials/files/${filename}`;
+      const matId = 'mat_' + crypto.randomUUID().slice(0, 8);
+      const cleanExt = (fileType || path.extname(originalFileName || '').replace('.', '') || 'pdf').toLowerCase();
+      const cleanTitle = name || originalFileName || 'Untitled Document';
+
+      // Persist in-memory / dataUrl if provided without external storage
+      let finalStoragePath = storagePath || storageUrl || '';
+      let finalFileDataUrl = fileDataUrl || '';
+      if (fileBase64 && !finalStoragePath) {
+        finalFileDataUrl = fileBase64.startsWith('data:')
+          ? fileBase64
+          : `data:${mimeType || 'application/pdf'};base64,${fileBase64}`;
+        finalStoragePath = finalFileDataUrl;
       }
 
       const newMaterial: StudyMaterial = {
         id: matId,
+        materialId: matId,
         userId: req.body.userId || 'default',
         subjectId: subjectId || '',
         subjectName: subjectName || 'General',
         topic: topic || '',
-        name: name || originalFileName || 'Untitled Document',
+        name: cleanTitle,
+        documentTitle: cleanTitle,
         originalFileName: originalFileName || 'document.pdf',
-        fileType: fileType || 'pdf',
+        fileName: originalFileName || 'document.pdf',
+        fileType: cleanExt,
         mimeType: mimeType || 'application/pdf',
         fileSize: fileSize || 0,
-        storagePath: storagePath || '',
-        fileDataUrl: fileDataUrl || '',
+        storagePath: finalStoragePath,
+        storageKey: storageKey || undefined,
+        storageUrl: storageUrl || (finalStoragePath.startsWith('http') ? finalStoragePath : undefined),
+        downloadUrl: downloadUrl || (finalStoragePath.startsWith('http') ? finalStoragePath : undefined),
+        fileDataUrl: finalFileDataUrl || undefined,
+        extractedText: extractedText || undefined,
         uploadedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -2340,7 +2456,7 @@ Structure in clean Markdown:
   });
 
   // 5. Download original unmodified file
-  app.get('/api/study-materials/:id/download', (req, res) => {
+  app.get('/api/study-materials/:id/download', async (req, res) => {
     try {
       const db = readDB();
       const material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
@@ -2348,16 +2464,13 @@ Structure in clean Markdown:
         return res.status(404).json({ error: 'Study material not found' });
       }
 
-      // Check if file exists on disk
-      if (material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
-        const filename = path.basename(material.storagePath);
-        const filePath = path.join(MATERIALS_DIR, filename);
-        if (fs.existsSync(filePath)) {
-          return res.download(filePath, material.originalFileName);
-        }
+      // If stored in Vercel Blob or public cloud storage, redirect directly
+      const cloudUrl = material.downloadUrl || (material.storagePath && material.storagePath.startsWith('http') ? material.storagePath : null);
+      if (cloudUrl) {
+        return res.redirect(cloudUrl);
       }
 
-      // Fallback: If base64 exists in fileDataUrl
+      // If dataUrl or base64 is stored
       if (material.fileDataUrl && material.fileDataUrl.startsWith('data:')) {
         const parts = material.fileDataUrl.split(',');
         const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/octet-stream';
@@ -2367,13 +2480,25 @@ Structure in clean Markdown:
         return res.send(buffer);
       }
 
-      res.status(404).json({ error: 'Original file content is not available for download' });
+      // Legacy fallback: check if file exists on disk
+      if (material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
+        const filename = path.basename(material.storagePath);
+        const filePath = path.join(process.cwd(), 'uploads', 'materials', filename);
+        if (fs.existsSync(filePath)) {
+          return res.download(filePath, material.originalFileName);
+        }
+      }
+
+      res.status(404).json({
+        error: 'FILE_UNAVAILABLE',
+        message: 'Original file content is not accessible. Please re-upload this document.',
+      });
     } catch (error) {
       res.status(500).json({ error: 'Failed to download study material' });
     }
   });
 
-  // 6. Preview content (HTML for docx, or metadata/stream for PDF)
+  // 6. Preview content (HTML for DOCX, text for TXT/CSV, or direct URL for PDF/Images)
   app.get('/api/study-materials/:id/preview', async (req, res) => {
     try {
       const db = readDB();
@@ -2382,12 +2507,33 @@ Structure in clean Markdown:
         return res.status(404).json({ error: 'Study material not found' });
       }
 
-      const ext = material.fileType.toLowerCase();
-      if (ext === 'docx' && material.storagePath) {
-        const filename = path.basename(material.storagePath);
-        const filePath = path.join(MATERIALS_DIR, filename);
-        if (fs.existsSync(filePath)) {
-          const result = await mammoth.convertToHtml({ path: filePath });
+      const ext = (material.fileType || '').toLowerCase().replace('.', '');
+
+      // DOCX HTML rendering via mammoth
+      if (ext === 'docx') {
+        let docxBuffer: Buffer | null = null;
+        if (material.storagePath && material.storagePath.startsWith('http')) {
+          try {
+            const resp = await fetch(material.storagePath);
+            if (resp.ok) {
+              docxBuffer = Buffer.from(await resp.arrayBuffer());
+            }
+          } catch (e) {
+            console.warn('Failed to fetch docx from cloud URL:', e);
+          }
+        } else if (material.fileDataUrl && material.fileDataUrl.startsWith('data:')) {
+          const parts = material.fileDataUrl.split(',');
+          docxBuffer = Buffer.from(parts[1], 'base64');
+        } else if (material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
+          const filename = path.basename(material.storagePath);
+          const legacyPath = path.join(process.cwd(), 'uploads', 'materials', filename);
+          if (fs.existsSync(legacyPath)) {
+            docxBuffer = fs.readFileSync(legacyPath);
+          }
+        }
+
+        if (docxBuffer) {
+          const result = await mammoth.convertToHtml({ buffer: docxBuffer });
           return res.json({
             previewType: 'html',
             html: result.value,
@@ -2396,8 +2542,29 @@ Structure in clean Markdown:
         }
       }
 
+      // TXT / CSV rendering
+      if (ext === 'txt' || ext === 'csv') {
+        let textContent = material.extractedText || '';
+        if (!textContent && material.storagePath && material.storagePath.startsWith('http')) {
+          try {
+            const resp = await fetch(material.storagePath);
+            if (resp.ok) textContent = await resp.text();
+          } catch (e) {}
+        } else if (!textContent && material.fileDataUrl && material.fileDataUrl.startsWith('data:')) {
+          const parts = material.fileDataUrl.split(',');
+          textContent = Buffer.from(parts[1], 'base64').toString('utf-8');
+        }
+
+        return res.json({
+          previewType: ext,
+          text: textContent,
+          fileUrl: material.storagePath,
+          material,
+        });
+      }
+
       res.json({
-        previewType: ext === 'pdf' ? 'pdf' : ext === 'docx' ? 'docx' : 'doc',
+        previewType: ext === 'pdf' ? 'pdf' : ['jpg', 'jpeg', 'png', 'webp'].includes(ext) ? 'image' : ext,
         fileUrl: material.storagePath,
         material,
       });
@@ -2417,9 +2584,12 @@ Structure in clean Markdown:
       }
 
       const existing = db.studyMaterials[index];
+      const updatedName = req.body.name !== undefined ? req.body.name.trim() : existing.name;
+
       db.studyMaterials[index] = {
         ...existing,
-        name: req.body.name !== undefined ? req.body.name.trim() : existing.name,
+        name: updatedName,
+        documentTitle: updatedName,
         subjectId: req.body.subjectId !== undefined ? req.body.subjectId : existing.subjectId,
         subjectName: req.body.subjectName !== undefined ? req.body.subjectName : existing.subjectName,
         topic: req.body.topic !== undefined ? req.body.topic.trim() : existing.topic,
@@ -2433,21 +2603,21 @@ Structure in clean Markdown:
     }
   });
 
-  // 8. Delete study material (Safe, with disk cleanup)
-  app.delete('/api/study-materials/:id', (req, res) => {
+  // 8. Delete study material (safe cloud cleanup + metadata removal)
+  app.delete('/api/study-materials/:id', async (req, res) => {
     try {
       const db = readDB();
       if (!db.studyMaterials) db.studyMaterials = [];
       const material = db.studyMaterials.find((m) => m.id === req.params.id);
 
-      if (material && material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
-        const filename = path.basename(material.storagePath);
-        const filePath = path.join(MATERIALS_DIR, filename);
-        if (fs.existsSync(filePath)) {
+      if (material) {
+        // Delete from Vercel Blob if stored in persistent cloud storage
+        const blobUrlOrKey = material.storageKey || (material.storagePath && material.storagePath.startsWith('http') ? material.storagePath : null);
+        if (blobUrlOrKey && process.env.BLOB_READ_WRITE_TOKEN) {
           try {
-            fs.unlinkSync(filePath);
-          } catch (uErr) {
-            console.warn('Could not delete material file from disk:', uErr);
+            await del(blobUrlOrKey, { token: process.env.BLOB_READ_WRITE_TOKEN });
+          } catch (delErr) {
+            console.warn('Could not delete blob from cloud storage:', delErr);
           }
         }
       }
@@ -2465,62 +2635,89 @@ Structure in clean Markdown:
   // CRITICAL MANDATE: Only triggered on explicit user button click. Never auto-process on upload or view.
   // ==========================================
 
-  // Helper to extract text / inline data from study material
+  // Helper to extract text / inline data from study material without local disk dependencies
   const getDocumentAiPayload = async (material: StudyMaterial) => {
-    let filePath = '';
-    if (material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
+    let buffer: Buffer | null = null;
+
+    if (material.storagePath && material.storagePath.startsWith('http')) {
+      try {
+        const resp = await fetch(material.storagePath);
+        if (resp.ok) {
+          buffer = Buffer.from(await resp.arrayBuffer());
+        }
+      } catch (fErr) {
+        console.warn('Could not fetch material file from cloud storage URL:', fErr);
+      }
+    } else if (material.fileDataUrl && material.fileDataUrl.startsWith('data:')) {
+      const parts = material.fileDataUrl.split(',');
+      buffer = Buffer.from(parts[1], 'base64');
+    } else if (material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
       const filename = path.basename(material.storagePath);
-      filePath = path.join(MATERIALS_DIR, filename);
+      const filePath = path.join(process.cwd(), 'uploads', 'materials', filename);
+      if (fs.existsSync(filePath)) {
+        buffer = fs.readFileSync(filePath);
+      }
     }
 
-    const ext = material.fileType.toLowerCase();
+    const ext = (material.fileType || '').toLowerCase().replace('.', '');
 
-    // 1. DOCX: extract full clean text using mammoth
-    if (ext === 'docx' && filePath && fs.existsSync(filePath)) {
-      try {
-        const result = await mammoth.extractRawText({ path: filePath });
-        const text = result.value?.trim();
-        if (text && text.length > 20) {
+    // 1. DOCX: extract clean text using mammoth
+    if (ext === 'docx') {
+      if (buffer) {
+        try {
+          const result = await mammoth.extractRawText({ buffer });
+          const text = result.value?.trim();
+          if (text && text.length > 20) {
+            return { type: 'text', text: text.slice(0, 100000) };
+          }
+        } catch (e) {
+          console.warn('Mammoth text extraction error:', e);
+        }
+      }
+      if (material.extractedText && material.extractedText.length > 20) {
+        return { type: 'text', text: material.extractedText.slice(0, 100000) };
+      }
+    }
+
+    // 2. TXT / CSV: plain text extraction
+    if (ext === 'txt' || ext === 'csv') {
+      if (buffer) {
+        const text = buffer.toString('utf-8').trim();
+        if (text) {
           return { type: 'text', text: text.slice(0, 100000) };
         }
-      } catch (e) {
-        console.warn('Mammoth text extraction error:', e);
+      }
+      if (material.extractedText) {
+        return { type: 'text', text: material.extractedText.slice(0, 100000) };
       }
     }
 
-    // 2. PDF: send as inlineData base64 if file exists
-    if (ext === 'pdf' && filePath && fs.existsSync(filePath)) {
-      try {
-        const buffer = fs.readFileSync(filePath);
-        const base64 = buffer.toString('base64');
-        return {
-          type: 'inlineData',
-          inlineData: {
-            mimeType: 'application/pdf',
-            data: base64,
-          },
-        };
-      } catch (e) {
-        console.warn('PDF read error:', e);
-      }
-    }
-
-    // 3. Fallback: If material.extractedText is present
-    if (material.extractedText && material.extractedText.length > 20) {
-      return { type: 'text', text: material.extractedText.slice(0, 100000) };
-    }
-
-    // 4. Fallback: If base64 exists in fileDataUrl
-    if (material.fileDataUrl && material.fileDataUrl.startsWith('data:')) {
-      const parts = material.fileDataUrl.split(',');
-      const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
+    // 3. PDF: send as inlineData base64
+    if (ext === 'pdf' && buffer) {
       return {
         type: 'inlineData',
         inlineData: {
-          mimeType: mime,
-          data: parts[1],
+          mimeType: 'application/pdf',
+          data: buffer.toString('base64'),
         },
       };
+    }
+
+    // 4. Images (JPG, PNG, WEBP)
+    if (['jpg', 'jpeg', 'png', 'webp'].includes(ext) && buffer) {
+      const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      return {
+        type: 'inlineData',
+        inlineData: {
+          mimeType: material.mimeType || mime,
+          data: buffer.toString('base64'),
+        },
+      };
+    }
+
+    // 5. Fallback: If material.extractedText is present
+    if (material.extractedText && material.extractedText.length > 20) {
+      return { type: 'text', text: material.extractedText.slice(0, 100000) };
     }
 
     return null;
@@ -2538,8 +2735,9 @@ Structure in clean Markdown:
 
     activeAiOperations.add(opKey);
     try {
-      const db = readDB();
-      if (!isSubscriptionActive(db.profile.subscription)) {
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      if (!checkUserHasActiveSubscription(req, db)) {
         return res.status(403).json({
           error: 'PRO_FEATURE_REQUIRED',
           message: 'AI Document Summarization requires an active Pro subscription.',
@@ -2547,13 +2745,23 @@ Structure in clean Markdown:
       }
 
       if (!db.studyMaterials) db.studyMaterials = [];
-      const index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+      let index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+      let targetDb = db;
+      if (index === -1) {
+        const defaultDb = readDB();
+        const defIdx = (defaultDb.studyMaterials || []).findIndex((m) => m.id === req.params.id);
+        if (defIdx !== -1) {
+          targetDb = defaultDb;
+          index = defIdx;
+        }
+      }
+
       if (index === -1) {
         return res.status(404).json({ error: 'Study material not found' });
       }
 
-      const material = db.studyMaterials[index];
-      const usageCheck = checkAndIncrementAiUsage(db, 0);
+      const material = targetDb.studyMaterials[index];
+      const usageCheck = checkAndIncrementAiUsage(targetDb, 0);
       if (!usageCheck.allowed) {
         return res.status(429).json({
           error: 'AI_LIMIT_REACHED',
@@ -2561,9 +2769,19 @@ Structure in clean Markdown:
         });
       }
 
+      const apiKey = getGeminiApiKey(req, targetDb);
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          code: 503,
+          provider: 'google-gemini',
+          message: 'GEMINI_API_KEY is not configured on the server. Please configure your key in Settings > Secrets.',
+        });
+      }
+
       let ai;
       try {
-        ai = getGeminiClient();
+        ai = getGeminiClient(apiKey);
       } catch (e: any) {
         return res.status(500).json({
           error: 'GEMINI_NOT_CONFIGURED',
@@ -2614,14 +2832,14 @@ ${payload.text}`
       material.summary = summary;
       material.summaryGeneratedAt = new Date().toISOString();
       material.updatedAt = new Date().toISOString();
-      db.studyMaterials[index] = material;
-      writeDB(db);
+      targetDb.studyMaterials[index] = material;
+      writeDB(targetDb, userId, userEmail);
 
       res.json({
         success: true,
         summary,
         material,
-        aiUsage: db.profile.aiUsage,
+        aiUsage: targetDb.profile.aiUsage,
       });
     } catch (error: any) {
       const errData = parseGeminiError(error);
@@ -2644,8 +2862,9 @@ ${payload.text}`
 
     activeAiOperations.add(opKey);
     try {
-      const db = readDB();
-      if (!isSubscriptionActive(db.profile.subscription)) {
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      if (!checkUserHasActiveSubscription(req, db)) {
         return res.status(403).json({
           error: 'PRO_FEATURE_REQUIRED',
           message: 'AI Study Notes Generation requires an active Pro subscription.',
@@ -2653,13 +2872,23 @@ ${payload.text}`
       }
 
       if (!db.studyMaterials) db.studyMaterials = [];
-      const index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+      let index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+      let targetDb = db;
+      if (index === -1) {
+        const defaultDb = readDB();
+        const defIdx = (defaultDb.studyMaterials || []).findIndex((m) => m.id === req.params.id);
+        if (defIdx !== -1) {
+          targetDb = defaultDb;
+          index = defIdx;
+        }
+      }
+
       if (index === -1) {
         return res.status(404).json({ error: 'Study material not found' });
       }
 
-      const material = db.studyMaterials[index];
-      const usageCheck = checkAndIncrementAiUsage(db, 0);
+      const material = targetDb.studyMaterials[index];
+      const usageCheck = checkAndIncrementAiUsage(targetDb, 0);
       if (!usageCheck.allowed) {
         return res.status(429).json({
           error: 'AI_LIMIT_REACHED',
@@ -2667,9 +2896,19 @@ ${payload.text}`
         });
       }
 
+      const apiKey = getGeminiApiKey(req, targetDb);
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          code: 503,
+          provider: 'google-gemini',
+          message: 'GEMINI_API_KEY is not configured on the server. Please configure your key in Settings > Secrets.',
+        });
+      }
+
       let ai;
       try {
-        ai = getGeminiClient();
+        ai = getGeminiClient(apiKey);
       } catch (e: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
@@ -2722,14 +2961,14 @@ ${payload.text}`
       material.studyNotes = studyNotes;
       material.studyNotesGeneratedAt = new Date().toISOString();
       material.updatedAt = new Date().toISOString();
-      db.studyMaterials[index] = material;
-      writeDB(db);
+      targetDb.studyMaterials[index] = material;
+      writeDB(targetDb, userId, userEmail);
 
       res.json({
         success: true,
         studyNotes,
         material,
-        aiUsage: db.profile.aiUsage,
+        aiUsage: targetDb.profile.aiUsage,
       });
     } catch (error: any) {
       const errData = parseGeminiError(error);
@@ -2752,8 +2991,9 @@ ${payload.text}`
 
     activeAiOperations.add(opKey);
     try {
-      const db = readDB();
-      if (!isSubscriptionActive(db.profile.subscription)) {
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      if (!checkUserHasActiveSubscription(req, db)) {
         return res.status(403).json({
           error: 'PRO_FEATURE_REQUIRED',
           message: 'AI Key Points Extraction requires an active Pro subscription.',
@@ -2761,13 +3001,23 @@ ${payload.text}`
       }
 
       if (!db.studyMaterials) db.studyMaterials = [];
-      const index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+      let index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+      let targetDb = db;
+      if (index === -1) {
+        const defaultDb = readDB();
+        const defIdx = (defaultDb.studyMaterials || []).findIndex((m) => m.id === req.params.id);
+        if (defIdx !== -1) {
+          targetDb = defaultDb;
+          index = defIdx;
+        }
+      }
+
       if (index === -1) {
         return res.status(404).json({ error: 'Study material not found' });
       }
 
-      const material = db.studyMaterials[index];
-      const usageCheck = checkAndIncrementAiUsage(db, 0);
+      const material = targetDb.studyMaterials[index];
+      const usageCheck = checkAndIncrementAiUsage(targetDb, 0);
       if (!usageCheck.allowed) {
         return res.status(429).json({
           error: 'AI_LIMIT_REACHED',
@@ -2775,9 +3025,19 @@ ${payload.text}`
         });
       }
 
+      const apiKey = getGeminiApiKey(req, targetDb);
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          code: 503,
+          provider: 'google-gemini',
+          message: 'GEMINI_API_KEY is not configured on the server. Please configure your key in Settings > Secrets.',
+        });
+      }
+
       let ai;
       try {
-        ai = getGeminiClient();
+        ai = getGeminiClient(apiKey);
       } catch (e: any) {
         return res.status(503).json({
           error: 'GEMINI_NOT_CONFIGURED',
@@ -2824,14 +3084,14 @@ ${payload.text}`
       material.keyPoints = keyPoints;
       material.keyPointsGeneratedAt = new Date().toISOString();
       material.updatedAt = new Date().toISOString();
-      db.studyMaterials[index] = material;
-      writeDB(db);
+      targetDb.studyMaterials[index] = material;
+      writeDB(targetDb, userId, userEmail);
 
       res.json({
         success: true,
         keyPoints,
         material,
-        aiUsage: db.profile.aiUsage,
+        aiUsage: targetDb.profile.aiUsage,
       });
     } catch (error: any) {
       const errData = parseGeminiError(error);

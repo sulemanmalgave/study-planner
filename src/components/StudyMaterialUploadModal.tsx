@@ -8,10 +8,14 @@ import {
   Loader2, 
   BookOpen, 
   Sparkles,
-  Layers
+  Layers,
+  Image as ImageIcon
 } from 'lucide-react';
+import { upload } from '@vercel/blob/client';
 import { Course, StudyMaterial, FREE_PLAN_LIMITS } from '../types';
 import SubjectSelect from './SubjectSelect';
+
+const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.webp', '.txt', '.csv'];
 
 interface StudyMaterialUploadModalProps {
   isOpen: boolean;
@@ -51,15 +55,14 @@ export default function StudyMaterialUploadModal({
   const validateAndSetFile = (selectedFile: File) => {
     setErrorMessage(null);
     const ext = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
-    const allowed = ['.pdf', '.doc', '.docx'];
 
-    if (!allowed.includes(ext)) {
-      setErrorMessage('Unsupported file format. Please upload a PDF, DOC, or DOCX document.');
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      setErrorMessage('Unsupported file format. Supported formats: PDF, Word (DOC, DOCX), Images (JPG, PNG, WEBP), Text (TXT), and CSV.');
       return;
     }
 
     if (selectedFile.size > 30 * 1024 * 1024) {
-      setErrorMessage('File size exceeds the 30MB maximum limit. Please choose a smaller document.');
+      setErrorMessage('File size exceeds the 30MB maximum limit. Please select a document under 30MB.');
       return;
     }
 
@@ -95,6 +98,7 @@ export default function StudyMaterialUploadModal({
   };
 
   const formatFileSize = (bytes: number) => {
+    if (!bytes) return '0 B';
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
@@ -119,40 +123,100 @@ export default function StudyMaterialUploadModal({
 
     const selectedCourse = courses.find((c) => c.id === subjectId);
     const subjectName = selectedCourse?.name || 'General';
+    const documentTitle = title.trim() || file.name.replace(/\.[^/.]+$/, '');
+    const cleanExt = file.name.split('.').pop()?.toLowerCase() || 'pdf';
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('name', title.trim() || file.name.replace(/\.[^/.]+$/, ''));
-      formData.append('subjectId', subjectId);
-      formData.append('subjectName', subjectName);
-      formData.append('topic', topic.trim());
+      let savedMaterial: StudyMaterial | null = null;
 
-      setUploadProgress(45);
+      // Strategy 1: Attempt direct client-side Vercel Blob upload (handles up to 30MB without hitting serverless 4.5MB limits)
+      try {
+        setUploadProgress(30);
+        const blob = await upload(file.name, file, {
+          access: 'public',
+          handleUploadUrl: '/api/study-materials/upload-token',
+        });
 
-      const response = await fetch('/api/study-materials/upload', {
-        method: 'POST',
-        body: formData,
-      });
+        setUploadProgress(75);
 
-      setUploadProgress(85);
-      const data = await response.json();
+        // Save material metadata with the permanent blob identifier & URL
+        const metaResp = await fetch('/api/study-materials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: documentTitle,
+            subjectId,
+            subjectName,
+            topic: topic.trim(),
+            originalFileName: file.name,
+            fileType: cleanExt,
+            mimeType: file.type || 'application/octet-stream',
+            fileSize: file.size,
+            storagePath: blob.url,
+            storageKey: blob.pathname,
+            storageUrl: blob.url,
+            downloadUrl: blob.downloadUrl,
+          }),
+        });
 
-      if (!response.ok) {
-        if (data.error === 'LIMIT_REACHED') {
-          onTriggerUpgrade();
-          onClose();
-          return;
+        if (!metaResp.ok) {
+          const errData = await metaResp.json().catch(() => ({}));
+          throw new Error(errData.message || 'Failed to save material metadata after file upload.');
         }
-        throw new Error(data.message || data.error || 'Failed to upload study material.');
+
+        savedMaterial = await metaResp.json();
+      } catch (blobError: any) {
+        console.warn('Client blob upload not available or failed:', blobError?.message);
+
+        // If storage is explicitly unconfigured, check the diagnostic message
+        if (
+          blobError?.message?.includes('storage is not configured') ||
+          blobError?.message?.includes('STORAGE_NOT_CONFIGURED')
+        ) {
+          throw new Error('Study Materials storage is not configured for production.');
+        }
+
+        // Strategy 2: Fallback to server multipart upload endpoint
+        setUploadProgress(45);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('name', documentTitle);
+        formData.append('subjectId', subjectId);
+        formData.append('subjectName', subjectName);
+        formData.append('topic', topic.trim());
+
+        const response = await fetch('/api/study-materials/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          if (data.error === 'LIMIT_REACHED') {
+            onTriggerUpgrade();
+            onClose();
+            return;
+          }
+          if (data.error === 'STORAGE_NOT_CONFIGURED') {
+            throw new Error('Study Materials storage is not configured for production.');
+          }
+          throw new Error(data.message || data.error || 'Unable to save this material. Please try again.');
+        }
+
+        savedMaterial = data;
+      }
+
+      if (!savedMaterial || !savedMaterial.id) {
+        throw new Error('Unable to save this material. Please try again.');
       }
 
       setUploadProgress(100);
-      onUploadSuccess(data);
+      onUploadSuccess(savedMaterial);
       onClose();
     } catch (err: any) {
-      console.error('Upload failed:', err);
-      setErrorMessage(err.message || 'Upload failed. Please check your connection and try again.');
+      console.error('Study material upload failed:', err);
+      setErrorMessage(err.message || 'Unable to save this material. Please try again.');
     } finally {
       setIsUploading(false);
     }
@@ -170,12 +234,12 @@ export default function StudyMaterialUploadModal({
             </div>
             <div>
               <h3 className="text-sm font-black text-[#1D1B20]">Upload Study Material</h3>
-              <p className="text-[10px] text-[#49454F] font-medium">PDF, Word DOC &amp; DOCX files up to 30MB</p>
+              <p className="text-[10px] text-[#49454F] font-medium">PDF, Word, Images, TXT, CSV up to 30MB</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-[#49454F] hover:text-[#1D1B20] hover:bg-[#EADDFF]/50 rounded-full transition-colors"
+            className="p-1.5 text-[#49454F] hover:text-[#1D1B20] hover:bg-[#EADDFF]/50 rounded-full transition-colors cursor-pointer"
             id="close-upload-modal-btn"
           >
             <X className="w-4 h-4" />
@@ -193,7 +257,7 @@ export default function StudyMaterialUploadModal({
             </div>
             <button
               onClick={onTriggerUpgrade}
-              className="text-[10px] font-bold text-[#6750A4] hover:underline uppercase tracking-wide"
+              className="text-[10px] font-bold text-[#6750A4] hover:underline uppercase tracking-wide cursor-pointer"
             >
               Get Unlimited
             </button>
@@ -202,10 +266,10 @@ export default function StudyMaterialUploadModal({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4" id="upload-material-form">
           {errorMessage && (
-            <div className="p-3 text-xs text-[#B3261E] bg-[#FDECEB] border border-[#F9DEDC] rounded-2xl flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="p-3.5 text-xs text-[#B3261E] bg-[#FDECEB] border border-[#F9DEDC] rounded-2xl flex items-start gap-2.5" id="upload-error-alert">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#B3261E]" />
               <div className="flex-1 leading-relaxed">
-                <span>{errorMessage}</span>
+                <span className="font-semibold">{errorMessage}</span>
               </div>
             </div>
           )}
@@ -228,7 +292,7 @@ export default function StudyMaterialUploadModal({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.txt,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/webp,text/plain,text/csv"
               onChange={handleFileInputChange}
               className="hidden"
               id="file-upload-input"
@@ -237,7 +301,11 @@ export default function StudyMaterialUploadModal({
             {file ? (
               <div className="flex items-center gap-3 text-left">
                 <div className="p-3 bg-emerald-100 text-emerald-700 rounded-xl">
-                  <FileText className="w-6 h-6" />
+                  {['jpg', 'jpeg', 'png', 'webp'].includes(file.name.split('.').pop()?.toLowerCase() || '') ? (
+                    <ImageIcon className="w-6 h-6" />
+                  ) : (
+                    <FileText className="w-6 h-6" />
+                  )}
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-[#1D1B20] max-w-xs truncate">{file.name}</h4>
@@ -261,7 +329,7 @@ export default function StudyMaterialUploadModal({
                     Drag &amp; drop your study document, or <span className="text-[#6750A4] underline">browse</span>
                   </p>
                   <p className="text-[10px] text-[#79747E] mt-1 font-mono">
-                    Supports PDF, DOCX, DOC • Max 30MB
+                    Supports PDF, Word, Images, TXT, CSV • Max 30MB
                   </p>
                 </div>
               </div>

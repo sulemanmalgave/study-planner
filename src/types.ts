@@ -42,6 +42,7 @@ export interface UserProfile {
   isMicrosoftLinked?: boolean;
   mobileDevice?: MobileDevice | null;
   aiUsage?: AiUsage;
+  geminiApiKey?: string;
 }
 
 export interface Course {
@@ -138,20 +139,28 @@ export interface AudioLecture {
 
 export interface StudyMaterial {
   id: string;
+  materialId?: string; // Identifier alias
   userId?: string;
   subjectId?: string; // Course ID
   subjectName: string;
   topic?: string; // Chapter / Module / Unit
   name: string; // Document title / display name
+  documentTitle?: string; // Title alias
+  fileName?: string; // File name alias
   originalFileName: string;
-  fileType: 'pdf' | 'doc' | 'docx' | string;
+  fileType: 'pdf' | 'doc' | 'docx' | 'jpg' | 'jpeg' | 'png' | 'webp' | 'txt' | 'csv' | string;
   mimeType: string;
   fileSize: number; // In bytes
-  storagePath: string; // Cloud storage URL or relative API path
+  storagePath: string; // Cloud storage URL or permanent identifier
+  storageKey?: string; // Permanent blob pathname/key
+  storageUrl?: string; // Permanent public cloud storage URL
+  downloadUrl?: string; // Direct download URL
   fileDataUrl?: string; // Offline/local preview cache
   uploadedAt: string; // ISO string
   createdAt: string; // ISO string
   updatedAt: string; // ISO string
+  lastOpenedAt?: string;
+  lastViewedPosition?: number;
 
   // Optional AI metadata - only generated upon explicit user button click
   summary?: string;
