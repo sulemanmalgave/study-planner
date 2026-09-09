@@ -35,7 +35,7 @@
       "userId": "default",
       "courseId": "",
       "subjectName": "Neuroscience",
-      "section": "",
+      "section": "Reproduction",
       "title": "Action Potentials & Synapses",
       "audioDataUrl": "",
       "originalFileName": "recording.mp3",
@@ -51,7 +51,7 @@
       "keyPoints": "Here is your high-yield study guide extracted directly from the lecture transcript:\n\n### **Key Concepts & Numerical Values for Exam Prep**\n\n* **Resting Membrane Potential:** **-70 mV** — The baseline electrical charge of a neuron at rest.\n* **Sodium-Potassium ATPase Pump ($\\text{Na}^+/\\text{K}^+$ Pump):** Maintains the resting potential by actively transporting:\n  * **3 Sodium ions ($\\text{Na}^+$) OUT** of the cell\n  * **2 Potassium ions ($\\text{K}^+$) IN** to the cell\n* **Threshold Potential:** **-55 mV** — The critical charge required to trigger an action potential.\n* **Depolarization:** Initiated when reaching threshold (-55 mV), causing **voltage-gated sodium channels** to open rapidly.\n  * **Sodium ($\\text{Na}^+$) Influx:** Massive flow of $\\text{Na}^+$ ions *into* the cell drives the membrane potential up to **+30 mV**.\n* **Repolarization:** The process of restoring the negative internal charge:\n  * **Sodium Channel Inactivation:** Inactivation gates close the voltage-gated $\\text{Na}^+$ channels.\n  * **Voltage-Gated Potassium Channels:** Open in response to peak depolarization.\n  * **Potassium ($\\text{K}^+$) Efflux:** Flow of $\\text{K}^+$ ions *out* of the cell lowers the membrane potential back down.\n* **Hyperpolarization:** A brief phase immediately following repolarization where the membrane potential temporarily drops **more negative than -70 mV** before returning to rest.",
       "keyPointsGeneratedAt": "2026-09-05T03:12:00.954Z",
       "createdAt": "2026-09-04T06:26:09.912Z",
-      "updatedAt": "2026-09-05T03:12:00.954Z"
+      "updatedAt": "2026-09-09T06:15:54.069Z"
     }
   ],
   "studyMaterials": []
