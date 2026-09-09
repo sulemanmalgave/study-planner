@@ -17,6 +17,8 @@ export function isEntitlementActive(sub?: Subscription | null): boolean {
   if (!sub) return false;
   const isStatusPremium =
     sub.subscriptionStatus === 'premium' ||
+    (sub as any).status === 'active' ||
+    (sub as any).subscriptionStatus === 'active' ||
     sub.plan === 'premium' ||
     sub.plan === 'monthly' ||
     sub.plan === 'yearly' ||

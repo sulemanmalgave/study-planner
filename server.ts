@@ -384,7 +384,14 @@ const pairingSessions = new Map<string, PairingSessionData>();
 // Helper function to evaluate subscription status and expiration
 function isSubscriptionActive(sub: any): boolean {
   if (!sub) return false;
-  const isStatusPremium = sub.subscriptionStatus === 'premium' || sub.plan === 'premium' || sub.plan === 'monthly' || sub.plan === 'yearly' || sub.plan === 'quarterly';
+  const isStatusPremium =
+    sub.subscriptionStatus === 'premium' ||
+    sub.status === 'active' ||
+    sub.subscriptionStatus === 'active' ||
+    sub.plan === 'premium' ||
+    sub.plan === 'monthly' ||
+    sub.plan === 'yearly' ||
+    sub.plan === 'quarterly';
   if (!isStatusPremium) return false;
   if (sub.expiryDate) {
     return new Date(sub.expiryDate).getTime() > Date.now();
@@ -933,6 +940,33 @@ const getEffectiveUser = (req: express.Request): { userId?: string; userEmail?: 
   };
 };
 
+// Authoritative subscription check helper: Matches account-status and client entitlement
+function checkUserHasActiveSubscription(req: express.Request, db?: DatabaseSchema): boolean {
+  try {
+    const { userId, userEmail } = getEffectiveUser(req);
+    // 1. Check ledger
+    const activeEntry = getActiveSubscriptionFromLedger(userId, userEmail);
+    if (activeEntry) return true;
+
+    // 2. Check profile subscription in db
+    const currentDb = db || readDB(userId, userEmail);
+    const sub = currentDb?.profile?.subscription;
+    if (sub && ((sub as any).status === 'active' || sub.subscriptionStatus === 'premium' || isSubscriptionActive(sub))) {
+      return true;
+    }
+
+    // 3. Client forwarded header/body hint (for stateless or serverless environments)
+    const subHeader = req.headers['x-subscription-status'];
+    if (subHeader === 'active' || subHeader === 'premium') return true;
+    if (req.body?.isPremium === true || req.body?.subscription?.status === 'active') return true;
+
+    return false;
+  } catch (err) {
+    console.error('Error checking active subscription:', err);
+    return false;
+  }
+}
+
 // AI Usage Tracking & Limits Check Helper
 function checkAndIncrementAiUsage(db: DatabaseSchema, durationSeconds: number = 0): { allowed: boolean; reason?: string } {
   if (!db.profile.aiUsage) {
@@ -1421,6 +1455,490 @@ app.get('/api/state', (req, res) => {
       res.status(500).json({ error: 'Failed to delete audio lecture' });
     }
   });
+
+  // Helper to safely extract inline audio part from data URL or raw base64
+  function extractAudioInlineData(rawAudio?: string, mimeTypeFallback: string = 'audio/mp3') {
+    if (!rawAudio || typeof rawAudio !== 'string') return null;
+    let cleanBase64 = rawAudio.trim();
+    let mime = mimeTypeFallback || 'audio/mp3';
+    if (cleanBase64.startsWith('data:')) {
+      const m = cleanBase64.match(/^data:([^;]+);base64,(.+)$/);
+      if (m) {
+        mime = m[1];
+        cleanBase64 = m[2];
+      }
+    }
+    if (!cleanBase64) return null;
+    return {
+      inlineData: {
+        mimeType: mime,
+        data: cleanBase64,
+      },
+    };
+  }
+
+  // ==========================================
+  // AI AUDIO LECTURE ENDPOINTS (Gemini Powered)
+  // Summary, Key Points, Study Notes, Transcript
+  // ==========================================
+
+  // AI Audio 1: Transcribe Audio Lecture
+  app.post('/api/ai/audio-lectures/:id/transcript', async (req, res) => {
+    const opKey = `audio:${req.params.id}:transcript`;
+    if (activeAiOperations.has(opKey)) {
+      return res.status(409).json({
+        error: 'OPERATION_IN_PROGRESS',
+        message: 'Audio lecture transcription is already in progress. Please wait a moment.',
+      });
+    }
+
+    activeAiOperations.add(opKey);
+    try {
+      const apiKey = getGeminiApiKey();
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
+        });
+      }
+
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+
+      const isAllowed = checkUserHasActiveSubscription(req, db);
+      if (!isAllowed) {
+        return res.status(403).json({
+          error: 'PRO_FEATURE_REQUIRED',
+          message: 'AI Audio Lecture features require an active Premium subscription.',
+        });
+      }
+
+      let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
+      let targetDb = db;
+      if (!lecture) {
+        const defaultDb = readDB();
+        const found = (defaultDb.audioLectures || []).find((al) => al.id === req.params.id);
+        if (found) {
+          lecture = found;
+          targetDb = defaultDb;
+        }
+      }
+
+      if (!lecture) {
+        return res.status(404).json({ error: 'Audio lecture not found' });
+      }
+
+      const rawAudio = req.body?.audioBase64 || lecture.audioDataUrl;
+      const audioPart = extractAudioInlineData(rawAudio, req.body?.audioMimeType || lecture.fileType);
+
+      if (!audioPart) {
+        return res.status(400).json({
+          error: 'NO_AUDIO_DATA',
+          message: 'Audio data was not found for this lecture. Please ensure the audio file is uploaded or recorded.',
+        });
+      }
+
+      let ai;
+      try {
+        ai = getGeminiClient();
+      } catch (err: any) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
+        });
+      }
+
+      const prompt = `You are a high-accuracy academic transcription specialist. Transcribe this lecture audio cleanly and completely into English (or the spoken language of the lecture). Preserve technical vocabulary, subject definitions, and formula references precisely. Use paragraph breaks to separate thoughts and speakers where appropriate. Do not add conversational commentary, preface, or concluding remarks; output only the transcript text.`;
+
+      const transcript = await generateTextWithGemini(ai, [audioPart, prompt]);
+
+      lecture.transcript = transcript;
+      lecture.transcriptGeneratedAt = new Date().toISOString();
+      lecture.updatedAt = new Date().toISOString();
+
+      const idx = (targetDb.audioLectures || []).findIndex((al) => al.id === lecture.id);
+      if (idx !== -1) {
+        targetDb.audioLectures[idx] = lecture;
+      }
+      writeDB(targetDb, userId, userEmail);
+
+      res.json({
+        success: true,
+        transcript,
+        lecture,
+      });
+    } catch (error: any) {
+      const errData = parseGeminiError(error);
+      console.warn('[Gemini AI] Transcript generation failed for lecture', req.params.id, errData.error, errData.message);
+      res.status(errData.code).json(errData);
+    } finally {
+      activeAiOperations.delete(opKey);
+    }
+  });
+
+  // AI Audio 2: Generate Lecture Summary
+  app.post('/api/ai/audio-lectures/:id/summary', async (req, res) => {
+    const opKey = `audio:${req.params.id}:summary`;
+    if (activeAiOperations.has(opKey)) {
+      return res.status(409).json({
+        error: 'OPERATION_IN_PROGRESS',
+        message: 'AI Lecture Summary is already in progress. Please wait a moment.',
+      });
+    }
+
+    activeAiOperations.add(opKey);
+    try {
+      const apiKey = getGeminiApiKey();
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
+        });
+      }
+
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+
+      const isAllowed = checkUserHasActiveSubscription(req, db);
+      if (!isAllowed) {
+        return res.status(403).json({
+          error: 'PRO_FEATURE_REQUIRED',
+          message: 'AI Audio Lecture features require an active Premium subscription.',
+        });
+      }
+
+      let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
+      let targetDb = db;
+      if (!lecture) {
+        const defaultDb = readDB();
+        const found = (defaultDb.audioLectures || []).find((al) => al.id === req.params.id);
+        if (found) {
+          lecture = found;
+          targetDb = defaultDb;
+        }
+      }
+
+      if (!lecture) {
+        return res.status(404).json({ error: 'Audio lecture not found' });
+      }
+
+      let ai;
+      try {
+        ai = getGeminiClient();
+      } catch (err: any) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
+        });
+      }
+
+      const sourceTranscript = req.body?.transcript || lecture.transcript;
+      const rawAudio = req.body?.audioBase64 || lecture.audioDataUrl;
+      const audioPart = extractAudioInlineData(rawAudio, req.body?.audioMimeType || lecture.fileType);
+
+      let summary = '';
+      if (sourceTranscript && sourceTranscript.trim().length > 15) {
+        summary = await generateTextWithGemini(
+          ai,
+          `You are an expert academic tutor. Generate a comprehensive, high-yield study summary for this lecture:
+Title: "${lecture.title}"
+Subject / Course: "${lecture.subjectName}"
+Section / Topic: "${lecture.section || 'General'}"
+
+LECTURE TRANSCRIPT:
+${sourceTranscript}
+
+Structure the summary cleanly using Markdown headers:
+### 1. Lecture Overview & Primary Objectives
+### 2. Core Themes & Theoretical Framework
+### 3. Key Concepts & Detailed Explanations
+### 4. Practical Examples & Real-world Applications
+### 5. High-Yield Revision Takeaways
+
+Ensure clarity, rigor, and actionable revision value for students.`
+        );
+      } else if (audioPart) {
+        summary = await generateTextWithGemini(ai, [
+          audioPart,
+          `You are an expert academic tutor. Listen to this lecture audio titled "${lecture.title}" for subject "${lecture.subjectName}" (Section: "${lecture.section || 'General'}"). Generate a comprehensive study summary with:
+### 1. Lecture Overview & Primary Objectives
+### 2. Core Themes & Theoretical Framework
+### 3. Key Concepts & Detailed Explanations
+### 4. Practical Examples & Real-world Applications
+### 5. High-Yield Revision Takeaways
+
+Structure cleanly in Markdown.`
+        ]);
+      } else {
+        return res.status(400).json({
+          error: 'NO_SOURCE_DATA',
+          message: 'Unable to generate summary without lecture audio or transcript. Please generate a transcript or attach audio first.',
+        });
+      }
+
+      lecture.summary = summary;
+      lecture.summaryGeneratedAt = new Date().toISOString();
+      lecture.updatedAt = new Date().toISOString();
+
+      const idx = (targetDb.audioLectures || []).findIndex((al) => al.id === lecture.id);
+      if (idx !== -1) {
+        targetDb.audioLectures[idx] = lecture;
+      }
+      writeDB(targetDb, userId, userEmail);
+
+      res.json({
+        success: true,
+        summary,
+        lecture,
+      });
+    } catch (error: any) {
+      const errData = parseGeminiError(error);
+      console.warn('[Gemini AI] Summary generation failed for lecture', req.params.id, errData.error, errData.message);
+      res.status(errData.code).json(errData);
+    } finally {
+      activeAiOperations.delete(opKey);
+    }
+  });
+
+  // AI Audio 3: Extract Key Points & Exam Takeaways
+  app.post('/api/ai/audio-lectures/:id/key-points', async (req, res) => {
+    const opKey = `audio:${req.params.id}:key-points`;
+    if (activeAiOperations.has(opKey)) {
+      return res.status(409).json({
+        error: 'OPERATION_IN_PROGRESS',
+        message: 'AI Key Points extraction is already in progress. Please wait a moment.',
+      });
+    }
+
+    activeAiOperations.add(opKey);
+    try {
+      const apiKey = getGeminiApiKey();
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
+        });
+      }
+
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+
+      const isAllowed = checkUserHasActiveSubscription(req, db);
+      if (!isAllowed) {
+        return res.status(403).json({
+          error: 'PRO_FEATURE_REQUIRED',
+          message: 'AI Audio Lecture features require an active Premium subscription.',
+        });
+      }
+
+      let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
+      let targetDb = db;
+      if (!lecture) {
+        const defaultDb = readDB();
+        const found = (defaultDb.audioLectures || []).find((al) => al.id === req.params.id);
+        if (found) {
+          lecture = found;
+          targetDb = defaultDb;
+        }
+      }
+
+      if (!lecture) {
+        return res.status(404).json({ error: 'Audio lecture not found' });
+      }
+
+      let ai;
+      try {
+        ai = getGeminiClient();
+      } catch (err: any) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
+        });
+      }
+
+      const sourceTranscript = req.body?.transcript || lecture.transcript;
+      const rawAudio = req.body?.audioBase64 || lecture.audioDataUrl;
+      const audioPart = extractAudioInlineData(rawAudio, req.body?.audioMimeType || lecture.fileType);
+
+      let keyPoints = '';
+      if (sourceTranscript && sourceTranscript.trim().length > 15) {
+        keyPoints = await generateTextWithGemini(
+          ai,
+          `You are an academic exam prep tutor. Extract high-yield key takeaways, core definitions, and exam-critical concepts from this lecture:
+Title: "${lecture.title}"
+Subject: "${lecture.subjectName}"
+Section / Topic: "${lecture.section || 'General'}"
+
+LECTURE TRANSCRIPT:
+${sourceTranscript}
+
+Format cleanly in Markdown with bullet points:
+### 📌 Critical Exam Takeaways
+- High-yield concepts frequently tested on exams.
+### 🔑 Essential Terms & Definitions
+- **[Concept/Term]**: Precise academic definition.
+### ⚠️ Common Pitfalls & Clarifications
+- Crucial distinctions, tricky exceptions, and memory aids.`
+        );
+      } else if (audioPart) {
+        keyPoints = await generateTextWithGemini(ai, [
+          audioPart,
+          `You are an academic exam prep tutor. Extract high-yield key takeaways, core definitions, and exam-critical concepts from this lecture audio titled "${lecture.title}" for subject "${lecture.subjectName}".
+Format cleanly in Markdown:
+### 📌 Critical Exam Takeaways
+### 🔑 Essential Terms & Definitions
+### ⚠️ Common Pitfalls & Clarifications`
+        ]);
+      } else {
+        return res.status(400).json({
+          error: 'NO_SOURCE_DATA',
+          message: 'Unable to extract key points without lecture audio or transcript. Please generate a transcript or attach audio first.',
+        });
+      }
+
+      lecture.keyPoints = keyPoints;
+      lecture.keyPointsGeneratedAt = new Date().toISOString();
+      lecture.updatedAt = new Date().toISOString();
+
+      const idx = (targetDb.audioLectures || []).findIndex((al) => al.id === lecture.id);
+      if (idx !== -1) {
+        targetDb.audioLectures[idx] = lecture;
+      }
+      writeDB(targetDb, userId, userEmail);
+
+      res.json({
+        success: true,
+        keyPoints,
+        lecture,
+      });
+    } catch (error: any) {
+      const errData = parseGeminiError(error);
+      console.warn('[Gemini AI] Key points extraction failed for lecture', req.params.id, errData.error, errData.message);
+      res.status(errData.code).json(errData);
+    } finally {
+      activeAiOperations.delete(opKey);
+    }
+  });
+
+  // AI Audio 4: Generate Structured Study Notes
+  const handleAudioStudyNotesRoute = async (req: express.Request, res: express.Response) => {
+    const opKey = `audio:${req.params.id}:study-notes`;
+    if (activeAiOperations.has(opKey)) {
+      return res.status(409).json({
+        error: 'OPERATION_IN_PROGRESS',
+        message: 'AI Study Notes generation is already in progress. Please wait a moment.',
+      });
+    }
+
+    activeAiOperations.add(opKey);
+    try {
+      const apiKey = getGeminiApiKey();
+      if (!apiKey) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
+        });
+      }
+
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+
+      const isAllowed = checkUserHasActiveSubscription(req, db);
+      if (!isAllowed) {
+        return res.status(403).json({
+          error: 'PRO_FEATURE_REQUIRED',
+          message: 'AI Audio Lecture features require an active Premium subscription.',
+        });
+      }
+
+      let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
+      let targetDb = db;
+      if (!lecture) {
+        const defaultDb = readDB();
+        const found = (defaultDb.audioLectures || []).find((al) => al.id === req.params.id);
+        if (found) {
+          lecture = found;
+          targetDb = defaultDb;
+        }
+      }
+
+      if (!lecture) {
+        return res.status(404).json({ error: 'Audio lecture not found' });
+      }
+
+      let ai;
+      try {
+        ai = getGeminiClient();
+      } catch (err: any) {
+        return res.status(503).json({
+          error: 'GEMINI_NOT_CONFIGURED',
+          message: 'Gemini API key is not configured in the production environment.',
+        });
+      }
+
+      const sourceTranscript = req.body?.transcript || lecture.transcript;
+      const rawAudio = req.body?.audioBase64 || lecture.audioDataUrl;
+      const audioPart = extractAudioInlineData(rawAudio, req.body?.audioMimeType || lecture.fileType);
+
+      let studyNotes = '';
+      if (sourceTranscript && sourceTranscript.trim().length > 15) {
+        studyNotes = await generateTextWithGemini(
+          ai,
+          `You are an elite study strategist. Generate structured, thorough Cornell-style study notes based on this lecture:
+Title: "${lecture.title}"
+Subject: "${lecture.subjectName}"
+Section / Topic: "${lecture.section || 'General'}"
+
+LECTURE TRANSCRIPT:
+${sourceTranscript}
+
+Structure in clean Markdown:
+# ${lecture.title} — Comprehensive Study Notes
+## 🎯 Core Learning Objectives
+## 📖 Detailed Notes & Concept Breakdown
+## ❓ Cue Column / Self-Test Review Questions
+## 📝 Summary & Key Formulations`
+        );
+      } else if (audioPart) {
+        studyNotes = await generateTextWithGemini(ai, [
+          audioPart,
+          `You are an elite study strategist. Generate structured Cornell-style study notes based on this audio lecture titled "${lecture.title}" for subject "${lecture.subjectName}".
+Structure in clean Markdown with Core Learning Objectives, Detailed Notes & Concept Breakdown, Review Questions, and Summary.`
+        ]);
+      } else {
+        return res.status(400).json({
+          error: 'NO_SOURCE_DATA',
+          message: 'Unable to generate study notes without lecture audio or transcript. Please generate a transcript or attach audio first.',
+        });
+      }
+
+      lecture.studyNotes = studyNotes;
+      lecture.studyNotesGeneratedAt = new Date().toISOString();
+      lecture.updatedAt = new Date().toISOString();
+
+      const idx = (targetDb.audioLectures || []).findIndex((al) => al.id === lecture.id);
+      if (idx !== -1) {
+        targetDb.audioLectures[idx] = lecture;
+      }
+      writeDB(targetDb, userId, userEmail);
+
+      res.json({
+        success: true,
+        studyNotes,
+        notes: studyNotes,
+        lecture,
+      });
+    } catch (error: any) {
+      const errData = parseGeminiError(error);
+      console.warn('[Gemini AI] Study notes generation failed for lecture', req.params.id, errData.error, errData.message);
+      res.status(errData.code).json(errData);
+    } finally {
+      activeAiOperations.delete(opKey);
+    }
+  };
+
+  app.post('/api/ai/audio-lectures/:id/study-notes', handleAudioStudyNotesRoute);
+  app.post('/api/ai/audio-lectures/:id/notes', handleAudioStudyNotesRoute);
 
   // AI 5: Get AI Usage status
   app.get('/api/ai/usage', (req, res) => {

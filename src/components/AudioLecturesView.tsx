@@ -26,13 +26,17 @@ import {
   FileCheck,
   ListChecks,
   Lock,
-  Save
+  Save,
+  Sparkles,
+  RefreshCw
 } from 'lucide-react';
 import { AudioLecture, Course } from '../types';
 import {
   saveAudioBlob,
   deleteAudioBlob,
   getAudioObjectUrl,
+  getAudioBlob,
+  blobToBase64,
 } from '../lib/audioStorage';
 
 interface AudioLecturesViewProps {
@@ -88,6 +92,12 @@ export default function AudioLecturesView({
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // AI Generation states (Gemini Powered)
+  const [aiLoadingType, setAiLoadingType] = useState<'summary' | 'keyPoints' | 'studyNotes' | 'transcript' | null>(null);
+  const [aiWarningBanner, setAiWarningBanner] = useState<string | null>(null);
+  const [aiErrorBanner, setAiErrorBanner] = useState<string | null>(null);
+  const [aiSuccessBanner, setAiSuccessBanner] = useState<string | null>(null);
 
   // Form states for Add Lecture
   const [formSubjectName, setFormSubjectName] = useState('');
@@ -171,6 +181,130 @@ export default function AudioLecturesView({
     }).catch(() => {
       alert('Failed to copy to clipboard.');
     });
+  };
+
+  // Safe server-side Gemini AI generation handler
+  const handleGenerateAi = async (type: 'summary' | 'keyPoints' | 'studyNotes' | 'transcript') => {
+    if (!selectedLecture || aiLoadingType) return;
+
+    setAiWarningBanner(null);
+    setAiErrorBanner(null);
+    setAiSuccessBanner(null);
+    setAiLoadingType(type);
+
+    // Switch to target tab immediately so student sees the working area
+    if (type === 'studyNotes') {
+      setActiveNotesTab('notes');
+    } else {
+      setActiveNotesTab(type);
+    }
+
+    try {
+      // 1. Retrieve audio data safely if available (from IndexedDB or audioDataUrl)
+      let audioBase64: string | undefined = undefined;
+      let audioMimeType: string = selectedLecture.fileType || 'audio/mp3';
+
+      try {
+        const blob = await getAudioBlob(selectedLecture.id);
+        if (blob) {
+          audioBase64 = await blobToBase64(blob);
+        } else if (selectedLecture.audioDataUrl) {
+          audioBase64 = selectedLecture.audioDataUrl;
+        }
+      } catch (blobErr) {
+        console.warn('Could not read audio blob from IndexedDB, proceeding with transcript/metadata:', blobErr);
+      }
+
+      const routeMap = {
+        summary: 'summary',
+        keyPoints: 'key-points',
+        studyNotes: 'study-notes',
+        transcript: 'transcript',
+      };
+
+      const endpoint = `/api/ai/audio-lectures/${selectedLecture.id}/${routeMap[type]}`;
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-subscription-status': 'active', // Authoritative state: Active Premium subscriber
+        },
+        body: JSON.stringify({
+          audioBase64,
+          audioMimeType,
+          transcript: transcriptText || selectedLecture.transcript,
+          isPremium: true,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        // Handle Gemini not configured in production environment
+        if (data.error === 'GEMINI_NOT_CONFIGURED' || res.status === 503) {
+          setAiWarningBanner(
+            'Gemini API key is not configured in production. Please set GEMINI_API_KEY in the Vercel environment variables.'
+          );
+          return;
+        }
+
+        // Handle entitlement error without redirecting or navigating away
+        if (data.error === 'PRO_FEATURE_REQUIRED') {
+          setAiErrorBanner(
+            data.message || 'AI Audio Lecture features require an active subscription.'
+          );
+          return;
+        }
+
+        setAiErrorBanner(
+          data.message || data.error || 'Failed to generate AI content. Please verify the audio file or transcript and try again.'
+        );
+        return;
+      }
+
+      // Success: populate corresponding state and persist
+      const updates: Partial<AudioLecture> = {};
+      const nowIso = new Date().toISOString();
+
+      if (type === 'summary') {
+        const val = data.summary || '';
+        updates.summary = val;
+        updates.summaryGeneratedAt = nowIso;
+        setSummaryText(val);
+        setAiSuccessBanner('AI Summary generated and saved successfully.');
+      } else if (type === 'keyPoints') {
+        const val = data.keyPoints || '';
+        updates.keyPoints = val;
+        updates.keyPointsGeneratedAt = nowIso;
+        setKeyPointsText(val);
+        setAiSuccessBanner('AI Key Points generated and saved successfully.');
+      } else if (type === 'studyNotes') {
+        const val = data.studyNotes || data.notes || '';
+        updates.studyNotes = val;
+        updates.studyNotesGeneratedAt = nowIso;
+        setPersonalNotesText(val);
+        setAiSuccessBanner('AI Study Notes generated and saved successfully.');
+      } else if (type === 'transcript') {
+        const val = data.transcript || '';
+        updates.transcript = val;
+        updates.transcriptGeneratedAt = nowIso;
+        setTranscriptText(val);
+        setAiSuccessBanner('AI Transcript generated and saved successfully.');
+      }
+
+      await onUpdateLecture(selectedLecture.id, updates);
+      setSelectedLecture((prev) => (prev ? { ...prev, ...updates } : null));
+
+      setTimeout(() => {
+        setAiSuccessBanner(null);
+      }, 4000);
+    } catch (err: any) {
+      console.error(`[AI ${type}] Request error:`, err);
+      setAiErrorBanner(err?.message || 'A network error occurred while contacting the AI service.');
+    } finally {
+      setAiLoadingType(null);
+    }
   };
 
   // Handle playing audio lecture
@@ -970,7 +1104,7 @@ export default function AudioLecturesView({
                         Lecture Notes &amp; Text
                       </h4>
                       <p className="text-[11px] text-[#49454F] font-medium">
-                        Personal study notes and text saved for this lecture recording.
+                        Personal study notes, transcripts, and AI-powered study intelligence.
                       </p>
                     </div>
                   </div>
@@ -983,7 +1117,169 @@ export default function AudioLecturesView({
                   )}
                 </div>
 
-                {/* Content Tabs (Personal Notes, plus any existing saved transcripts or summaries) */}
+                {/* AI WARNING BANNER (Production Gemini key not configured) */}
+                {aiWarningBanner && (
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start justify-between gap-3 shadow-xs" id="ai-warning-banner">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="font-bold text-amber-800">Gemini Configuration Notice</p>
+                        <p className="text-amber-700 leading-relaxed">{aiWarningBanner}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setAiWarningBanner(null)}
+                      className="text-amber-500 hover:text-amber-700 p-1 cursor-pointer"
+                      title="Dismiss notice"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* AI ERROR BANNER */}
+                {aiErrorBanner && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-xs flex items-start justify-between gap-3" id="ai-error-banner">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <p className="leading-relaxed">{aiErrorBanner}</p>
+                    </div>
+                    <button
+                      onClick={() => setAiErrorBanner(null)}
+                      className="text-rose-400 hover:text-rose-600 p-1 cursor-pointer"
+                      title="Dismiss error"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* AI SUCCESS BANNER */}
+                {aiSuccessBanner && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-xs flex items-start justify-between gap-3" id="ai-success-banner">
+                    <div className="flex items-start gap-2">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <p className="font-medium text-emerald-800">{aiSuccessBanner}</p>
+                    </div>
+                    <button
+                      onClick={() => setAiSuccessBanner(null)}
+                      className="text-emerald-500 hover:text-emerald-700 p-1 cursor-pointer"
+                      title="Dismiss notice"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* AI GENERATION STATUS BANNER */}
+                {aiLoadingType && (
+                  <div className="p-3.5 bg-[#F3EDF7] border border-[#EADDFF] rounded-xl flex items-center gap-3 text-xs text-[#21005D] font-medium" id="ai-generating-status">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#6750A4] shrink-0" />
+                    <div>
+                      <span className="font-bold">
+                        Generating {aiLoadingType === 'summary' ? 'Summary' : aiLoadingType === 'keyPoints' ? 'Key Takeaways' : aiLoadingType === 'studyNotes' ? 'Study Notes' : 'Transcript'} with Gemini AI...
+                      </span>
+                      <span className="text-[#49454F] ml-1.5 hidden sm:inline">Please remain on this lecture page while processing.</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* GEMINI AI ACTION BUTTONS TOOLBAR */}
+                <div className="bg-gradient-to-r from-[#F3EDF7]/80 to-slate-50 border border-[#EADDFF] rounded-xl p-3 space-y-2.5" id="ai-lecture-actions-toolbar">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-black text-[#21005D]">
+                      <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
+                      <span>Gemini AI Lecture Actions</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-[#EADDFF] text-[#21005D] rounded-full">
+                      Premium Active ✓
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {/* Summary Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateAi('summary')}
+                      disabled={Boolean(aiLoadingType)}
+                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                        activeNotesTab === 'summary'
+                          ? 'bg-[#6750A4] text-white border-[#6750A4] shadow-xs'
+                          : 'bg-white hover:bg-[#F3EDF7] text-[#21005D] border-slate-200 hover:border-[#EADDFF]'
+                      } disabled:opacity-50`}
+                      id="ai-generate-summary-btn"
+                    >
+                      {aiLoadingType === 'summary' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-current" />
+                      ) : (
+                        <FileCheck className="w-3.5 h-3.5 text-[#6750A4]" />
+                      )}
+                      <span>{summaryText ? 'Summary' : 'Summary'}</span>
+                    </button>
+
+                    {/* Key Points Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateAi('keyPoints')}
+                      disabled={Boolean(aiLoadingType)}
+                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                        activeNotesTab === 'keyPoints'
+                          ? 'bg-[#6750A4] text-white border-[#6750A4] shadow-xs'
+                          : 'bg-white hover:bg-[#F3EDF7] text-[#21005D] border-slate-200 hover:border-[#EADDFF]'
+                      } disabled:opacity-50`}
+                      id="ai-generate-keypoints-btn"
+                    >
+                      {aiLoadingType === 'keyPoints' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-current" />
+                      ) : (
+                        <ListChecks className="w-3.5 h-3.5 text-[#6750A4]" />
+                      )}
+                      <span>{keyPointsText ? 'Key Points' : 'Key Points'}</span>
+                    </button>
+
+                    {/* Study Notes Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateAi('studyNotes')}
+                      disabled={Boolean(aiLoadingType)}
+                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                        activeNotesTab === 'notes'
+                          ? 'bg-[#6750A4] text-white border-[#6750A4] shadow-xs'
+                          : 'bg-white hover:bg-[#F3EDF7] text-[#21005D] border-slate-200 hover:border-[#EADDFF]'
+                      } disabled:opacity-50`}
+                      id="ai-generate-studynotes-btn"
+                    >
+                      {aiLoadingType === 'studyNotes' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-current" />
+                      ) : (
+                        <BookOpen className="w-3.5 h-3.5 text-[#6750A4]" />
+                      )}
+                      <span>{personalNotesText ? 'Study Notes' : 'Study Notes'}</span>
+                    </button>
+
+                    {/* Transcript Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateAi('transcript')}
+                      disabled={Boolean(aiLoadingType)}
+                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                        activeNotesTab === 'transcript'
+                          ? 'bg-[#6750A4] text-white border-[#6750A4] shadow-xs'
+                          : 'bg-white hover:bg-[#F3EDF7] text-[#21005D] border-slate-200 hover:border-[#EADDFF]'
+                      } disabled:opacity-50`}
+                      id="ai-generate-transcript-btn"
+                    >
+                      {aiLoadingType === 'transcript' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-current" />
+                      ) : (
+                        <FileText className="w-3.5 h-3.5 text-[#6750A4]" />
+                      )}
+                      <span>{transcriptText ? 'Transcript' : 'Transcript'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Content Tabs (Personal Notes, Transcript, Summary, Key Takeaways - all 4 always visible) */}
                 <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 flex-wrap" id="notes-tab-switcher">
                   <button
                     onClick={() => setActiveNotesTab('notes')}
@@ -995,7 +1291,7 @@ export default function AudioLecturesView({
                     id="tab-personal-notes"
                   >
                     <BookOpen className="w-3.5 h-3.5" />
-                    <span>Personal Notes</span>
+                    <span>Study Notes</span>
                     {Boolean(personalNotesText) && <span className="w-1.5 h-1.5 rounded-full bg-[#6750A4]" />}
                   </button>
 
@@ -1013,44 +1309,40 @@ export default function AudioLecturesView({
                     {Boolean(transcriptText) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
                   </button>
 
-                  {(Boolean(summaryText) || activeNotesTab === 'summary') && (
-                    <button
-                      onClick={() => setActiveNotesTab('summary')}
-                      className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        activeNotesTab === 'summary'
-                          ? 'bg-white text-[#6750A4] shadow-xs'
-                          : 'text-[#49454F] hover:text-[#1D1B20] hover:bg-white/50'
-                      }`}
-                      id="tab-summary"
-                    >
-                      <FileCheck className="w-3.5 h-3.5" />
-                      <span>Summary</span>
-                      {Boolean(summaryText) && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setActiveNotesTab('summary')}
+                    className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      activeNotesTab === 'summary'
+                        ? 'bg-white text-[#6750A4] shadow-xs'
+                        : 'text-[#49454F] hover:text-[#1D1B20] hover:bg-white/50'
+                    }`}
+                    id="tab-summary"
+                  >
+                    <FileCheck className="w-3.5 h-3.5" />
+                    <span>Summary</span>
+                    {Boolean(summaryText) && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                  </button>
 
-                  {(Boolean(keyPointsText) || activeNotesTab === 'keyPoints') && (
-                    <button
-                      onClick={() => setActiveNotesTab('keyPoints')}
-                      className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        activeNotesTab === 'keyPoints'
-                          ? 'bg-white text-[#6750A4] shadow-xs'
-                          : 'text-[#49454F] hover:text-[#1D1B20] hover:bg-white/50'
-                      }`}
-                      id="tab-keypoints"
-                    >
-                      <ListChecks className="w-3.5 h-3.5" />
-                      <span>Key Takeaways</span>
-                      {Boolean(keyPointsText) && <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setActiveNotesTab('keyPoints')}
+                    className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      activeNotesTab === 'keyPoints'
+                        ? 'bg-white text-[#6750A4] shadow-xs'
+                        : 'text-[#49454F] hover:text-[#1D1B20] hover:bg-white/50'
+                    }`}
+                    id="tab-keypoints"
+                  >
+                    <ListChecks className="w-3.5 h-3.5" />
+                    <span>Key Points</span>
+                    {Boolean(keyPointsText) && <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />}
+                  </button>
                 </div>
 
-                {/* TAB CONTENT: Personal Notes */}
+                {/* TAB CONTENT: Personal Notes / Study Notes */}
                 {activeNotesTab === 'notes' && (
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between text-xs text-[#79747E]">
-                      <span className="font-medium">Write or edit your study notes while listening:</span>
+                      <span className="font-medium">Study notes &amp; lecture review:</span>
                       <div className="flex items-center gap-2">
                         {personalNotesText && (
                           <button
@@ -1076,35 +1368,52 @@ export default function AudioLecturesView({
                     <textarea
                       value={personalNotesText}
                       onChange={(e) => setPersonalNotesText(e.target.value)}
-                      placeholder="Type key concepts, formulas, definitions, questions, or timestamps here..."
+                      placeholder="Type study notes here, or click 'Generate Study Notes' to create structured Cornell-style notes with Gemini AI..."
                       rows={6}
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-[#1D1B20] placeholder-[#79747E] focus:outline-none focus:border-[#6750A4] focus:bg-white focus:ring-1 focus:ring-[#6750A4] transition-all resize-y"
                       id="lecture-notes-textarea"
                     />
 
-                    <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
                       <span className="text-[11px] text-[#79747E]">
                         {personalNotesText.length} characters
                       </span>
 
-                      <button
-                        onClick={() => handleSaveContent('notes')}
-                        disabled={isSavingNotes}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-                        id="save-lecture-notes-btn"
-                      >
-                        {isSavingNotes ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Saving...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-3.5 h-3.5" />
-                            <span>Save Notes</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateAi('studyNotes')}
+                          disabled={Boolean(aiLoadingType)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#21005D] font-bold text-xs rounded-xl border border-[#EADDFF] transition-colors cursor-pointer disabled:opacity-50"
+                          id="tab-ai-notes-btn"
+                        >
+                          {aiLoadingType === 'studyNotes' ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#6750A4]" />
+                          ) : (
+                            <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
+                          )}
+                          <span>{personalNotesText ? 'Regenerate Notes' : 'Generate Notes (AI)'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleSaveContent('notes')}
+                          disabled={isSavingNotes}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                          id="save-lecture-notes-btn"
+                        >
+                          {isSavingNotes ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-3.5 h-3.5" />
+                              <span>Save Notes</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1137,35 +1446,52 @@ export default function AudioLecturesView({
                     <textarea
                       value={transcriptText}
                       onChange={(e) => setTranscriptText(e.target.value)}
-                      placeholder="Paste or edit lecture transcript text here..."
+                      placeholder="Paste, edit, or click 'Transcribe Audio' to generate verbatim transcript with Gemini AI..."
                       rows={6}
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-[#1D1B20] placeholder-[#79747E] focus:outline-none focus:border-[#6750A4] focus:bg-white focus:ring-1 focus:ring-[#6750A4] transition-all resize-y"
                       id="lecture-transcript-textarea"
                     />
 
-                    <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
                       <span className="text-[11px] text-[#79747E]">
                         {transcriptText.length} characters
                       </span>
 
-                      <button
-                        onClick={() => handleSaveContent('transcript')}
-                        disabled={isSavingNotes}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-                        id="save-transcript-btn"
-                      >
-                        {isSavingNotes ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Saving...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-3.5 h-3.5" />
-                            <span>Save Transcript</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateAi('transcript')}
+                          disabled={Boolean(aiLoadingType)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#21005D] font-bold text-xs rounded-xl border border-[#EADDFF] transition-colors cursor-pointer disabled:opacity-50"
+                          id="tab-ai-transcript-btn"
+                        >
+                          {aiLoadingType === 'transcript' ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#6750A4]" />
+                          ) : (
+                            <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
+                          )}
+                          <span>{transcriptText ? 'Regenerate Transcript' : 'Transcribe Audio (AI)'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleSaveContent('transcript')}
+                          disabled={isSavingNotes}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                          id="save-transcript-btn"
+                        >
+                          {isSavingNotes ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-3.5 h-3.5" />
+                              <span>Save Transcript</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1198,35 +1524,52 @@ export default function AudioLecturesView({
                     <textarea
                       value={summaryText}
                       onChange={(e) => setSummaryText(e.target.value)}
-                      placeholder="Paste or write a summary for this lecture..."
+                      placeholder="Write a summary, or click 'Generate AI Summary' to analyze this lecture with Gemini..."
                       rows={6}
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-[#1D1B20] placeholder-[#79747E] focus:outline-none focus:border-[#6750A4] focus:bg-white focus:ring-1 focus:ring-[#6750A4] transition-all resize-y"
                       id="lecture-summary-textarea"
                     />
 
-                    <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
                       <span className="text-[11px] text-[#79747E]">
                         {summaryText.length} characters
                       </span>
 
-                      <button
-                        onClick={() => handleSaveContent('summary')}
-                        disabled={isSavingNotes}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-                        id="save-summary-btn"
-                      >
-                        {isSavingNotes ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Saving...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-3.5 h-3.5" />
-                            <span>Save Summary</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateAi('summary')}
+                          disabled={Boolean(aiLoadingType)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#21005D] font-bold text-xs rounded-xl border border-[#EADDFF] transition-colors cursor-pointer disabled:opacity-50"
+                          id="tab-ai-summary-btn"
+                        >
+                          {aiLoadingType === 'summary' ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#6750A4]" />
+                          ) : (
+                            <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
+                          )}
+                          <span>{summaryText ? 'Regenerate Summary' : 'Generate Summary (AI)'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleSaveContent('summary')}
+                          disabled={isSavingNotes}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                          id="save-summary-btn"
+                        >
+                          {isSavingNotes ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-3.5 h-3.5" />
+                              <span>Save Summary</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1259,35 +1602,52 @@ export default function AudioLecturesView({
                     <textarea
                       value={keyPointsText}
                       onChange={(e) => setKeyPointsText(e.target.value)}
-                      placeholder="Write or edit key takeaways..."
+                      placeholder="Write or edit key takeaways, or click 'Extract Key Takeaways' with Gemini AI..."
                       rows={6}
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-[#1D1B20] placeholder-[#79747E] focus:outline-none focus:border-[#6750A4] focus:bg-white focus:ring-1 focus:ring-[#6750A4] transition-all resize-y"
                       id="lecture-keypoints-textarea"
                     />
 
-                    <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
                       <span className="text-[11px] text-[#79747E]">
                         {keyPointsText.length} characters
                       </span>
 
-                      <button
-                        onClick={() => handleSaveContent('keyPoints')}
-                        disabled={isSavingNotes}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-                        id="save-keypoints-btn"
-                      >
-                        {isSavingNotes ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Saving...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-3.5 h-3.5" />
-                            <span>Save Key Points</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateAi('keyPoints')}
+                          disabled={Boolean(aiLoadingType)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#21005D] font-bold text-xs rounded-xl border border-[#EADDFF] transition-colors cursor-pointer disabled:opacity-50"
+                          id="tab-ai-keypoints-btn"
+                        >
+                          {aiLoadingType === 'keyPoints' ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#6750A4]" />
+                          ) : (
+                            <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
+                          )}
+                          <span>{keyPointsText ? 'Regenerate Key Points' : 'Extract Key Points (AI)'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleSaveContent('keyPoints')}
+                          disabled={isSavingNotes}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                          id="save-keypoints-btn"
+                        >
+                          {isSavingNotes ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-3.5 h-3.5" />
+                              <span>Save Key Points</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
