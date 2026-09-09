@@ -128,6 +128,7 @@ export interface AudioLecture {
   transcript?: string;
   transcriptGeneratedAt?: string;
   studyNotes?: string;
+  notes?: string;
   studyNotesGeneratedAt?: string;
   summary?: string;
   summaryGeneratedAt?: string;

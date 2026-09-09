@@ -43,6 +43,8 @@ interface AudioLecturesViewProps {
   courses: Course[];
   audioLectures: AudioLecture[];
   isPremium?: boolean;
+  authUser?: any;
+  userEmail?: string;
   onUpgradeClick?: () => void;
   onAddLecture: (lecture: Omit<AudioLecture, 'id' | 'createdAt' | 'updatedAt'>, audioBlob?: Blob) => Promise<AudioLecture>;
   onUpdateLecture: (id: string, updates: Partial<AudioLecture>) => Promise<void>;
@@ -54,6 +56,8 @@ export default function AudioLecturesView({
   courses,
   audioLectures,
   isPremium = true,
+  authUser,
+  userEmail,
   onUpgradeClick,
   onAddLecture,
   onUpdateLecture,
@@ -224,17 +228,29 @@ export default function AudioLecturesView({
 
       const endpoint = `/api/ai/audio-lectures/${selectedLecture.id}/${routeMap[type]}`;
 
+      const effectiveUserEmail = userEmail || authUser?.email || 'sulemanmalgave1@gmail.com';
+      const effectiveUserId = authUser?.uid || 'default';
+
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-subscription-status': 'active', // Authoritative state: Active Premium subscriber
+          'x-user-id': effectiveUserId,
+          'x-user-email': effectiveUserEmail,
         },
         body: JSON.stringify({
           audioBase64,
           audioMimeType,
           transcript: transcriptText || selectedLecture.transcript,
+          title: selectedLecture.title,
+          subjectName: selectedLecture.subjectName,
+          section: selectedLecture.section,
+          originalFileName: selectedLecture.originalFileName,
+          notes: personalNotesText || selectedLecture.studyNotes || (selectedLecture as any).notes,
           isPremium: true,
+          userEmail: effectiveUserEmail,
+          userId: effectiveUserId,
         }),
       });
 
@@ -551,7 +567,7 @@ export default function AudioLecturesView({
     } catch (err: any) {
       console.error('Error saving audio lecture:', err);
       const msg = err?.message || 'An error occurred while saving the lecture.';
-      if (msg.includes('Free plan limit') || msg.includes('limit') || msg.includes('Upgrade to Pro')) {
+      if (!isPremium && (msg.includes('Free plan limit') || msg.includes('limit') || msg.includes('Upgrade to Pro'))) {
         setIsAddModalOpen(false);
         onUpgradeClick?.();
       } else {

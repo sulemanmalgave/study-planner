@@ -1181,6 +1181,8 @@ export default function App() {
               courses={courses}
               audioLectures={audioLectures}
               isPremium={isPremium}
+              authUser={authUser}
+              userEmail={authUser?.email || profile?.email}
               onUpgradeClick={() => setIsUpgradeOpen(true)}
               onAddLecture={handleAddAudioLecture}
               onUpdateLecture={handleUpdateAudioLecture}
