@@ -80,8 +80,249 @@ function getGeminiClient(): GoogleGenAI {
   return geminiClient;
 }
 
-// Concurrency lock to prevent accidental duplicate Gemini requests per lecture/action
-const activeAiOperations = new Set<string>();
+// Concurrency lock to prevent accidental duplicate Gemini requests per lecture/action with auto-expiry
+class ResilientAiLock {
+  private locks = new Map<string, number>();
+  private readonly ttlMs = 45000; // 45 seconds maximum lock duration
+
+  has(key: string): boolean {
+    const ts = this.locks.get(key);
+    if (!ts) return false;
+    if (Date.now() - ts > this.ttlMs) {
+      this.locks.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  add(key: string): void {
+    this.locks.set(key, Date.now());
+  }
+
+  delete(key: string): void {
+    this.locks.delete(key);
+  }
+}
+const activeAiOperations = new ResilientAiLock();
+
+// Helper to format an individual bullet item across primitive or object representations
+function formatKeyPointBulletItem(item: any): string {
+  if (item === null || item === undefined) return '';
+
+  if (typeof item === 'string') {
+    let clean = item.trim();
+    // Normalize existing bullet prefixes so we don't produce double bullets
+    clean = clean.replace(/^[\*\-\•\–\—\>]\s*/, '').trim();
+    return clean ? `- ${clean}` : '';
+  }
+
+  if (typeof item === 'object') {
+    const term = item.term || item.concept || item.title || item.name || item.keyword;
+    const def = item.definition || item.meaning || item.explanation || item.description || item.value || item.details;
+    if (term && def) {
+      return `- **${String(term).trim()}**: ${String(def).trim()}`;
+    }
+
+    const point = item.point || item.takeaway || item.text || item.content || item.item || item.fact || item.rule || item.statement;
+    if (point) {
+      return `- ${String(point).trim()}`;
+    }
+
+    // Key-value pairs inside object
+    const entries = Object.entries(item).filter(([k]) => k !== 'id' && k !== 'index');
+    if (entries.length > 0) {
+      return `- ${entries.map(([k, v]) => `**${k}**: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' | ')}`;
+    }
+  }
+
+  return `- ${String(item).trim()}`;
+}
+
+// Robust schema validator and normalizer for Key Points output
+function normalizeKeyPointsOutput(raw: any): string {
+  if (!raw) return '';
+
+  // 1. Recursive handling of raw JSON objects and arrays
+  if (typeof raw === 'object' && raw !== null) {
+    // Schema A: Array of items or section objects
+    if (Array.isArray(raw)) {
+      if (raw.length === 0) return '';
+      // Check if array items are section structures ({ title/heading, items/points })
+      const isSectionArray = raw.every((it) => it && typeof it === 'object' && (it.title || it.heading || it.section) && (Array.isArray(it.items) || Array.isArray(it.points)));
+      if (isSectionArray) {
+        return raw
+          .map((sec) => {
+            const title = sec.title || sec.heading || sec.section || 'Key Section';
+            const items = sec.items || sec.points || [];
+            const bullets = items.map(formatKeyPointBulletItem).filter(Boolean).join('\n');
+            return `### ${title}\n${bullets}`;
+          })
+          .join('\n\n');
+      }
+
+      return raw.map(formatKeyPointBulletItem).filter(Boolean).join('\n');
+    }
+
+    // Schema B: Wrapped envelopes (e.g. { data: ... }, { result: ... }, { output: ... })
+    const unwrapped = raw.data || raw.result || raw.response || raw.output || raw.content;
+    if (unwrapped && (typeof unwrapped === 'object' || typeof unwrapped === 'string')) {
+      const parsedUnwrapped = normalizeKeyPointsOutput(unwrapped);
+      if (parsedUnwrapped) return parsedUnwrapped;
+    }
+
+    // Schema C: Structured 3-part or multi-part exam schema
+    const takeaways =
+      raw.criticalExamTakeaways ||
+      raw.takeaways ||
+      raw.criticalTakeaways ||
+      raw.examTakeaways ||
+      raw.coreTakeaways ||
+      raw.mainTakeaways ||
+      raw.keyPoints ||
+      raw.key_points ||
+      raw.key_takeaways ||
+      raw.points;
+
+    const terms =
+      raw.essentialTerms ||
+      raw.terms ||
+      raw.definitions ||
+      raw.vocabulary ||
+      raw.keyTerms ||
+      raw.essential_terms ||
+      raw.key_terms;
+
+    const pitfalls =
+      raw.commonPitfalls ||
+      raw.pitfalls ||
+      raw.clarifications ||
+      raw.misconceptions ||
+      raw.cautions ||
+      raw.warnings ||
+      raw.common_pitfalls;
+
+    const sections = raw.sections || raw.categories || raw.topics;
+
+    if (Array.isArray(sections) && sections.length > 0) {
+      return sections
+        .map((sec) => {
+          const title = sec.title || sec.heading || sec.name || 'Key Points';
+          const items = sec.items || sec.points || sec.takeaways || [];
+          const bullets = (Array.isArray(items) ? items : [items]).map(formatKeyPointBulletItem).filter(Boolean).join('\n');
+          return `### ${title}\n${bullets}`;
+        })
+        .join('\n\n');
+    }
+
+    if (takeaways || terms || pitfalls) {
+      const parts: string[] = [];
+
+      if (takeaways) {
+        const list = Array.isArray(takeaways) ? takeaways : [takeaways];
+        const bullets = list.map(formatKeyPointBulletItem).filter(Boolean).join('\n');
+        if (bullets) parts.push(`### 📌 Critical Exam Takeaways\n${bullets}`);
+      }
+
+      if (terms) {
+        if (!Array.isArray(terms) && typeof terms === 'object' && terms !== null) {
+          const bullets = Object.entries(terms)
+            .map(([k, v]) => `- **${k}**: ${String(v).trim()}`)
+            .join('\n');
+          if (bullets) parts.push(`### 🔑 Essential Terms & Definitions\n${bullets}`);
+        } else {
+          const list = Array.isArray(terms) ? terms : [terms];
+          const bullets = list.map(formatKeyPointBulletItem).filter(Boolean).join('\n');
+          if (bullets) parts.push(`### 🔑 Essential Terms & Definitions\n${bullets}`);
+        }
+      }
+
+      if (pitfalls) {
+        const list = Array.isArray(pitfalls) ? pitfalls : [pitfalls];
+        const bullets = list.map(formatKeyPointBulletItem).filter(Boolean).join('\n');
+        if (bullets) parts.push(`### ⚠️ Common Pitfalls & Clarifications\n${bullets}`);
+      }
+
+      if (parts.length > 0) return parts.join('\n\n');
+    }
+
+    // Schema D: Dictionary of key-values where all values are primitives
+    const entries = Object.entries(raw).filter(([k]) => !['status', 'success', 'model', 'timestamp'].includes(k));
+    if (entries.length > 0 && entries.every(([, v]) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) {
+      const bullets = entries.map(([k, v]) => `- **${k}**: ${String(v).trim()}`).join('\n');
+      return `### 🔑 Essential Terms & Definitions\n${bullets}`;
+    }
+
+    // Schema E: Catch-all for other object structures with values
+    const allValues = entries.map(([, v]) => formatKeyPointBulletItem(v)).filter(Boolean);
+    if (allValues.length > 0) {
+      return allValues.join('\n');
+    }
+  }
+
+  // 2. String processing & JSON detection
+  let text = String(raw).trim();
+
+  // Strip enclosing Markdown code blocks if model wrapped output in ```markdown or ```
+  if (text.startsWith('```markdown')) {
+    text = text.replace(/^```markdown\s*/i, '').replace(/\s*```$/, '').trim();
+  } else if (text.startsWith('```') && !text.startsWith('```json')) {
+    text = text.replace(/^```\w*\s*/i, '').replace(/\s*```$/, '').trim();
+  }
+
+  // Detect and extract JSON code block: ```json ... ```
+  const jsonFenceMatch = text.match(/```json\s*([\s\S]*?)\s*```/i);
+  if (jsonFenceMatch) {
+    try {
+      const parsed = JSON.parse(jsonFenceMatch[1]);
+      return normalizeKeyPointsOutput(parsed);
+    } catch {
+      // If parsing fails, strip fence and continue
+      text = text.replace(/```json\s*/i, '').replace(/\s*```$/, '').trim();
+    }
+  }
+
+  // Detect JSON object or array embedded within commentary text (e.g. "Here are the points: { ... }")
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  const firstBracket = text.indexOf('[');
+  const lastBracket = text.lastIndexOf(']');
+
+  if (firstBrace !== -1 && lastBrace > firstBrace && (firstBracket === -1 || firstBrace < firstBracket)) {
+    try {
+      const potentialJson = text.slice(firstBrace, lastBrace + 1);
+      const parsed = JSON.parse(potentialJson);
+      return normalizeKeyPointsOutput(parsed);
+    } catch {
+      // Continue to bracket check or raw text
+    }
+  }
+
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    try {
+      const potentialJson = text.slice(firstBracket, lastBracket + 1);
+      const parsed = JSON.parse(potentialJson);
+      return normalizeKeyPointsOutput(parsed);
+    } catch {
+      // Continue to raw text
+    }
+  }
+
+  // 3. Clean up raw Markdown text
+  // Ensure lines starting with '*' or '•' use standard '-' bullets
+  const cleanedText = text
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('• ') || trimmed.startsWith('* ')) {
+        return `- ${trimmed.slice(2)}`;
+      }
+      return line;
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n'); // collapse excessive blank lines
+
+  return cleanedText;
+}
 
 // Gemini error parser for actionable diagnostic codes and friendly user messages
 interface GeminiErrorResponse {
@@ -195,26 +436,53 @@ async function generateTextWithGemini(
   systemInstruction?: string,
   isAudioTask = false
 ): Promise<string> {
-  // Official verified Gemini models:
-  // - Audio transcription: 'gemini-3.5-transcribe', with 'gemini-3.8-flash' fallback
-  // - General text & summarization: 'gemini-3.8-flash', with 'gemini-flash-latest' fallback
+  // Official verified Gemini models according to Google AI Studio skill guidelines:
+  // - Primary fast/multimodal model: 'gemini-3.8-flash'
+  // - Resilient high-throughput fallback: 'gemini-3.1-flash-lite'
+  // - Stable latest alias: 'gemini-flash-latest'
+  // - Audio transcription: 'gemini-3.5-transcribe' with fallback to flash models
   const models = isAudioTask
-    ? ['gemini-3.5-transcribe', 'gemini-3.8-flash', 'gemini-flash-latest']
-    : ['gemini-3.8-flash', 'gemini-flash-latest'];
+    ? ['gemini-3.5-transcribe', 'gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest']
+    : ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
   let lastError: any = null;
 
-  for (const model of models) {
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
     try {
       const response = await ai.models.generateContent({
         model,
         contents: promptOrContents,
         config: systemInstruction ? { systemInstruction } : undefined,
       });
-      const text = response.text?.trim() || '';
+
+      // Extract text safely from response.text or candidates parts
+      let text = '';
+      try {
+        text = response.text?.trim() || '';
+      } catch {
+        text = '';
+      }
+
+      if (!text && response.candidates?.[0]?.content?.parts) {
+        text = response.candidates[0].content.parts
+          .map((p: any) => (typeof p.text === 'string' ? p.text : ''))
+          .join('')
+          .trim();
+      }
+
       if (text) return text;
     } catch (err: any) {
       lastError = err;
-      console.warn(`[Gemini AI] Text generation with ${model} failed, attempting next fallback:`, err?.message || err);
+      const status = err?.status || err?.code || 0;
+      const msg = err?.message || String(err);
+      console.warn(`[Gemini AI] Text generation with ${model} failed (status: ${status}):`, msg.slice(0, 160));
+
+      // If rate limited or quota burst encountered, wait briefly before trying next model
+      const isRateLimited = status === 429 || /RESOURCE_EXHAUSTED|quota|rate limit/i.test(msg);
+      if (isRateLimited && i < models.length - 1) {
+        console.info(`[Gemini AI] Rate limit/quota encountered on ${model}. Switching to resilient fallback ${models[i + 1]}...`);
+        await new Promise((resolve) => setTimeout(resolve, 750));
+      }
     }
   }
 
@@ -1370,8 +1638,14 @@ app.get('/api/state', (req, res) => {
   // 8a. Audio Lectures CRUD
   app.get('/api/audio-lectures', (req, res) => {
     try {
-      const db = readDB();
-      res.json(db.audioLectures || []);
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      let list = db.audioLectures || [];
+      if (list.length === 0) {
+        const defaultDb = readDB();
+        list = defaultDb.audioLectures || [];
+      }
+      res.json(list);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch audio lectures' });
     }
@@ -1391,7 +1665,7 @@ app.get('/api/state', (req, res) => {
       }
       const newLecture = {
         id: 'al_' + crypto.randomUUID().slice(0, 8),
-        userId: req.body.userId || 'default',
+        userId: userId || req.body.userId || 'default',
         courseId: req.body.courseId || '',
         subjectName: req.body.subjectName || 'General',
         section: req.body.section || '',
@@ -1413,7 +1687,7 @@ app.get('/api/state', (req, res) => {
         updatedAt: new Date().toISOString(),
       };
       db.audioLectures.push(newLecture);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(newLecture);
     } catch (error) {
       res.status(500).json({ error: 'Failed to create audio lecture' });
@@ -1422,17 +1696,33 @@ app.get('/api/state', (req, res) => {
 
   app.put('/api/audio-lectures/:id', (req, res) => {
     try {
-      const db = readDB();
-      if (!db.audioLectures) db.audioLectures = [];
-      const index = db.audioLectures.findIndex((al) => al.id === req.params.id);
-      if (index === -1) return res.status(404).json({ error: 'Audio lecture not found' });
-      db.audioLectures[index] = {
-        ...db.audioLectures[index],
+      const { userId, userEmail } = getEffectiveUser(req);
+      let targetDb = readDB(userId, userEmail);
+      if (!targetDb.audioLectures) targetDb.audioLectures = [];
+      let index = targetDb.audioLectures.findIndex((al) => al.id === req.params.id);
+
+      if (index === -1) {
+        const defaultDb = readDB();
+        const defaultIdx = (defaultDb.audioLectures || []).findIndex((al) => al.id === req.params.id);
+        if (defaultIdx !== -1) {
+          defaultDb.audioLectures[defaultIdx] = {
+            ...defaultDb.audioLectures[defaultIdx],
+            ...req.body,
+            updatedAt: new Date().toISOString(),
+          };
+          writeDB(defaultDb);
+          return res.json(defaultDb.audioLectures[defaultIdx]);
+        }
+        return res.status(404).json({ error: 'Audio lecture not found' });
+      }
+
+      targetDb.audioLectures[index] = {
+        ...targetDb.audioLectures[index],
         ...req.body,
         updatedAt: new Date().toISOString(),
       };
-      writeDB(db);
-      res.json(db.audioLectures[index]);
+      writeDB(targetDb, userId, userEmail);
+      res.json(targetDb.audioLectures[index]);
     } catch (error) {
       res.status(500).json({ error: 'Failed to update audio lecture' });
     }
@@ -1440,10 +1730,17 @@ app.get('/api/state', (req, res) => {
 
   app.delete('/api/audio-lectures/:id', (req, res) => {
     try {
-      const db = readDB();
-      if (!db.audioLectures) db.audioLectures = [];
-      db.audioLectures = db.audioLectures.filter((al) => al.id !== req.params.id);
-      writeDB(db);
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      if (db.audioLectures) {
+        db.audioLectures = db.audioLectures.filter((al) => al.id !== req.params.id);
+        writeDB(db, userId, userEmail);
+      }
+      const defaultDb = readDB();
+      if (defaultDb.audioLectures) {
+        defaultDb.audioLectures = defaultDb.audioLectures.filter((al) => al.id !== req.params.id);
+        writeDB(defaultDb);
+      }
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete audio lecture' });
@@ -1833,63 +2130,86 @@ Ensure clarity, rigor, and actionable revision value for students.`
       }
 
       const sourceTranscript = req.body?.transcript || lecture.transcript;
+      const sourceSummary = req.body?.summary || lecture.summary;
+      const sourceNotes = req.body?.notes || lecture.studyNotes || (lecture as any).notes;
       const rawAudio = req.body?.audioBase64 || lecture.audioDataUrl;
       const audioPart = extractAudioInlineData(rawAudio, req.body?.audioMimeType || lecture.fileType);
 
+      // Determine richest available text content for Key Points extraction:
+      // Priority 1: Full lecture transcript
+      // Priority 2: Generated summary (e.g. if summary was run first)
+      // Priority 3: Personal or study notes
+      const richTextContent = (sourceTranscript && sourceTranscript.trim().length > 15)
+        ? sourceTranscript.trim()
+        : (sourceSummary && sourceSummary.trim().length > 15)
+          ? sourceSummary.trim()
+          : (sourceNotes && sourceNotes.trim().length > 15)
+            ? sourceNotes.trim()
+            : '';
+
       let keyPoints = '';
-      if (sourceTranscript && sourceTranscript.trim().length > 15) {
+      if (richTextContent) {
         keyPoints = await generateTextWithGemini(
           ai,
-          `You are an academic exam prep tutor. Extract high-yield key takeaways, core definitions, and exam-critical concepts from this lecture:
-Title: "${lecture.title}"
-Subject: "${lecture.subjectName}"
+          `You are an expert academic tutor and exam prep specialist. Extract high-yield key takeaways, core definitions, and exam-critical concepts from this lecture:
+Title: "${lecture.title || 'Academic Lecture'}"
+Subject / Course: "${lecture.subjectName || 'General'}"
 Section / Topic: "${lecture.section || 'General'}"
 
-LECTURE TRANSCRIPT:
-${sourceTranscript}
+LECTURE CONTENT:
+${richTextContent}
 
 Format cleanly in Markdown with bullet points:
 ### 📌 Critical Exam Takeaways
-- High-yield concepts frequently tested on exams.
+- [Core finding, principle, or high-yield concept frequently tested on exams]
+- [Key structural takeaway or method]
+- [Practical application or problem-solving rule]
+
 ### 🔑 Essential Terms & Definitions
-- **[Concept/Term]**: Precise academic definition.
+- **[Concept/Term]**: Clear, rigorous definition and why it matters.
+- **[Concept/Term]**: Core formula, mechanism, or principle.
+
 ### ⚠️ Common Pitfalls & Clarifications
-- Crucial distinctions, tricky exceptions, and memory aids.`
+- [Crucial distinction, exception, or common misconception to avoid on exams]
+- [High-yield memory aid or clarification]`
         );
       } else if (audioPart) {
         keyPoints = await generateTextWithGemini(ai, [
           audioPart,
-          `You are an academic exam prep tutor. Extract high-yield key takeaways, core definitions, and exam-critical concepts from this lecture audio titled "${lecture.title}" for subject "${lecture.subjectName}".
-Format cleanly in Markdown:
+          `You are an expert academic tutor and exam prep specialist. Listen to this lecture audio titled "${lecture.title || 'Lecture'}" for subject "${lecture.subjectName || 'General'}". Extract high-yield key takeaways, core definitions, and exam-critical concepts.
+Format cleanly in Markdown with bullet points:
 ### 📌 Critical Exam Takeaways
 ### 🔑 Essential Terms & Definitions
 ### ⚠️ Common Pitfalls & Clarifications`
         ]);
-      } else if (lecture.title || lecture.subjectName || lecture.studyNotes || (lecture as any).notes) {
+      } else if (lecture.title || lecture.subjectName || sourceNotes) {
         keyPoints = await generateTextWithGemini(
           ai,
-          `You are an academic exam prep tutor. Extract high-yield key takeaways, core definitions, and exam-critical concepts for this lecture topic:
-Title: "${lecture.title}"
-Subject: "${lecture.subjectName}"
+          `You are an expert academic tutor and exam prep specialist. Extract high-yield key takeaways, core definitions, and exam-critical concepts for this lecture topic:
+Title: "${lecture.title || 'Lecture'}"
+Subject / Course: "${lecture.subjectName || 'General'}"
 Section / Topic: "${lecture.section || 'General'}"
-Existing Notes: "${lecture.studyNotes || (lecture as any).notes || 'General Study Material'}"
+Topic Overview: "${sourceNotes || 'General Study Material'}"
 
 Format cleanly in Markdown with bullet points:
 ### 📌 Critical Exam Takeaways
-- High-yield concepts frequently tested on exams.
+- [Core takeaway or concept]
 ### 🔑 Essential Terms & Definitions
-- **[Concept/Term]**: Precise academic definition.
+- **[Concept/Term]**: Definition and significance.
 ### ⚠️ Common Pitfalls & Clarifications
-- Crucial distinctions, tricky exceptions, and memory aids.`
+- [Important nuance or distinction]`
         );
       } else {
         return res.status(400).json({
           error: 'NO_SOURCE_DATA',
-          message: 'Unable to extract key points without lecture audio, transcript, or topic details.',
+          message: 'Unable to extract key points without lecture audio, transcript, summary, or topic details.',
         });
       }
 
-      lecture.keyPoints = keyPoints;
+      // Normalize keyPoints to ensure clean string output across any model formatting
+      const normalizedKeyPoints = normalizeKeyPointsOutput(keyPoints);
+
+      lecture.keyPoints = normalizedKeyPoints;
       lecture.keyPointsGeneratedAt = new Date().toISOString();
       lecture.updatedAt = new Date().toISOString();
 
@@ -1901,7 +2221,7 @@ Format cleanly in Markdown with bullet points:
 
       res.json({
         success: true,
-        keyPoints,
+        keyPoints: normalizedKeyPoints,
         lecture,
       });
     } catch (error: any) {
@@ -3085,15 +3405,25 @@ ${payload.text}`
       if (payload?.type === 'text') {
         keyPoints = await generateTextWithGemini(
           ai,
-          `You are an academic exam coach. Extract key points, definitions, facts, and essential review concepts from this document:
+          `You are an academic exam coach and prep specialist. Extract high-yield key takeaways, core definitions, and exam-critical concepts from this document:
 Document: "${material.name}"
 Subject: "${material.subjectName}"
 Topic: "${material.topic || 'General'}"
 
-Format as a high-yield bulleted cheat-sheet with **bolded key terms** and clear concise explanations.
-
 DOCUMENT TEXT:
-${payload.text}`
+${payload.text}
+
+Format cleanly in Markdown with bullet points:
+### 📌 Critical Exam Takeaways
+- [Core finding, principle, or high-yield concept frequently tested on exams]
+- [Practical application, mechanism, or problem-solving rule]
+
+### 🔑 Essential Terms & Definitions
+- **[Concept/Term]**: Clear, rigorous definition and why it matters.
+- **[Concept/Term]**: Core formula, mechanism, or principle.
+
+### ⚠️ Common Pitfalls & Clarifications
+- [Crucial distinction, exception, or common misconception to avoid on exams]`
         );
       } else if (payload?.type === 'inlineData') {
         keyPoints = await generateTextWithGemini(ai, {
@@ -3102,10 +3432,37 @@ ${payload.text}`
               inlineData: payload.inlineData,
             },
             {
-              text: `Extract the crucial key points, definitions, and essential exam facts from this document ("${material.name}", Subject: "${material.subjectName}"). Format as a bulleted list with bolded terms.`,
+              text: `You are an academic exam coach. Extract crucial key points, definitions, and essential exam facts from this document ("${material.name}", Subject: "${material.subjectName}").
+Format cleanly in Markdown with bullet points:
+### 📌 Critical Exam Takeaways
+### 🔑 Essential Terms & Definitions
+### ⚠️ Common Pitfalls & Clarifications`,
             },
           ],
         });
+      } else if (material.summary || req.body?.summary || (material as any).notes || (material as any).studyNotes || material.extractedText) {
+        const fallbackText = material.summary || req.body?.summary || (material as any).notes || (material as any).studyNotes || material.extractedText;
+        keyPoints = await generateTextWithGemini(
+          ai,
+          `You are an academic exam coach and prep specialist. Extract key points, definitions, facts, and essential review concepts from this document summary and notes:
+Document: "${material.name}"
+Subject: "${material.subjectName}"
+Topic: "${material.topic || 'General'}"
+
+DOCUMENT CONTENT:
+${fallbackText}
+
+Format cleanly in Markdown with bullet points:
+### 📌 Critical Exam Takeaways
+- [Core finding, principle, or high-yield concept frequently tested on exams]
+- [Practical application or rule]
+
+### 🔑 Essential Terms & Definitions
+- **[Concept/Term]**: Clear definition and significance.
+
+### ⚠️ Common Pitfalls & Clarifications
+- [Common misconception or pitfall]`
+        );
       } else {
         return res.status(400).json({
           error: 'NO_SOURCE_DATA',
@@ -3113,7 +3470,8 @@ ${payload.text}`
         });
       }
 
-      material.keyPoints = keyPoints;
+      const normalizedKeyPoints = normalizeKeyPointsOutput(keyPoints);
+      material.keyPoints = normalizedKeyPoints;
       material.keyPointsGeneratedAt = new Date().toISOString();
       material.updatedAt = new Date().toISOString();
       targetDb.studyMaterials[index] = material;
@@ -3121,7 +3479,7 @@ ${payload.text}`
 
       res.json({
         success: true,
-        keyPoints,
+        keyPoints: normalizedKeyPoints,
         material,
         aiUsage: targetDb.profile.aiUsage,
       });

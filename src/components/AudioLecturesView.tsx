@@ -248,6 +248,8 @@ export default function AudioLecturesView({
           section: selectedLecture.section,
           originalFileName: selectedLecture.originalFileName,
           notes: personalNotesText || selectedLecture.studyNotes || (selectedLecture as any).notes,
+          summary: summaryText || selectedLecture.summary,
+          keyPoints: keyPointsText || selectedLecture.keyPoints,
           isPremium: true,
           userEmail: effectiveUserEmail,
           userId: effectiveUserId,
@@ -261,6 +263,14 @@ export default function AudioLecturesView({
         if (data.error === 'GEMINI_NOT_CONFIGURED' || res.status === 503) {
           setAiWarningBanner(
             'Gemini API key is not configured in production. Please set GEMINI_API_KEY in the Vercel environment variables.'
+          );
+          return;
+        }
+
+        // Handle quota / rate limit gracefully
+        if (data.error === 'AI_QUOTA_EXCEEDED' || res.status === 429) {
+          setAiErrorBanner(
+            'Gemini API rate limit or quota reached. Please wait 15-30 seconds and try again.'
           );
           return;
         }
@@ -284,28 +294,43 @@ export default function AudioLecturesView({
       const nowIso = new Date().toISOString();
 
       if (type === 'summary') {
-        const val = data.summary || '';
+        const val = typeof data.summary === 'string' ? data.summary : JSON.stringify(data.summary || '');
         updates.summary = val;
         updates.summaryGeneratedAt = nowIso;
         setSummaryText(val);
+        setActiveNotesTab('summary');
         setAiSuccessBanner('AI Summary generated and saved successfully.');
       } else if (type === 'keyPoints') {
-        const val = data.keyPoints || '';
+        let val = data.keyPoints || '';
+        if (Array.isArray(val)) {
+          val = val.map((p) => (typeof p === 'string' ? `• ${p}` : `• ${JSON.stringify(p)}`)).join('\n');
+        } else if (typeof val === 'object' && val !== null) {
+          const list = val.keyPoints || val.key_points || val.takeaways || val.points;
+          if (Array.isArray(list)) {
+            val = list.map((p: any) => (typeof p === 'string' ? `• ${p}` : `• ${JSON.stringify(p)}`)).join('\n');
+          } else {
+            val = JSON.stringify(val, null, 2);
+          }
+        }
+        val = String(val).trim();
         updates.keyPoints = val;
         updates.keyPointsGeneratedAt = nowIso;
         setKeyPointsText(val);
+        setActiveNotesTab('keyPoints');
         setAiSuccessBanner('AI Key Points generated and saved successfully.');
       } else if (type === 'studyNotes') {
-        const val = data.studyNotes || data.notes || '';
+        const val = typeof (data.studyNotes || data.notes) === 'string' ? (data.studyNotes || data.notes) : JSON.stringify(data.studyNotes || data.notes || '');
         updates.studyNotes = val;
         updates.studyNotesGeneratedAt = nowIso;
         setPersonalNotesText(val);
+        setActiveNotesTab('notes');
         setAiSuccessBanner('AI Study Notes generated and saved successfully.');
       } else if (type === 'transcript') {
-        const val = data.transcript || '';
+        const val = typeof data.transcript === 'string' ? data.transcript : JSON.stringify(data.transcript || '');
         updates.transcript = val;
         updates.transcriptGeneratedAt = nowIso;
         setTranscriptText(val);
+        setActiveNotesTab('transcript');
         setAiSuccessBanner('AI Transcript generated and saved successfully.');
       }
 
