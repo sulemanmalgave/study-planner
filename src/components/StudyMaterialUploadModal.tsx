@@ -14,6 +14,7 @@ import {
 import { upload } from '@vercel/blob/client';
 import { Course, StudyMaterial, FREE_PLAN_LIMITS } from '../types';
 import SubjectSelect from './SubjectSelect';
+import { getAuthHeaders } from '../lib/emailAuth';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.webp', '.txt', '.csv'];
 
@@ -128,6 +129,12 @@ export default function StudyMaterialUploadModal({
 
     try {
       let savedMaterial: StudyMaterial | null = null;
+      const baseAuthHeaders = getAuthHeaders();
+      const tokenOnlyHeaders: Record<string, string> = {};
+      if (baseAuthHeaders['Authorization']) tokenOnlyHeaders['Authorization'] = baseAuthHeaders['Authorization'];
+      if (baseAuthHeaders['x-session-token']) tokenOnlyHeaders['x-session-token'] = baseAuthHeaders['x-session-token'];
+      if (baseAuthHeaders['x-user-id']) tokenOnlyHeaders['x-user-id'] = baseAuthHeaders['x-user-id'];
+      if (baseAuthHeaders['x-user-email']) tokenOnlyHeaders['x-user-email'] = baseAuthHeaders['x-user-email'];
 
       // Strategy 1: Attempt direct client-side Vercel Blob upload (handles up to 30MB without hitting serverless 4.5MB limits)
       try {
@@ -135,6 +142,7 @@ export default function StudyMaterialUploadModal({
         const blob = await upload(file.name, file, {
           access: 'public',
           handleUploadUrl: '/api/study-materials/upload-token',
+          headers: tokenOnlyHeaders,
         });
 
         setUploadProgress(75);
@@ -142,7 +150,10 @@ export default function StudyMaterialUploadModal({
         // Save material metadata with the permanent blob identifier & URL
         const metaResp = await fetch('/api/study-materials', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...tokenOnlyHeaders,
+          },
           body: JSON.stringify({
             name: documentTitle,
             subjectId,
@@ -187,6 +198,7 @@ export default function StudyMaterialUploadModal({
 
         const response = await fetch('/api/study-materials/upload', {
           method: 'POST',
+          headers: tokenOnlyHeaders,
           body: formData,
         });
 

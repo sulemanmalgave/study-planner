@@ -46,6 +46,11 @@ const getGeminiApiKey = (): string | undefined => {
   return sanitizeEnvVar(process.env.GEMINI_API_KEY);
 };
 
+// Check for the authoritative server-side BLOB_READ_WRITE_TOKEN environment variable
+const getBlobToken = (): string | undefined => {
+  return sanitizeEnvVar(process.env.BLOB_READ_WRITE_TOKEN);
+};
+
 // Gemini Client Lazy Initializer
 let geminiClient: GoogleGenAI | null = null;
 let currentClientKey: string | null = null;
@@ -2148,7 +2153,8 @@ Structure in clean Markdown:
   // 1. Get all study materials
   app.get('/api/study-materials', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       res.json(db.studyMaterials || []);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch study materials' });
@@ -2186,7 +2192,8 @@ Structure in clean Markdown:
   // 3a. Generate client-side Vercel Blob upload token (bypasses Vercel 4.5MB serverless body limit)
   app.post('/api/study-materials/upload-token', async (req, res) => {
     try {
-      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      const blobToken = getBlobToken();
+      if (!blobToken) {
         return res.status(503).json({
           error: 'STORAGE_NOT_CONFIGURED',
           message: 'Study Materials storage is not configured for production.',
@@ -2194,8 +2201,10 @@ Structure in clean Markdown:
         });
       }
 
-      const db = readDB();
-      if (!isSubscriptionActive(db.profile.subscription) && (db.studyMaterials || []).length >= FREE_PLAN_LIMITS.studyMaterials) {
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      const isPro = checkUserHasActiveSubscription(req, db);
+      if (!isPro && (db.studyMaterials || []).length >= FREE_PLAN_LIMITS.studyMaterials) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
           message: `You have reached the free plan limit of ${FREE_PLAN_LIMITS.studyMaterials} Study Materials. Upgrade to Premium for unlimited storage.`,
@@ -2203,6 +2212,7 @@ Structure in clean Markdown:
       }
 
       const jsonResponse = await handleUpload({
+        token: blobToken,
         body: req.body,
         request: req,
         onBeforeGenerateToken: async (pathname) => {
@@ -2223,10 +2233,8 @@ Structure in clean Markdown:
               'text/csv',
             ],
             maximumSizeInBytes: 30 * 1024 * 1024, // 30 MB
+            tokenPayload: JSON.stringify({ userId: userId || 'default' }),
           };
-        },
-        onUploadCompleted: async ({ blob }) => {
-          console.log('[Vercel Blob] Upload completed:', blob.pathname, blob.url);
         },
       });
 
@@ -2249,11 +2257,13 @@ Structure in clean Markdown:
       }
 
       try {
-        const db = readDB();
+        const { userId, userEmail } = getEffectiveUser(req);
+        const db = readDB(userId, userEmail);
         if (!db.studyMaterials) db.studyMaterials = [];
 
         // Check limits on free plan
-        if (!isSubscriptionActive(db.profile.subscription) && db.studyMaterials.length >= FREE_PLAN_LIMITS.studyMaterials) {
+        const isPro = checkUserHasActiveSubscription(req, db);
+        if (!isPro && db.studyMaterials.length >= FREE_PLAN_LIMITS.studyMaterials) {
           return res.status(403).json({
             error: 'LIMIT_REACHED',
             message: `You have reached the free plan limit of ${FREE_PLAN_LIMITS.studyMaterials} Study Materials. Upgrade to Premium for unlimited storage.`,
@@ -2287,13 +2297,15 @@ Structure in clean Markdown:
         let fileDataUrl = '';
 
         // Check persistent cloud storage configuration
-        if (process.env.BLOB_READ_WRITE_TOKEN) {
+        const blobToken = getBlobToken();
+        if (blobToken) {
           const safeBase = path.basename(req.file.originalname, `.${ext}`).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
           const blobPath = `materials/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeBase}.${ext}`;
 
           const blob = await put(blobPath, req.file.buffer, {
             access: 'public',
             contentType: req.file.mimetype || 'application/octet-stream',
+            token: blobToken,
           });
 
           storagePath = blob.url;
@@ -2333,7 +2345,7 @@ Structure in clean Markdown:
         const newMaterial: StudyMaterial = {
           id: 'mat_' + crypto.randomUUID().slice(0, 8),
           materialId: 'mat_' + crypto.randomUUID().slice(0, 8),
-          userId: req.body.userId || 'default',
+          userId: userId || req.body.userId || 'default',
           subjectId,
           subjectName,
           topic,
@@ -2356,7 +2368,7 @@ Structure in clean Markdown:
         };
 
         db.studyMaterials.push(newMaterial);
-        writeDB(db);
+        writeDB(db, userId, userEmail);
 
         res.json(newMaterial);
       } catch (uploadHandlerErr: any) {
@@ -2372,10 +2384,12 @@ Structure in clean Markdown:
   // 4. Save metadata after client-side upload or data URL upload
   app.post('/api/study-materials', async (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       if (!db.studyMaterials) db.studyMaterials = [];
 
-      if (!isSubscriptionActive(db.profile.subscription) && db.studyMaterials.length >= FREE_PLAN_LIMITS.studyMaterials) {
+      const isPro = checkUserHasActiveSubscription(req, db);
+      if (!isPro && db.studyMaterials.length >= FREE_PLAN_LIMITS.studyMaterials) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
           message: `You have reached the free plan limit of ${FREE_PLAN_LIMITS.studyMaterials} Study Materials. Upgrade to Premium for unlimited storage.`,
@@ -2417,7 +2431,7 @@ Structure in clean Markdown:
       const newMaterial: StudyMaterial = {
         id: matId,
         materialId: matId,
-        userId: req.body.userId || 'default',
+        userId: userId || req.body.userId || 'default',
         subjectId: subjectId || '',
         subjectName: subjectName || 'General',
         topic: topic || '',
@@ -2440,7 +2454,7 @@ Structure in clean Markdown:
       };
 
       db.studyMaterials.push(newMaterial);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(newMaterial);
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to create study material', message: error.message });
@@ -2450,8 +2464,13 @@ Structure in clean Markdown:
   // 5. Download original unmodified file
   app.get('/api/study-materials/:id/download', async (req, res) => {
     try {
-      const db = readDB();
-      const material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      let material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
+      if (!material && userId) {
+        const defaultDb = readDB();
+        material = (defaultDb.studyMaterials || []).find((m) => m.id === req.params.id);
+      }
       if (!material) {
         return res.status(404).json({ error: 'Study material not found' });
       }
@@ -2493,8 +2512,13 @@ Structure in clean Markdown:
   // 6. Preview content (HTML for DOCX, text for TXT/CSV, or direct URL for PDF/Images)
   app.get('/api/study-materials/:id/preview', async (req, res) => {
     try {
-      const db = readDB();
-      const material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      let material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
+      if (!material && userId) {
+        const defaultDb = readDB();
+        material = (defaultDb.studyMaterials || []).find((m) => m.id === req.params.id);
+      }
       if (!material) {
         return res.status(404).json({ error: 'Study material not found' });
       }
@@ -2568,9 +2592,23 @@ Structure in clean Markdown:
   // 7. Update metadata (Name, Subject, Topic)
   app.put('/api/study-materials/:id', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       if (!db.studyMaterials) db.studyMaterials = [];
-      const index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+      let index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
+
+      if (index === -1 && userId) {
+        const defaultDb = readDB();
+        const defIdx = (defaultDb.studyMaterials || []).findIndex((m) => m.id === req.params.id);
+        if (defIdx !== -1) {
+          const item = defaultDb.studyMaterials[defIdx];
+          defaultDb.studyMaterials.splice(defIdx, 1);
+          writeDB(defaultDb);
+          db.studyMaterials.push(item);
+          index = db.studyMaterials.length - 1;
+        }
+      }
+
       if (index === -1) {
         return res.status(404).json({ error: 'Study material not found' });
       }
@@ -2588,7 +2626,7 @@ Structure in clean Markdown:
         updatedAt: new Date().toISOString(),
       };
 
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(db.studyMaterials[index]);
     } catch (error) {
       res.status(500).json({ error: 'Failed to update study material' });
@@ -2598,24 +2636,36 @@ Structure in clean Markdown:
   // 8. Delete study material (safe cloud cleanup + metadata removal)
   app.delete('/api/study-materials/:id', async (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       if (!db.studyMaterials) db.studyMaterials = [];
-      const material = db.studyMaterials.find((m) => m.id === req.params.id);
+      let material = db.studyMaterials.find((m) => m.id === req.params.id);
+
+      if (!material && userId) {
+        const defaultDb = readDB();
+        const defIdx = (defaultDb.studyMaterials || []).findIndex((m) => m.id === req.params.id);
+        if (defIdx !== -1) {
+          material = defaultDb.studyMaterials[defIdx];
+          defaultDb.studyMaterials.splice(defIdx, 1);
+          writeDB(defaultDb);
+        }
+      }
 
       if (material) {
         // Delete from Vercel Blob if stored in persistent cloud storage
         const blobUrlOrKey = material.storageKey || (material.storagePath && material.storagePath.startsWith('http') ? material.storagePath : null);
-        if (blobUrlOrKey && process.env.BLOB_READ_WRITE_TOKEN) {
+        const blobToken = getBlobToken();
+        if (blobUrlOrKey && blobToken) {
           try {
-            await del(blobUrlOrKey, { token: process.env.BLOB_READ_WRITE_TOKEN });
+            await del(blobUrlOrKey, { token: blobToken });
           } catch (delErr) {
             console.warn('Could not delete blob from cloud storage:', delErr);
           }
         }
+        db.studyMaterials = db.studyMaterials.filter((m) => m.id !== req.params.id);
+        writeDB(db, userId, userEmail);
       }
 
-      db.studyMaterials = db.studyMaterials.filter((m) => m.id !== req.params.id);
-      writeDB(db);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete study material' });

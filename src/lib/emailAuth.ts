@@ -34,7 +34,7 @@ export interface AuthResult {
 /**
  * Helper to build auth headers including optional session token
  */
-function getAuthHeaders(): Record<string, string> {
+export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
