@@ -177,11 +177,17 @@ export default function StudyMaterialReaderModal({
   };
 
   const getViewerUrl = () => {
-    if (material.storageUrl) {
+    if (material.storageUrl && material.storageUrl.startsWith('http')) {
       return material.storageUrl;
     }
     if (material.storagePath && material.storagePath.startsWith('http')) {
       return material.storagePath;
+    }
+    if (material.storagePath && material.storagePath.startsWith('/api/')) {
+      return material.storagePath;
+    }
+    if (material.id) {
+      return `/api/study-materials/${material.id}/view`;
     }
     if (material.fileDataUrl) {
       return material.fileDataUrl;

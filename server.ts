@@ -18,7 +18,17 @@ const DB_FILE = path.join(process.cwd(), 'server_db.json');
 // Supported file extensions for Study Materials (PDF, Word DOC/DOCX, Images, TXT, CSV up to 30MB)
 const ALLOWED_MATERIAL_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.webp', '.txt', '.csv'];
 
-// In-memory multer storage: files are buffered in memory and NEVER written to the serverless filesystem (/var/task or /tmp)
+// Ensure local uploads directory for resilient durable file storage
+const UPLOADS_MATERIALS_DIR = path.join(process.cwd(), 'uploads', 'materials');
+try {
+  if (!fs.existsSync(UPLOADS_MATERIALS_DIR)) {
+    fs.mkdirSync(UPLOADS_MATERIALS_DIR, { recursive: true });
+  }
+} catch (dirErr) {
+  console.warn('[Storage] Could not create local materials directory:', dirErr);
+}
+
+// In-memory multer storage: files are buffered in memory and saved to Blob or local disk
 const uploadMaterial = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 30 * 1024 * 1024 }, // 30MB maximum limit
@@ -2481,43 +2491,87 @@ Structure in clean Markdown:
     }
   });
 
-  // 2. Serve legacy material files statically if available on local instance
+  // 2. Serve material files statically from local instance or self-heal from database data URL
   app.get('/api/study-materials/files/:filename', (req, res) => {
     try {
       const filename = path.basename(req.params.filename);
       const possiblePaths = [
         path.join(process.cwd(), 'uploads', 'materials', filename),
       ];
+
+      const ext = path.extname(filename).toLowerCase();
+      let contentType = 'application/octet-stream';
+      if (ext === '.pdf') contentType = 'application/pdf';
+      else if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      else if (ext === '.doc') contentType = 'application/msword';
+      else if (ext === '.png') contentType = 'image/png';
+      else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+      else if (ext === '.webp') contentType = 'image/webp';
+      else if (ext === '.txt') contentType = 'text/plain';
+      else if (ext === '.csv') contentType = 'text/csv';
+
       for (const p of possiblePaths) {
         if (fs.existsSync(p)) {
-          const ext = path.extname(filename).toLowerCase();
-          let contentType = 'application/octet-stream';
-          if (ext === '.pdf') contentType = 'application/pdf';
-          else if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-          else if (ext === '.doc') contentType = 'application/msword';
           res.setHeader('Content-Type', contentType);
-          res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
           return fs.createReadStream(p).pipe(res);
         }
       }
+
+      // Self-healing database fallback if container restarted
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      const defaultDb = readDB();
+      const allMaterials = [...(db.studyMaterials || []), ...(defaultDb.studyMaterials || [])];
+      const match = allMaterials.find((m) =>
+        (m.storagePath && m.storagePath.includes(filename)) ||
+        (m.storageKey && m.storageKey.includes(filename)) ||
+        m.originalFileName === filename
+      );
+
+      if (match && match.fileDataUrl && match.fileDataUrl.startsWith('data:')) {
+        const parts = match.fileDataUrl.split(',');
+        const mime = parts[0].match(/:(.*?);/)?.[1] || contentType;
+        const buffer = Buffer.from(parts[1], 'base64');
+        try {
+          const uploadsDir = path.join(process.cwd(), 'uploads', 'materials');
+          if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+          fs.writeFileSync(path.join(uploadsDir, filename), buffer);
+        } catch (e) {}
+
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(match.originalFileName || filename)}"`);
+        return res.send(buffer);
+      }
+
       return res.status(404).json({
         error: 'FILE_NOT_FOUND',
-        message: 'Legacy local file is no longer available on this serverless instance.',
+        message: 'The requested study material file could not be found.',
       });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to access legacy file' });
+      res.status(500).json({ error: 'Failed to access study material file' });
     }
   });
 
-  // 3a. Generate client-side Vercel Blob upload token (bypasses Vercel 4.5MB serverless body limit)
+  // 2b. Check storage capability status
+  app.get('/api/study-materials/storage-status', (req, res) => {
+    const blobToken = getBlobToken();
+    res.json({
+      blobConfigured: !!blobToken,
+      localStorageAvailable: true,
+      maxUploadBytes: 30 * 1024 * 1024,
+    });
+  });
+
+  // 3a. Generate client-side Vercel Blob upload token (when configured)
   app.post('/api/study-materials/upload-token', async (req, res) => {
     try {
       const blobToken = getBlobToken();
       if (!blobToken) {
-        return res.status(503).json({
-          error: 'STORAGE_NOT_CONFIGURED',
-          message: 'Study Materials storage is not configured for production.',
-          hint: 'BLOB_READ_WRITE_TOKEN is not set in environment variables.',
+        return res.status(200).json({
+          configured: false,
+          useDirectUpload: true,
+          message: 'Vercel Blob is not configured. Direct multipart upload is active.',
         });
       }
 
@@ -2616,10 +2670,11 @@ Structure in clean Markdown:
         let downloadUrl = '';
         let fileDataUrl = '';
 
-        // Check persistent cloud storage configuration
+        // Persistent cloud storage or local disk storage with dataUrl resilience
         const blobToken = getBlobToken();
+        const safeBase = path.basename(req.file.originalname, `.${ext}`).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+
         if (blobToken) {
-          const safeBase = path.basename(req.file.originalname, `.${ext}`).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
           const blobPath = `materials/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeBase}.${ext}`;
 
           const blob = await put(blobPath, req.file.buffer, {
@@ -2632,17 +2687,26 @@ Structure in clean Markdown:
           storageKey = blob.pathname;
           storageUrl = blob.url;
           downloadUrl = blob.downloadUrl;
-        } else {
-          // If in production environment without storage configured, error explicitly
-          if (process.env.VERCEL === '1' || process.env.NODE_ENV === 'production') {
-            return res.status(503).json({
-              error: 'STORAGE_NOT_CONFIGURED',
-              message: 'Study Materials storage is not configured for production.',
-            });
-          }
-          // For local development / preview fallback without BLOB_READ_WRITE_TOKEN
           fileDataUrl = `data:${req.file.mimetype || 'application/octet-stream'};base64,${req.file.buffer.toString('base64')}`;
-          storagePath = fileDataUrl;
+        } else {
+          // Durable local file storage (works in container, Cloud Run, VPS, and local dev)
+          const safeFilename = `${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeBase}.${ext}`;
+          const uploadsDir = path.join(process.cwd(), 'uploads', 'materials');
+          try {
+            if (!fs.existsSync(uploadsDir)) {
+              fs.mkdirSync(uploadsDir, { recursive: true });
+            }
+            fs.writeFileSync(path.join(uploadsDir, safeFilename), req.file.buffer);
+          } catch (fsErr) {
+            console.warn('[Storage] Could not write file to disk:', fsErr);
+          }
+
+          storagePath = `/api/study-materials/files/${safeFilename}`;
+          storageKey = safeFilename;
+          storageUrl = storagePath;
+          downloadUrl = `/api/study-materials/files/${safeFilename}`;
+          // Also persist dataUrl in DB as an instant resilient backup
+          fileDataUrl = `data:${req.file.mimetype || 'application/octet-stream'};base64,${req.file.buffer.toString('base64')}`;
         }
 
         // In-memory text extraction for fast searching without disk writes
@@ -2748,6 +2812,24 @@ Structure in clean Markdown:
         finalStoragePath = finalFileDataUrl;
       }
 
+      // If dataUrl is present, write to disk cache so it has a fast direct HTTP URL
+      if (finalFileDataUrl && finalFileDataUrl.startsWith('data:') && (!finalStoragePath || finalStoragePath.startsWith('data:'))) {
+        try {
+          const uploadsDir = path.join(process.cwd(), 'uploads', 'materials');
+          if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+          const safeBase = path.basename(cleanTitle, `.${cleanExt}`).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+          const safeFilename = `${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeBase}.${cleanExt}`;
+          const diskPath = path.join(uploadsDir, safeFilename);
+          const base64Content = finalFileDataUrl.split(',')[1];
+          if (base64Content) {
+            fs.writeFileSync(diskPath, Buffer.from(base64Content, 'base64'));
+            finalStoragePath = `/api/study-materials/files/${safeFilename}`;
+          }
+        } catch (diskErr) {
+          console.warn('[Storage] Could not write base64 to disk cache:', diskErr);
+        }
+      }
+
       const newMaterial: StudyMaterial = {
         id: matId,
         materialId: matId,
@@ -2801,6 +2883,15 @@ Structure in clean Markdown:
         return res.redirect(cloudUrl);
       }
 
+      // If disk file exists
+      if (material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
+        const filename = path.basename(material.storagePath);
+        const filePath = path.join(process.cwd(), 'uploads', 'materials', filename);
+        if (fs.existsSync(filePath)) {
+          return res.download(filePath, material.originalFileName);
+        }
+      }
+
       // If dataUrl or base64 is stored
       if (material.fileDataUrl && material.fileDataUrl.startsWith('data:')) {
         const parts = material.fileDataUrl.split(',');
@@ -2811,21 +2902,62 @@ Structure in clean Markdown:
         return res.send(buffer);
       }
 
-      // Legacy fallback: check if file exists on disk
-      if (material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
-        const filename = path.basename(material.storagePath);
-        const filePath = path.join(process.cwd(), 'uploads', 'materials', filename);
-        if (fs.existsSync(filePath)) {
-          return res.download(filePath, material.originalFileName);
-        }
-      }
-
       res.status(404).json({
         error: 'FILE_UNAVAILABLE',
         message: 'Original file content is not accessible. Please re-upload this document.',
       });
     } catch (error) {
       res.status(500).json({ error: 'Failed to download study material' });
+    }
+  });
+
+  // 5b. View file inline (for PDF iframe, image preview)
+  app.get('/api/study-materials/:id/view', async (req, res) => {
+    try {
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
+      let material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
+      if (!material && userId) {
+        const defaultDb = readDB();
+        material = (defaultDb.studyMaterials || []).find((m) => m.id === req.params.id);
+      }
+      if (!material) {
+        return res.status(404).json({ error: 'Study material not found' });
+      }
+
+      // If stored in Vercel Blob or public cloud storage, redirect directly
+      const cloudUrl = material.storageUrl || (material.storagePath && material.storagePath.startsWith('http') ? material.storagePath : null);
+      if (cloudUrl) {
+        return res.redirect(cloudUrl);
+      }
+
+      // If disk file exists
+      if (material.storagePath && material.storagePath.startsWith('/api/study-materials/files/')) {
+        const filename = path.basename(material.storagePath);
+        const filePath = path.join(process.cwd(), 'uploads', 'materials', filename);
+        if (fs.existsSync(filePath)) {
+          res.setHeader('Content-Type', material.mimeType || 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(material.originalFileName)}"`);
+          return fs.createReadStream(filePath).pipe(res);
+        }
+      }
+
+      // If dataUrl or base64 is stored
+      if (material.fileDataUrl && material.fileDataUrl.startsWith('data:')) {
+        const parts = material.fileDataUrl.split(',');
+        const mime = parts[0].match(/:(.*?);/)?.[1] || material.mimeType || 'application/pdf';
+        const buffer = Buffer.from(parts[1], 'base64');
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(material.originalFileName)}"`);
+        return res.send(buffer);
+      }
+
+      res.status(404).json({
+        error: 'FILE_UNAVAILABLE',
+        message: 'Original file content is not accessible.',
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to view study material' });
     }
   });
 

@@ -136,59 +136,9 @@ export default function StudyMaterialUploadModal({
       if (baseAuthHeaders['x-user-id']) tokenOnlyHeaders['x-user-id'] = baseAuthHeaders['x-user-id'];
       if (baseAuthHeaders['x-user-email']) tokenOnlyHeaders['x-user-email'] = baseAuthHeaders['x-user-email'];
 
-      // Strategy 1: Attempt direct client-side Vercel Blob upload (handles up to 30MB without hitting serverless 4.5MB limits)
+      // Strategy 1: Fast direct multipart server upload (supports up to 30MB, resilient local/cloud storage)
       try {
-        setUploadProgress(30);
-        const blob = await upload(file.name, file, {
-          access: 'public',
-          handleUploadUrl: '/api/study-materials/upload-token',
-          headers: tokenOnlyHeaders,
-        });
-
-        setUploadProgress(75);
-
-        // Save material metadata with the permanent blob identifier & URL
-        const metaResp = await fetch('/api/study-materials', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...tokenOnlyHeaders,
-          },
-          body: JSON.stringify({
-            name: documentTitle,
-            subjectId,
-            subjectName,
-            topic: topic.trim(),
-            originalFileName: file.name,
-            fileType: cleanExt,
-            mimeType: file.type || 'application/octet-stream',
-            fileSize: file.size,
-            storagePath: blob.url,
-            storageKey: blob.pathname,
-            storageUrl: blob.url,
-            downloadUrl: blob.downloadUrl,
-          }),
-        });
-
-        if (!metaResp.ok) {
-          const errData = await metaResp.json().catch(() => ({}));
-          throw new Error(errData.message || 'Failed to save material metadata after file upload.');
-        }
-
-        savedMaterial = await metaResp.json();
-      } catch (blobError: any) {
-        console.warn('Client blob upload not available or failed:', blobError?.message);
-
-        // If storage is explicitly unconfigured, check the diagnostic message
-        if (
-          blobError?.message?.includes('storage is not configured') ||
-          blobError?.message?.includes('STORAGE_NOT_CONFIGURED')
-        ) {
-          throw new Error('Study Materials storage is not configured for production.');
-        }
-
-        // Strategy 2: Fallback to server multipart upload endpoint
-        setUploadProgress(45);
+        setUploadProgress(40);
         const formData = new FormData();
         formData.append('file', file);
         formData.append('name', documentTitle);
@@ -204,19 +154,104 @@ export default function StudyMaterialUploadModal({
 
         const data = await response.json().catch(() => ({}));
 
-        if (!response.ok) {
-          if (data.error === 'LIMIT_REACHED') {
+        if (response.ok && data && data.id) {
+          savedMaterial = data;
+        } else if (data.error === 'LIMIT_REACHED') {
+          onTriggerUpgrade();
+          onClose();
+          return;
+        } else {
+          console.warn('Multipart upload encountered an issue, trying alternative upload strategy:', data?.message || data?.error);
+        }
+      } catch (multipartErr: any) {
+        console.warn('Multipart upload failed, attempting fallback upload:', multipartErr?.message);
+      }
+
+      // Strategy 2: Attempt client-side Vercel Blob upload if configured
+      if (!savedMaterial) {
+        try {
+          setUploadProgress(60);
+          const blob = await upload(file.name, file, {
+            access: 'public',
+            handleUploadUrl: '/api/study-materials/upload-token',
+            headers: tokenOnlyHeaders,
+          });
+
+          setUploadProgress(80);
+
+          // Save material metadata with the permanent blob identifier & URL
+          const metaResp = await fetch('/api/study-materials', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...tokenOnlyHeaders,
+            },
+            body: JSON.stringify({
+              name: documentTitle,
+              subjectId,
+              subjectName,
+              topic: topic.trim(),
+              originalFileName: file.name,
+              fileType: cleanExt,
+              mimeType: file.type || 'application/octet-stream',
+              fileSize: file.size,
+              storagePath: blob.url,
+              storageKey: blob.pathname,
+              storageUrl: blob.url,
+              downloadUrl: blob.downloadUrl,
+            }),
+          });
+
+          if (metaResp.ok) {
+            savedMaterial = await metaResp.json();
+          }
+        } catch (blobError: any) {
+          console.warn('Client blob upload not available, falling back to base64 encoding:', blobError?.message);
+        }
+      }
+
+      // Strategy 3: Resilient client-side FileReader Base64 fallback (guarantees upload even if server limits or network issues occur)
+      if (!savedMaterial) {
+        setUploadProgress(70);
+        const base64DataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        setUploadProgress(85);
+        const metaResp = await fetch('/api/study-materials', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...tokenOnlyHeaders,
+          },
+          body: JSON.stringify({
+            name: documentTitle,
+            subjectId,
+            subjectName,
+            topic: topic.trim(),
+            originalFileName: file.name,
+            fileType: cleanExt,
+            mimeType: file.type || 'application/octet-stream',
+            fileSize: file.size,
+            fileDataUrl: base64DataUrl,
+            fileBase64: base64DataUrl,
+          }),
+        });
+
+        if (!metaResp.ok) {
+          const errData = await metaResp.json().catch(() => ({}));
+          if (errData.error === 'LIMIT_REACHED') {
             onTriggerUpgrade();
             onClose();
             return;
           }
-          if (data.error === 'STORAGE_NOT_CONFIGURED') {
-            throw new Error('Study Materials storage is not configured for production.');
-          }
-          throw new Error(data.message || data.error || 'Unable to save this material. Please try again.');
+          throw new Error(errData.message || 'Unable to save this material. Please try again.');
         }
 
-        savedMaterial = data;
+        savedMaterial = await metaResp.json();
       }
 
       if (!savedMaterial || !savedMaterial.id) {
