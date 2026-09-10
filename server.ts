@@ -702,16 +702,161 @@ const getInitialDatabaseState = (): DatabaseSchema => {
   };
 };
 
-const getDbFilePath = (userId?: string) => {
+const getDbFilePath = (userId?: string, isBackup: boolean = false) => {
   const baseDir = (process.env.VERCEL || process.env.TMPDIR) ? '/tmp' : process.cwd();
+  const suffix = isBackup ? '_backup.json' : '.json';
   if (userId) {
     const sanitized = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
     if (sanitized) {
-      return path.join(baseDir, `server_db_${sanitized}.json`);
+      return path.join(baseDir, `server_db_${sanitized}${suffix}`);
     }
   }
-  return path.join(baseDir, 'server_db.json');
+  return path.join(baseDir, `server_db${suffix}`);
 };
+
+// Safe, non-destructive server-side merge of two database states
+function mergeDatabaseStates(
+  primary: DatabaseSchema | null | undefined,
+  secondary: DatabaseSchema | null | undefined
+): DatabaseSchema {
+  if (!primary && !secondary) return getInitialDatabaseState();
+  if (!primary) return secondary!;
+  if (!secondary) return primary;
+
+  const profileName = (secondary.profile?.name && secondary.profile.name !== 'Student')
+    ? secondary.profile.name
+    : (primary.profile?.name || 'Student');
+  const profileEmail = secondary.profile?.email || primary.profile?.email || '';
+  const profileInitials = secondary.profile?.initials || primary.profile?.initials || 'ST';
+
+  // Subscription entitlement protection: never downgrade from premium
+  let sub = primary.profile?.subscription;
+  if (!isSubscriptionActive(sub) && isSubscriptionActive(secondary.profile?.subscription)) {
+    sub = secondary.profile?.subscription;
+  }
+
+  // Merge Courses (Union by id)
+  const courseMap = new Map<string, any>();
+  (primary.courses || []).forEach(c => c && c.id && courseMap.set(c.id, c));
+  (secondary.courses || []).forEach(c => {
+    if (c && c.id) {
+      if (!courseMap.has(c.id)) {
+        courseMap.set(c.id, c);
+      } else {
+        courseMap.set(c.id, { ...courseMap.get(c.id), ...c });
+      }
+    }
+  });
+
+  // Merge Timetable (Union by id)
+  const timetableMap = new Map<string, any>();
+  (primary.timetable || []).forEach(t => t && t.id && timetableMap.set(t.id, t));
+  (secondary.timetable || []).forEach(t => {
+    if (t && t.id) {
+      if (!timetableMap.has(t.id)) {
+        timetableMap.set(t.id, t);
+      } else {
+        timetableMap.set(t.id, { ...timetableMap.get(t.id), ...t });
+      }
+    }
+  });
+
+  // Merge Assignments (Union by id)
+  const assignmentMap = new Map<string, any>();
+  (primary.assignments || []).forEach(a => a && a.id && assignmentMap.set(a.id, a));
+  (secondary.assignments || []).forEach(a => {
+    if (a && a.id) {
+      if (!assignmentMap.has(a.id)) {
+        assignmentMap.set(a.id, a);
+      } else {
+        assignmentMap.set(a.id, { ...assignmentMap.get(a.id), ...a });
+      }
+    }
+  });
+
+  // Merge Exams (Union by id)
+  const examMap = new Map<string, any>();
+  (primary.exams || []).forEach(e => e && e.id && examMap.set(e.id, e));
+  (secondary.exams || []).forEach(e => {
+    if (e && e.id) {
+      if (!examMap.has(e.id)) {
+        examMap.set(e.id, e);
+      } else {
+        examMap.set(e.id, { ...examMap.get(e.id), ...e });
+      }
+    }
+  });
+
+  // Merge Notes (Union by id, preserving latest timestamp)
+  const notesMap = new Map<string, any>();
+  (primary.notes || []).forEach(n => n && n.id && notesMap.set(n.id, n));
+  (secondary.notes || []).forEach(n => {
+    if (n && n.id) {
+      const existing = notesMap.get(n.id);
+      if (!existing) {
+        notesMap.set(n.id, n);
+      } else {
+        const existingTs = new Date(existing.updatedAt || 0).getTime();
+        const incomingTs = new Date(n.updatedAt || 0).getTime();
+        notesMap.set(n.id, incomingTs >= existingTs ? { ...existing, ...n } : { ...n, ...existing });
+      }
+    }
+  });
+
+  // Merge Study Sessions (Union by id)
+  const sessionMap = new Map<string, any>();
+  (primary.studySessions || []).forEach(s => s && s.id && sessionMap.set(s.id, s));
+  (secondary.studySessions || []).forEach(s => {
+    if (s && s.id && !sessionMap.has(s.id)) {
+      sessionMap.set(s.id, s);
+    }
+  });
+
+  // Merge Audio Lectures (Union by id)
+  const audioMap = new Map<string, any>();
+  (primary.audioLectures || []).forEach(a => a && a.id && audioMap.set(a.id, a));
+  (secondary.audioLectures || []).forEach(a => {
+    if (a && a.id) {
+      if (!audioMap.has(a.id)) {
+        audioMap.set(a.id, a);
+      } else {
+        audioMap.set(a.id, { ...audioMap.get(a.id), ...a });
+      }
+    }
+  });
+
+  // Merge Study Materials (Union by id)
+  const materialsMap = new Map<string, any>();
+  (primary.studyMaterials || []).forEach(m => m && m.id && materialsMap.set(m.id, m));
+  (secondary.studyMaterials || []).forEach(m => {
+    if (m && m.id) {
+      if (!materialsMap.has(m.id)) {
+        materialsMap.set(m.id, m);
+      } else {
+        materialsMap.set(m.id, { ...materialsMap.get(m.id), ...m });
+      }
+    }
+  });
+
+  return {
+    profile: {
+      ...primary.profile,
+      ...secondary.profile,
+      name: profileName,
+      email: profileEmail,
+      initials: profileInitials,
+      subscription: sub,
+    },
+    courses: Array.from(courseMap.values()),
+    timetable: Array.from(timetableMap.values()),
+    assignments: Array.from(assignmentMap.values()),
+    exams: Array.from(examMap.values()),
+    notes: Array.from(notesMap.values()),
+    studySessions: Array.from(sessionMap.values()),
+    audioLectures: Array.from(audioMap.values()),
+    studyMaterials: Array.from(materialsMap.values()),
+  };
+}
 
 // --- Dedicated Subscriptions & Entitlements Ledger ---
 interface StoredSubscriptionLedgerEntry {
@@ -1027,13 +1172,30 @@ const normalizePlanType = (plan: string): 'monthly' | 'yearly' | 'quarterly' => 
 
 let inMemoryDbMap = new Map<string, DatabaseSchema>();
 
-// Database utility helpers with account isolation support
+// Database utility helpers with account isolation support and redundant backup persistence
 const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
   const memKey = userId ? `user_${userId}` : 'default';
   try {
-    const filePath = getDbFilePath(userId);
-    if (!fs.existsSync(filePath)) {
-      // If user specific file does not exist, seed from initial database state
+    const filePath = getDbFilePath(userId, false);
+    const backupFilePath = getDbFilePath(userId, true);
+    const cwdFilePath = path.join(process.cwd(), 'server_db.json');
+
+    let activePath: string | null = null;
+    if (fs.existsSync(filePath)) {
+      activePath = filePath;
+    } else if (fs.existsSync(backupFilePath)) {
+      activePath = backupFilePath;
+    } else if (fs.existsSync(cwdFilePath)) {
+      activePath = cwdFilePath;
+    }
+
+    if (!activePath) {
+      // If user specific file does not exist, check in-memory cache
+      if (inMemoryDbMap.has(memKey)) {
+        return inMemoryDbMap.get(memKey)!;
+      }
+
+      // Seed from initial database state
       const defaultState = getInitialDatabaseState();
       
       // If the user already has an active subscription in the ledger, preserve it!
@@ -1054,18 +1216,25 @@ const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
       }
       try {
         fs.writeFileSync(filePath, JSON.stringify(defaultState, null, 2));
+        fs.writeFileSync(backupFilePath, JSON.stringify(defaultState, null, 2));
       } catch (e) {
         inMemoryDbMap.set(memKey, defaultState);
       }
       return defaultState;
     }
-    const data = fs.readFileSync(filePath, 'utf-8');
+
+    const data = fs.readFileSync(activePath, 'utf-8');
     const parsed = JSON.parse(data) as DatabaseSchema;
-    if (!parsed.audioLectures) {
-      parsed.audioLectures = [];
-    }
-    if (!parsed.studyMaterials) {
-      parsed.studyMaterials = [];
+    if (!parsed.courses) parsed.courses = [];
+    if (!parsed.timetable) parsed.timetable = [];
+    if (!parsed.assignments) parsed.assignments = [];
+    if (!parsed.exams) parsed.exams = [];
+    if (!parsed.notes) parsed.notes = [];
+    if (!parsed.studySessions) parsed.studySessions = [];
+    if (!parsed.audioLectures) parsed.audioLectures = [];
+    if (!parsed.studyMaterials) parsed.studyMaterials = [];
+    if (!parsed.profile) {
+      parsed.profile = getInitialDatabaseState().profile;
     }
     if (!parsed.profile.aiUsage) {
       parsed.profile.aiUsage = {
@@ -1096,6 +1265,8 @@ const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
       }
     }
 
+    // Keep in-memory cache synchronized
+    inMemoryDbMap.set(memKey, parsed);
     return parsed;
   } catch (err) {
     console.error(`Error reading database file for user ${userId || 'default'}, using fallback state:`, err);
@@ -1104,12 +1275,14 @@ const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
       fallback = getInitialDatabaseState();
       inMemoryDbMap.set(memKey, fallback);
     }
-    if (!fallback.audioLectures) {
-      fallback.audioLectures = [];
-    }
-    if (!fallback.studyMaterials) {
-      fallback.studyMaterials = [];
-    }
+    if (!fallback.courses) fallback.courses = [];
+    if (!fallback.timetable) fallback.timetable = [];
+    if (!fallback.assignments) fallback.assignments = [];
+    if (!fallback.exams) fallback.exams = [];
+    if (!fallback.notes) fallback.notes = [];
+    if (!fallback.studySessions) fallback.studySessions = [];
+    if (!fallback.audioLectures) fallback.audioLectures = [];
+    if (!fallback.studyMaterials) fallback.studyMaterials = [];
     if (!isSubscriptionActive(fallback.profile?.subscription)) {
       const activeFromLedger = getActiveSubscriptionFromLedger(userId, userEmail);
       if (activeFromLedger) {
@@ -1153,11 +1326,22 @@ const writeDB = (data: DatabaseSchema, userId?: string, userEmail?: string) => {
   }
 
   inMemoryDbMap.set(memKey, data);
+  const jsonStr = JSON.stringify(data, null, 2);
+
+  // 1. Primary write
   try {
-    const filePath = getDbFilePath(userId);
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    const filePath = getDbFilePath(userId, false);
+    fs.writeFileSync(filePath, jsonStr);
   } catch (err) {
-    console.warn(`Could not write database file for user ${userId || 'default'} to disk (in-memory state updated):`, err);
+    console.warn(`Could not write primary database file for user ${userId || 'default'} to disk:`, err);
+  }
+
+  // 2. Secondary redundant backup write
+  try {
+    const backupFilePath = getDbFilePath(userId, true);
+    fs.writeFileSync(backupFilePath, jsonStr);
+  } catch (err) {
+    console.warn(`Could not write backup database file for user ${userId || 'default'} to disk:`, err);
   }
 };
 
@@ -1295,6 +1479,41 @@ app.get('/api/state', (req, res) => {
   }
 });
 
+// 1a. Safe non-destructive client-server state synchronization
+app.post('/api/state/sync', (req, res) => {
+  try {
+    const { userId, userEmail } = getEffectiveUser(req);
+    const clientState = req.body?.state as DatabaseSchema;
+    if (!clientState) {
+      return res.status(400).json({ error: 'State payload is required' });
+    }
+    const currentDb = readDB(userId, userEmail);
+    const merged = mergeDatabaseStates(currentDb, clientState);
+    writeDB(merged, userId, userEmail);
+    res.json(merged);
+  } catch (error) {
+    console.error('Failed to sync state:', error);
+    res.status(500).json({ error: 'Failed to sync database state' });
+  }
+});
+
+app.put('/api/state', (req, res) => {
+  try {
+    const { userId, userEmail } = getEffectiveUser(req);
+    const clientState = (req.body?.state || req.body) as DatabaseSchema;
+    if (!clientState) {
+      return res.status(400).json({ error: 'State payload is required' });
+    }
+    const currentDb = readDB(userId, userEmail);
+    const merged = mergeDatabaseStates(currentDb, clientState);
+    writeDB(merged, userId, userEmail);
+    res.json(merged);
+  } catch (error) {
+    console.error('Failed to update state:', error);
+    res.status(500).json({ error: 'Failed to update database state' });
+  }
+});
+
   // 2. Update user profile
   app.put('/api/profile', (req, res) => {
     try {
@@ -1401,15 +1620,9 @@ app.get('/api/state', (req, res) => {
   // Let's implement dynamic schedules.
   app.post('/api/timetable', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       
-      // Calculate active schedules or periods. To be secure, let's limit total periods on free plan to 5, or schedules to 2.
-      // The prompt says: "2 Timetables". Let's support multiple timetables.
-      // If we represent a "timetable" as a collection of periods, a free user can create periods for at most 2 distinct "timetable schedules".
-      // Let's count unique timetable IDs. If we have a single default timetable, and they want to create a second schedule, we enforce.
-      // Alternatively, let's check unique periods. To keep things extremely simple and transparent, let's enforce a limit of at most 2 custom schedule schedules.
-      // Let's count periods. If free, let's allow at most 2 periods as the core limit for simpler demo testing, or separate schedules. Let's make it 2 periods for the free limit to trigger easily, or allow creating at most 2 separate weekly schedules.
-      // Let's enforce that a user on the Free plan can create at most 2 period entries in their timetable so they hit the limit beautifully, and can upgrade.
       const totalPeriods = db.timetable.length;
       if (!isSubscriptionActive(db.profile.subscription) && totalPeriods >= FREE_PLAN_LIMITS.timetables) {
         return res.status(403).json({
@@ -1426,7 +1639,7 @@ app.get('/api/state', (req, res) => {
         courseId: req.body.courseId || 'c1',
       };
       db.timetable.push(newPeriod);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(newPeriod);
     } catch (error) {
       res.status(500).json({ error: 'Failed to create timetable period' });
@@ -1435,11 +1648,12 @@ app.get('/api/state', (req, res) => {
 
   app.put('/api/timetable/:id', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       const index = db.timetable.findIndex((t) => t.id === req.params.id);
       if (index === -1) return res.status(404).json({ error: 'Schedule entry not found' });
       db.timetable[index] = { ...db.timetable[index], ...req.body };
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(db.timetable[index]);
     } catch (error) {
       res.status(500).json({ error: 'Failed to update schedule entry' });
@@ -1448,9 +1662,10 @@ app.get('/api/state', (req, res) => {
 
   app.delete('/api/timetable/:id', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       db.timetable = db.timetable.filter((t) => t.id !== req.params.id);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete schedule entry' });
@@ -1460,7 +1675,8 @@ app.get('/api/state', (req, res) => {
   // 5. Assignments CRUD with limit check
   app.post('/api/assignments', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       const activeTasks = db.assignments.filter((a) => a.status === 'pending').length;
       if (
         !isSubscriptionActive(db.profile.subscription) &&
@@ -1481,7 +1697,7 @@ app.get('/api/state', (req, res) => {
         description: req.body.description || '',
       };
       db.assignments.push(newAssignment);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(newAssignment);
     } catch (error) {
       res.status(500).json({ error: 'Failed to create assignment' });
@@ -1490,11 +1706,12 @@ app.get('/api/state', (req, res) => {
 
   app.put('/api/assignments/:id', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       const index = db.assignments.findIndex((a) => a.id === req.params.id);
       if (index === -1) return res.status(404).json({ error: 'Assignment not found' });
       db.assignments[index] = { ...db.assignments[index], ...req.body };
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(db.assignments[index]);
     } catch (error) {
       res.status(500).json({ error: 'Failed to update assignment' });
@@ -1503,9 +1720,10 @@ app.get('/api/state', (req, res) => {
 
   app.delete('/api/assignments/:id', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       db.assignments = db.assignments.filter((a) => a.id !== req.params.id);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete assignment' });
@@ -1515,7 +1733,8 @@ app.get('/api/state', (req, res) => {
   // 6. Exams CRUD with limit check
   app.post('/api/exams', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       if (!isSubscriptionActive(db.profile.subscription) && db.exams.length >= FREE_PLAN_LIMITS.exams) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
@@ -1531,7 +1750,7 @@ app.get('/api/state', (req, res) => {
         description: req.body.description || '',
       };
       db.exams.push(newExam);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(newExam);
     } catch (error) {
       res.status(500).json({ error: 'Failed to create exam' });
@@ -1540,11 +1759,12 @@ app.get('/api/state', (req, res) => {
 
   app.put('/api/exams/:id', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       const index = db.exams.findIndex((e) => e.id === req.params.id);
       if (index === -1) return res.status(404).json({ error: 'Exam not found' });
       db.exams[index] = { ...db.exams[index], ...req.body };
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(db.exams[index]);
     } catch (error) {
       res.status(500).json({ error: 'Failed to update exam' });
@@ -1553,9 +1773,10 @@ app.get('/api/state', (req, res) => {
 
   app.delete('/api/exams/:id', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       db.exams = db.exams.filter((e) => e.id !== req.params.id);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete exam' });
@@ -1565,7 +1786,8 @@ app.get('/api/state', (req, res) => {
   // 7. Notes CRUD with limit check
   app.post('/api/notes', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       if (!isSubscriptionActive(db.profile.subscription) && db.notes.length >= FREE_PLAN_LIMITS.notes) {
         return res.status(403).json({
           error: 'LIMIT_REACHED',
@@ -1580,7 +1802,7 @@ app.get('/api/state', (req, res) => {
         updatedAt: new Date().toISOString(),
       };
       db.notes.push(newNote);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(newNote);
     } catch (error) {
       res.status(500).json({ error: 'Failed to create note' });
@@ -1589,7 +1811,8 @@ app.get('/api/state', (req, res) => {
 
   app.put('/api/notes/:id', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       const index = db.notes.findIndex((n) => n.id === req.params.id);
       if (index === -1) return res.status(404).json({ error: 'Note not found' });
       db.notes[index] = {
@@ -1599,7 +1822,7 @@ app.get('/api/state', (req, res) => {
         courseId: req.body.courseId !== undefined ? req.body.courseId : db.notes[index].courseId,
         updatedAt: new Date().toISOString(),
       };
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(db.notes[index]);
     } catch (error) {
       res.status(500).json({ error: 'Failed to update note' });
@@ -1608,9 +1831,10 @@ app.get('/api/state', (req, res) => {
 
   app.delete('/api/notes/:id', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       db.notes = db.notes.filter((n) => n.id !== req.params.id);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete note' });
@@ -1620,7 +1844,8 @@ app.get('/api/state', (req, res) => {
   // 8. Study Sessions (Unlimited)
   app.post('/api/sessions', (req, res) => {
     try {
-      const db = readDB();
+      const { userId, userEmail } = getEffectiveUser(req);
+      const db = readDB(userId, userEmail);
       const newSession = {
         id: 's_' + crypto.randomUUID().slice(0, 8),
         durationMinutes: parseInt(req.body.durationMinutes) || Math.max(1, Math.round((req.body.actualFocusedDurationSeconds || 1500) / 60)),
@@ -1638,7 +1863,7 @@ app.get('/api/state', (req, res) => {
         createdAt: req.body.createdAt || new Date().toISOString(),
       };
       db.studySessions.push(newSession);
-      writeDB(db);
+      writeDB(db, userId, userEmail);
       res.json(newSession);
     } catch (error) {
       res.status(500).json({ error: 'Failed to save study session' });

@@ -60,8 +60,16 @@ import {
   clearLocalAuthUser, 
   associateLocalDataWithEmailAccount,
   checkCurrentAuth,
+  getAuthHeaders,
   handleSignOut as performSignOut
 } from './lib/emailAuth';
+import {
+  loadClientState,
+  saveClientState,
+  mergeDatabaseStates,
+  hasMeaningfulData,
+  sanitizeSchema,
+} from './lib/storage';
 import EmailAuthModal from './components/EmailAuthModal';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
@@ -97,8 +105,9 @@ export default function App() {
     }
     return null;
   });
-  const [dbState, setDbState] = useState<DatabaseSchema | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  // Initialize state synchronously from resilient dual-key local storage so data is immediately available
+  const [dbState, setDbState] = useState<DatabaseSchema | null>(() => loadClientState());
+  const [isLoading, setIsLoading] = useState<boolean>(() => !loadClientState());
   const [error, setError] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<AuthUserProfile | null>(() => getLocalAuthUser());
   const [isEmailAuthOpen, setIsEmailAuthOpen] = useState<boolean>(false);
@@ -125,9 +134,7 @@ export default function App() {
                   subscription: authResult.subscription,
                 },
               };
-              try {
-                localStorage.setItem('studyflow_db_state', JSON.stringify(next));
-              } catch (e) {}
+              saveClientState(next);
               return next;
             });
           }
@@ -158,9 +165,7 @@ export default function App() {
                         subscription: data.subscription,
                       },
                     };
-                    try {
-                      localStorage.setItem('studyflow_db_state', JSON.stringify(next));
-                    } catch (e) {}
+                    saveClientState(next);
                     return next;
                   });
                 }
@@ -203,9 +208,7 @@ export default function App() {
             subscription: subscription,
           },
         };
-        try {
-          localStorage.setItem('studyflow_db_state', JSON.stringify(next));
-        } catch (e) {}
+        saveClientState(next);
         return next;
       });
     } else {
@@ -219,9 +222,7 @@ export default function App() {
             email: user.email || prev.profile.email,
           },
         };
-        try {
-          localStorage.setItem('studyflow_db_state', JSON.stringify(next));
-        } catch (e) {}
+        saveClientState(next);
         return next;
       });
     }
@@ -272,13 +273,9 @@ export default function App() {
   const [isLimitDialogOpen, setIsLimitDialogOpen] = useState<boolean>(false);
   const [limitType, setLimitType] = useState<'assignments' | 'exams' | 'notes' | 'courses' | 'timetables' | 'audioLectures' | 'studyMaterials'>('assignments');
 
-  // Helper to persist state to LocalStorage and Firestore
+  // Helper to persist state to LocalStorage (both primary & backup keys) and Firestore
   const persistState = async (newState: DatabaseSchema) => {
-    try {
-      localStorage.setItem('studyflow_db_state', JSON.stringify(newState));
-    } catch (e) {
-      console.warn('Failed to save state to localStorage:', e);
-    }
+    saveClientState(newState);
 
     // Always preserve and update dedicated independent entitlement storage
     if (newState?.profile?.subscription) {
@@ -294,24 +291,86 @@ export default function App() {
     }
   };
 
-  // Load state on mount with entitlement protection
+  // Keep a reference to current dbState for visibilitychange and beforeunload flushing
+  const dbStateRef = React.useRef(dbState);
+  useEffect(() => {
+    dbStateRef.current = dbState;
+  }, [dbState]);
+
+  // Page lifecycle persistence: flush state on unload or when tab/browser goes into background
+  useEffect(() => {
+    const handleFlush = () => {
+      if (dbStateRef.current) {
+        saveClientState(dbStateRef.current);
+      }
+    };
+    window.addEventListener('beforeunload', handleFlush);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleFlush();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', handleFlush);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Load state on mount with entitlement protection and non-destructive cold-start protection
   const fetchState = async () => {
-    setIsLoading(true);
+    const initialLocal = loadClientState();
+    if (!initialLocal) {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       const localEntitlement = getStoredEntitlement();
+      const localCached = loadClientState();
 
       // 1. Try Express Backend API
-      const response = await fetch('/api/state').catch(() => null);
+      const response = await fetch('/api/state', {
+        headers: getAuthHeaders(),
+      }).catch(() => null);
+
       if (response && response.ok) {
-        const data = (await response.json()) as DatabaseSchema;
+        const serverData = (await response.json()) as DatabaseSchema;
         // Reconcile: Never allow an active entitlement to be wiped by free backend default
-        data.profile.subscription = reconcileSubscription(data?.profile?.subscription, localEntitlement);
-        if (isEntitlementActive(localEntitlement) && !isEntitlementActive(data?.profile?.subscription)) {
+        serverData.profile.subscription = reconcileSubscription(serverData?.profile?.subscription, localEntitlement);
+        if (isEntitlementActive(localEntitlement) && !isEntitlementActive(serverData?.profile?.subscription)) {
           syncEntitlementToBackend(localEntitlement!);
         }
-        setDbState(data);
-        persistState(data);
+
+        const localHas = hasMeaningfulData(localCached);
+        const serverHas = hasMeaningfulData(serverData);
+
+        let finalState: DatabaseSchema;
+        if (localHas && !serverHas) {
+          // COLD START SCENARIO: Server container was restarted/recycled (e.g. after 20-30 min idle).
+          // Server has clean default data while client has user's courses, tasks, notes, etc.
+          // NEVER overwrite local state with empty server defaults!
+          finalState = mergeDatabaseStates(localCached, serverData);
+          // Push local state to server to hydrate the newly spawned container instance
+          fetch('/api/state/sync', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
+            body: JSON.stringify({ state: finalState }),
+          }).catch((err) => console.warn('[Sync] Non-blocking server hydration notice:', err));
+        } else if (localHas && serverHas) {
+          // Both have data: perform safe union merge by ID
+          finalState = mergeDatabaseStates(localCached, serverData);
+        } else if (!localHas && serverHas) {
+          // Fresh browser profile / new device: take server data
+          finalState = sanitizeSchema(serverData);
+        } else {
+          finalState = sanitizeSchema(localCached || serverData);
+        }
+
+        setDbState(finalState);
+        persistState(finalState);
         return;
       }
 
@@ -323,8 +382,9 @@ export default function App() {
           if (docSnap.exists()) {
             const firestoreData = docSnap.data() as DatabaseSchema;
             firestoreData.profile.subscription = reconcileSubscription(firestoreData?.profile?.subscription, localEntitlement);
-            setDbState(firestoreData);
-            persistState(firestoreData);
+            const finalState = localCached ? mergeDatabaseStates(localCached, firestoreData) : sanitizeSchema(firestoreData);
+            setDbState(finalState);
+            persistState(finalState);
             return;
           }
         } catch (fErr) {
@@ -332,17 +392,12 @@ export default function App() {
         }
       }
 
-      // 3. Try LocalStorage
-      const localData = localStorage.getItem('studyflow_db_state');
-      if (localData) {
-        try {
-          const parsed = JSON.parse(localData) as DatabaseSchema;
-          parsed.profile.subscription = reconcileSubscription(parsed?.profile?.subscription, localEntitlement);
-          setDbState(parsed);
-          return;
-        } catch (e) {
-          console.warn('Failed to parse local state:', e);
-        }
+      // 3. Try LocalStorage (both primary and backup stores)
+      if (localCached) {
+        localCached.profile.subscription = reconcileSubscription(localCached?.profile?.subscription, localEntitlement);
+        setDbState(localCached);
+        persistState(localCached);
+        return;
       }
 
       // 4. Default Initial Client State fallback
@@ -354,7 +409,8 @@ export default function App() {
     } catch (err: any) {
       console.warn('Using initial fallback state:', err);
       const localEntitlement = getStoredEntitlement();
-      const fallback = getInitialClientState();
+      const localCached = loadClientState();
+      const fallback = localCached || getInitialClientState();
       fallback.profile.subscription = reconcileSubscription(fallback?.profile?.subscription, localEntitlement);
       setDbState(fallback);
       persistState(fallback);

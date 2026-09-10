@@ -1,4 +1,4 @@
-const CACHE_NAME = 'study-planner-pwa-v1';
+const CACHE_NAME = 'study-planner-pwa-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -37,28 +37,8 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // Handle API state requests with network-first, fallback to cache
-  if (url.pathname === '/api/state' && request.method === 'GET') {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put('/api/state-cache', responseClone);
-            });
-          }
-          return response;
-        })
-        .catch(() => {
-          return caches.match('/api/state-cache').then((cached) => {
-            if (cached) return cached;
-            return new Response(JSON.stringify({ error: 'OFFLINE' }), {
-              headers: { 'Content-Type': 'application/json' }
-            });
-          });
-        })
-    );
+  // Never cache or intercept any backend API routes; let the application network/storage layer handle state
+  if (url.pathname.startsWith('/api/')) {
     return;
   }
 

@@ -41,6 +41,9 @@ export function isEntitlementActive(sub?: Subscription | null): boolean {
  * Performs backward-compatible, idempotent migration from legacy dbState if needed.
  */
 export function getStoredEntitlement(): EntitlementRecord | null {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return null;
+  }
   try {
     // 1. Check dedicated independent entitlement storage
     const stored = localStorage.getItem(ENTITLEMENT_STORAGE_KEY);
@@ -83,6 +86,9 @@ export function saveStoredEntitlement(
   source: 'payment' | 'restored' | 'cache' | 'server' = 'cache',
   userDetails?: { userId?: string; userEmail?: string }
 ): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return;
+  }
   try {
     const record: EntitlementRecord = {
       ...subscription,
