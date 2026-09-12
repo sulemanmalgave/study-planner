@@ -4,6 +4,7 @@ import { X, Sparkles } from 'lucide-react';
 import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
 import { AuthUserProfile } from '../lib/emailAuth';
 import EmailAuthCard from './EmailAuthCard';
+import { useTranslation } from '../lib/i18n';
 
 interface EmailAuthModalProps {
   isOpen: boolean;
@@ -20,6 +21,8 @@ export default function EmailAuthModal({
   onAuthSuccess,
   onSignOut,
 }: EmailAuthModalProps) {
+  const { language } = useTranslation();
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -59,10 +62,12 @@ export default function EmailAuthModal({
                 />
                 <div>
                   <h3 className="text-sm font-extrabold text-[#1D1B20] tracking-tight flex items-center gap-1.5">
-                    <span>Study Planner Account</span>
+                    <span>{language === 'fr-FR' ? 'Compte Study Planner' : 'Study Planner Account'}</span>
                     <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
                   </h3>
-                  <p className="text-[11px] text-[#49454F]">Secure access to your study workspace</p>
+                  <p className="text-[11px] text-[#49454F]">
+                    {language === 'fr-FR' ? 'Accès sécurisé à votre espace d\'études' : 'Secure access to your study workspace'}
+                  </p>
                 </div>
               </div>
               <button

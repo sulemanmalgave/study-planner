@@ -12,8 +12,10 @@ import {
   LayoutDashboard,
   Calendar,
   CheckSquare,
-  Clock
+  Clock,
+  Globe
 } from 'lucide-react';
+import { useTranslation, Language } from './lib/i18n';
 
 import Sidebar from './components/Sidebar';
 import DashboardView from './components/DashboardView';
@@ -81,6 +83,7 @@ import {
 } from './lib/entitlement';
 
 export default function App() {
+  const { t, language, setLanguage } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
@@ -423,11 +426,21 @@ export default function App() {
     fetchState();
   }, []);
 
+  // Sync language with profile setting
+  useEffect(() => {
+    if (dbState?.profile?.language) {
+      const targetLang: Language = dbState.profile.language === 'fr-FR' ? 'fr-FR' : 'en';
+      if (targetLang !== language) {
+        setLanguage(targetLang);
+      }
+    }
+  }, [dbState?.profile?.language]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#0a0f1d] text-white space-y-4" id="app-loading-spinner">
         <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
-        <p className="text-xs font-mono text-slate-400 uppercase tracking-widest animate-pulse">Initializing Study Planner...</p>
+        <p className="text-xs font-mono text-slate-400 uppercase tracking-widest animate-pulse">{t('app.loading')}</p>
       </div>
     );
   }
@@ -438,16 +451,16 @@ export default function App() {
         <div className="p-4 bg-rose-950/40 border border-rose-800 rounded-2xl flex items-center gap-3 max-w-md">
           <AlertCircle className="w-8 h-8 text-rose-500 shrink-0" />
           <div>
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Workspace Connection Lost</h3>
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">{t('app.connectionLost')}</h3>
             <p className="text-[11px] text-rose-200 mt-1 leading-relaxed">{error}</p>
           </div>
         </div>
         <button
           onClick={fetchState}
-          className="flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-xs font-bold rounded-xl transition-all shadow"
+          className="flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-xs font-bold rounded-xl transition-all shadow cursor-pointer"
         >
           <RefreshCw className="w-4 h-4" />
-          <span>Re-try Connecting</span>
+          <span>{t('app.retryConnecting')}</span>
         </button>
       </div>
     );
@@ -1097,7 +1110,7 @@ export default function App() {
                   }
                 }}
               />
-              <span className="text-xs font-black tracking-tight text-[#1D1B20] truncate">Study Planner</span>
+              <span className="text-xs font-black tracking-tight text-[#1D1B20] truncate">{t('app.name')}</span>
             </div>
 
             {/* Global search input */}
@@ -1107,7 +1120,7 @@ export default function App() {
                 type="text"
                 value={globalSearchQuery}
                 onChange={(e) => setGlobalSearchQuery(e.target.value)}
-                placeholder="Search notes, assignments..."
+                placeholder={t('header.searchPlaceholder')}
                 className="w-full bg-[#F3EDF7] border-none rounded-full pl-10 pr-4 py-2 text-xs text-[#1D1B20] placeholder:text-[#49454F] focus:ring-2 focus:ring-[#6750A4] focus:outline-none"
               />
             </div>
@@ -1115,17 +1128,55 @@ export default function App() {
 
           {/* Right Header Quick Controls */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0" id="header-quick-actions">
+            {/* Language Selector in Header */}
+            <div className="flex items-center bg-[#F3EDF7] border border-[#E1E3E1] rounded-full p-0.5 text-[10px] font-bold" id="header-language-toggle" title="Switch language / Changer de langue">
+              <button
+                type="button"
+                onClick={() => {
+                  setLanguage('en');
+                  if (profile?.language !== 'en-US') {
+                    handleUpdateProfile({ language: 'en-US' });
+                  }
+                }}
+                className={`px-2 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${
+                  language === 'en'
+                    ? 'bg-[#6750A4] text-white shadow-xs'
+                    : 'text-[#49454F] hover:text-[#1D1B20]'
+                }`}
+                title="English (US)"
+              >
+                <span>EN</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLanguage('fr-FR');
+                  if (profile?.language !== 'fr-FR') {
+                    handleUpdateProfile({ language: 'fr-FR' });
+                  }
+                }}
+                className={`px-2 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${
+                  language === 'fr-FR'
+                    ? 'bg-[#6750A4] text-white shadow-xs'
+                    : 'text-[#49454F] hover:text-[#1D1B20]'
+                }`}
+                title="Français (France)"
+              >
+                <span>FR</span>
+              </button>
+            </div>
+
             <button
               onClick={() => handleQuickAddClick('task')}
               className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 bg-[#EADDFF] hover:bg-[#D0BCFF] text-[10px] font-black text-[#21005D] rounded-full border border-[#E1E3E1] transition-colors cursor-pointer"
               id="header-quick-add-btn"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">QUICK ADD</span>
+              <span className="hidden xs:inline">{t('header.quickAdd')}</span>
             </button>
 
             {/* Notification bell alert triggers */}
-            <button className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] rounded-full text-[#49454F] border border-[#E1E3E1] transition-colors relative cursor-pointer" title="Notifications">
+            <button className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] rounded-full text-[#49454F] border border-[#E1E3E1] transition-colors relative cursor-pointer" title={t('header.notifications')}>
               <Bell className="w-4 h-4" />
               <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-rose-500 rounded-full" />
             </button>
@@ -1311,8 +1362,8 @@ export default function App() {
           {/* Application Footer */}
           <footer className="mt-12 pt-6 border-t border-[#E1E3E1] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#49454F] font-medium px-2 pb-6" id="app-footer">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-[#1D1B20]">Study Planner</span>
-              <span>• Timetable, Study Timer &amp; Notes</span>
+              <span className="font-bold text-[#1D1B20]">{t('app.name')}</span>
+              <span>• {language === 'fr-FR' ? 'Emploi du temps, Chronomètre d\'étude & Fiches' : 'Timetable, Study Timer & Notes'}</span>
               <span className="text-[10px] bg-[#EADDFF] text-[#21005D] font-bold px-2 py-0.5 rounded-full border border-[#D0BCFF]/60">v1.2</span>
             </div>
             <div className="flex items-center gap-6">
@@ -1321,9 +1372,11 @@ export default function App() {
                 className="text-[#6750A4] hover:text-[#503E84] font-bold hover:underline cursor-pointer transition-colors"
                 id="footer-link-privacy"
               >
-                Privacy Policy
+                {language === 'fr-FR' ? 'Politique de confidentialité' : 'Privacy Policy'}
               </button>
-              <span className="text-slate-400">© 2026 All rights reserved</span>
+              <span className="text-slate-400">
+                © 2026 {language === 'fr-FR' ? 'Tous droits réservés' : 'All rights reserved'}
+              </span>
             </div>
           </footer>
 
@@ -1384,13 +1437,13 @@ export default function App() {
       {/* 4. Mobile Bottom Navigation Bar (< 768px) with Smooth Sliding Active Indicator */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#E1E3E1] z-40 px-2 py-1 flex items-center justify-around shadow-lg" id="mobile-bottom-nav">
         {[
-          { id: 'dashboard', label: 'Home', icon: LayoutDashboard, onClick: () => setActiveTab('dashboard'), isActive: activeTab === 'dashboard', elementId: 'bottom-nav-home' },
-          { id: 'calendar', label: 'Calendar', icon: Calendar, onClick: () => setActiveTab('calendar'), isActive: activeTab === 'calendar', elementId: 'bottom-nav-calendar' },
-          { id: 'assignments', label: 'Tasks', icon: CheckSquare, onClick: () => setActiveTab('assignments'), isActive: activeTab === 'assignments', elementId: 'bottom-nav-tasks' },
-          { id: 'study-timer', label: 'Timer', icon: Clock, onClick: () => setActiveTab('study-timer'), isActive: activeTab === 'study-timer', elementId: 'bottom-nav-timer' },
+          { id: 'dashboard', label: t('nav.home'), icon: LayoutDashboard, onClick: () => setActiveTab('dashboard'), isActive: activeTab === 'dashboard', elementId: 'bottom-nav-home' },
+          { id: 'calendar', label: t('nav.calendar'), icon: Calendar, onClick: () => setActiveTab('calendar'), isActive: activeTab === 'calendar', elementId: 'bottom-nav-calendar' },
+          { id: 'assignments', label: t('nav.tasks'), icon: CheckSquare, onClick: () => setActiveTab('assignments'), isActive: activeTab === 'assignments', elementId: 'bottom-nav-tasks' },
+          { id: 'study-timer', label: t('nav.timer'), icon: Clock, onClick: () => setActiveTab('study-timer'), isActive: activeTab === 'study-timer', elementId: 'bottom-nav-timer' },
           { 
             id: 'more', 
-            label: 'More', 
+            label: t('nav.more'), 
             icon: Menu, 
             onClick: () => setIsMobileMenuOpen(true), 
             isActive: ['subjects', 'timetable', 'exams', 'notes', 'progress', 'mobile-companion', 'settings'].includes(activeTab), 

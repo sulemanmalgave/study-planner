@@ -63,6 +63,7 @@ export function sanitizeSchema(state: any): DatabaseSchema {
       photoURL: state.profile?.photoURL || null,
       subscription: state.profile?.subscription || fallback.profile.subscription,
       aiUsage: state.profile?.aiUsage || fallback.profile.aiUsage,
+      language: state.profile?.language || (typeof window !== 'undefined' ? localStorage.getItem('studyflow_language') || 'en' : 'en'),
     },
     courses: Array.isArray(state.courses) ? state.courses : [],
     timetable: Array.isArray(state.timetable) ? state.timetable : [],

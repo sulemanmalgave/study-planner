@@ -43,6 +43,7 @@ export interface UserProfile {
   mobileDevice?: MobileDevice | null;
   aiUsage?: AiUsage;
   geminiApiKey?: string;
+  language?: 'en' | 'fr-FR' | string;
 }
 
 export interface Course {

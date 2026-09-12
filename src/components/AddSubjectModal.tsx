@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, BookOpen, Plus, AlertCircle, Check, Loader2 } from 'lucide-react';
 import { Course } from '../types';
+import { useTranslation } from '../lib/i18n';
 
 interface AddSubjectModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export default function AddSubjectModal({
   onSuccess,
   dark = false,
 }: AddSubjectModalProps) {
+  const { t, language } = useTranslation();
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [color, setColor] = useState('#3b82f6');
@@ -45,7 +47,7 @@ export default function AddSubjectModal({
 
     const trimmedName = name.trim();
     if (!trimmedName) {
-      setErrorMessage('Please enter a subject name.');
+      setErrorMessage(language === 'fr-FR' ? 'Veuillez saisir un nom de matière.' : 'Please enter a subject name.');
       return;
     }
 
@@ -56,7 +58,11 @@ export default function AddSubjectModal({
     );
 
     if (isDuplicate) {
-      setErrorMessage(`"${trimmedName}" already exists. Please choose a different name.`);
+      setErrorMessage(
+        language === 'fr-FR' 
+          ? `« ${trimmedName} » existe déjà. Veuillez choisir un autre nom.`
+          : `"${trimmedName}" already exists. Please choose a different name.`
+      );
       return;
     }
 
@@ -69,7 +75,7 @@ export default function AddSubjectModal({
       });
 
       if (!res.success) {
-        setErrorMessage(res.error || 'Failed to create subject.');
+        setErrorMessage(res.error || (language === 'fr-FR' ? 'Échec de la création de la matière.' : 'Failed to create subject.'));
         setIsSubmitting(false);
         return;
       }
@@ -89,7 +95,7 @@ export default function AddSubjectModal({
       }
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'An unexpected error occurred.');
+      setErrorMessage(err.message || (language === 'fr-FR' ? 'Une erreur inattendue est survenue.' : 'An unexpected error occurred.'));
       setIsSubmitting(false);
     }
   };
@@ -122,9 +128,13 @@ export default function AddSubjectModal({
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-extrabold tracking-tight">Add New Subject</h3>
+              <h3 className="text-sm font-extrabold tracking-tight">
+                {language === 'fr-FR' ? 'Ajouter une matière' : 'Add New Subject'}
+              </h3>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                Create a subject to link with tasks, classes, notes &amp; exams
+                {language === 'fr-FR'
+                  ? 'Créez une matière pour la lier aux devoirs, cours, notes et examens'
+                  : 'Create a subject to link with tasks, classes, notes & exams'}
               </p>
             </div>
           </div>
@@ -150,7 +160,7 @@ export default function AddSubjectModal({
         <div className="space-y-4" onKeyDown={handleKeyDown}>
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Subject Name <span className="text-red-500">*</span>
+              {language === 'fr-FR' ? 'Nom de la matière' : 'Subject Name'} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -161,7 +171,7 @@ export default function AddSubjectModal({
                 setName(e.target.value);
                 if (errorMessage) setErrorMessage('');
               }}
-              placeholder="e.g. Mathematics, Physics, Organic Chemistry"
+              placeholder={language === 'fr-FR' ? 'ex. Mathématiques, Physique, Chimie' : 'e.g. Mathematics, Physics, Organic Chemistry'}
               className={`w-full text-xs rounded-xl px-3.5 py-2.5 outline-none border transition-all ${
                 dark
                   ? 'bg-slate-800/80 border-slate-700 text-white focus:border-[#6750A4]'
@@ -173,7 +183,8 @@ export default function AddSubjectModal({
 
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Subject Code / Abbreviation <span className="text-slate-400 font-normal">(Optional)</span>
+              {language === 'fr-FR' ? 'Code / Abréviation' : 'Subject Code / Abbreviation'}{' '}
+              <span className="text-slate-400 font-normal">({language === 'fr-FR' ? 'Optionnel' : 'Optional'})</span>
             </label>
             <input
               type="text"
@@ -191,7 +202,7 @@ export default function AddSubjectModal({
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-              Color Tag
+              {language === 'fr-FR' ? 'Pastille de couleur' : 'Color Tag'}
             </label>
             <div className="flex flex-wrap items-center gap-2">
               {PRESET_COLORS.map((c) => (
@@ -223,7 +234,7 @@ export default function AddSubjectModal({
               }`}
               id="cancel-add-subject-btn"
             >
-              Cancel
+              {language === 'fr-FR' ? 'Annuler' : 'Cancel'}
             </button>
             <button
               type="button"
@@ -235,12 +246,12 @@ export default function AddSubjectModal({
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Saving...</span>
+                  <span>{language === 'fr-FR' ? 'Enregistrement...' : 'Saving...'}</span>
                 </>
               ) : (
                 <>
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Save Subject</span>
+                  <span>{language === 'fr-FR' ? 'Enregistrer la matière' : 'Save Subject'}</span>
                 </>
               )}
             </button>

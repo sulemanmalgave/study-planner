@@ -21,6 +21,7 @@ import {
   Flame
 } from 'lucide-react';
 import { Course, StudySession } from '../types';
+import { useTranslation } from '../lib/i18n';
 
 interface StudyTimerViewProps {
   courses: Course[];
@@ -37,6 +38,7 @@ export default function StudyTimerView({
   onAddCourse,
   onNavigateToTab
 }: StudyTimerViewProps) {
+  const { t, language, formatDate } = useTranslation();
   // Preset selection: 25 Min (1500s), 50 Min (3000s), Custom
   const [preset, setPreset] = useState<'25' | '50' | 'custom'>('25');
   const [customInputMinutes, setCustomInputMinutes] = useState(45);
@@ -397,17 +399,17 @@ export default function StudyTimerView({
           </div>
           <div>
             <div className="text-[10px] font-extrabold text-[#79747E] uppercase tracking-wider">
-              Today's Study
+              {language === 'fr-FR' ? 'Étude d\'aujourd\'hui' : "Today's Study"}
             </div>
             <div className="text-xl sm:text-2xl font-black text-[#1D1B20] tracking-tight">
               {todayFocusedMins >= 60 ? `${todayHours}h` : `${todayFocusedMins}m`}{' '}
               <span className="text-xs font-bold text-[#49454F]">
-                ({todaySessions.length} {todaySessions.length === 1 ? 'Session' : 'Sessions'})
+                ({todaySessions.length} {language === 'fr-FR' ? (todaySessions.length === 1 ? 'session' : 'sessions') : (todaySessions.length === 1 ? 'Session' : 'Sessions')})
               </span>
             </div>
             {mostStudiedToday !== 'None' && (
               <div className="text-xs font-semibold text-[#6750A4] mt-0.5">
-                Most Studied: <strong className="font-extrabold">{mostStudiedToday}</strong>
+                {language === 'fr-FR' ? 'Matière la plus étudiée :' : 'Most Studied:'} <strong className="font-extrabold">{mostStudiedToday}</strong>
               </div>
             )}
           </div>
@@ -417,7 +419,7 @@ export default function StudyTimerView({
         <div className="sm:col-span-7 flex flex-col justify-center space-y-1.5 border-t sm:border-t-0 sm:border-l border-slate-100 sm:pl-5 pt-3 sm:pt-0">
           <div className="flex justify-between items-center text-xs font-extrabold">
             <span className="text-[#1D1B20] uppercase tracking-wider text-[11px]">
-              Daily Progress Goal (3h)
+              {language === 'fr-FR' ? 'Objectif quotidien (3h)' : 'Daily Progress Goal (3h)'}
             </span>
             <span className="text-[#6750A4]">{dailyProgressPercent}%</span>
           </div>
@@ -439,13 +441,15 @@ export default function StudyTimerView({
             <div className="flex items-center gap-2">
               <Timer className="w-5 h-5 text-[#6750A4]" />
               <h3 className="text-base font-black text-[#1D1B20] tracking-tight">
-                Focus Study Timer
+                {language === 'fr-FR' ? 'Minuteur d\'étude' : 'Focus Study Timer'}
               </h3>
             </div>
 
             {/* Subject Dropdown / Add Subject */}
             <div className="flex items-center gap-2">
-              <span className="text-xs font-extrabold text-[#79747E] uppercase">Subject:</span>
+              <span className="text-xs font-extrabold text-[#79747E] uppercase">
+                {language === 'fr-FR' ? 'Matière :' : 'Subject:'}
+              </span>
               {courses.length > 0 ? (
                 <div className="relative">
                   <select
@@ -469,7 +473,9 @@ export default function StudyTimerView({
                   id="no-subjects-add-btn"
                 >
                   <AlertCircle className="w-3.5 h-3.5" />
-                  <span>No subjects added yet — Add Subject</span>
+                  <span>
+                    {language === 'fr-FR' ? 'Aucune matière — Ajouter une matière' : 'No subjects added yet — Add Subject'}
+                  </span>
                 </button>
               )}
             </div>
@@ -482,7 +488,7 @@ export default function StudyTimerView({
               style={{ backgroundColor: selectedCourse?.color || '#6750A4' }}
               id="active-subject-badge"
             >
-              {selectedCourse ? selectedCourse.name : 'Select a Subject'}
+              {selectedCourse ? selectedCourse.name : (language === 'fr-FR' ? 'Sélectionner une matière' : 'Select a Subject')}
             </span>
           </div>
 
@@ -497,7 +503,7 @@ export default function StudyTimerView({
                   : 'text-[#49454F] hover:text-[#1D1B20]'
               }`}
             >
-              25 Min
+              {language === 'fr-FR' ? '25 min' : '25 Min'}
             </button>
             <button
               onClick={() => setPreset('50')}
@@ -508,7 +514,7 @@ export default function StudyTimerView({
                   : 'text-[#49454F] hover:text-[#1D1B20]'
               }`}
             >
-              50 Min
+              {language === 'fr-FR' ? '50 min' : '50 Min'}
             </button>
             <button
               onClick={() => setPreset('custom')}
@@ -519,14 +525,16 @@ export default function StudyTimerView({
                   : 'text-[#49454F] hover:text-[#1D1B20]'
               }`}
             >
-              Custom
+              {language === 'fr-FR' ? 'Personnalisé' : 'Custom'}
             </button>
           </div>
 
           {/* Custom Duration Input */}
           {preset === 'custom' && (
             <div className="flex items-center gap-3 bg-[#F3EDF7]/60 p-2.5 rounded-2xl border border-[#E1E3E1]">
-              <span className="text-xs font-bold text-[#49454F]">Set Duration (Minutes):</span>
+              <span className="text-xs font-bold text-[#49454F]">
+                {language === 'fr-FR' ? 'Définir la durée (Minutes) :' : 'Set Duration (Minutes):'}
+              </span>
               <input
                 type="number"
                 min={1}
@@ -568,7 +576,11 @@ export default function StudyTimerView({
                 {formatTime(timeLeft)}
               </div>
               <div className="text-xs font-extrabold text-[#6750A4] uppercase tracking-widest">
-                {isRunning ? 'Focused Study' : isPaused ? 'Paused' : 'Ready'}
+                {isRunning
+                  ? (language === 'fr-FR' ? 'Concentration en cours' : 'Focused Study')
+                  : isPaused
+                  ? (language === 'fr-FR' ? 'En pause' : 'Paused')
+                  : (language === 'fr-FR' ? 'Prêt' : 'Ready')}
               </div>
             </div>
           </div>
@@ -582,7 +594,7 @@ export default function StudyTimerView({
                 id="start-focus-btn"
               >
                 <Play className="w-5 h-5 fill-current" />
-                <span>Start Focus</span>
+                <span>{language === 'fr-FR' ? 'Démarrer' : 'Start Focus'}</span>
               </button>
             ) : isRunning ? (
               <button
@@ -591,7 +603,7 @@ export default function StudyTimerView({
                 id="pause-focus-btn"
               >
                 <Pause className="w-5 h-5 fill-current" />
-                <span>Pause</span>
+                <span>{language === 'fr-FR' ? 'Pause' : 'Pause'}</span>
               </button>
             ) : (
               <button
@@ -600,7 +612,7 @@ export default function StudyTimerView({
                 id="resume-focus-btn"
               >
                 <Play className="w-5 h-5 fill-current" />
-                <span>Resume</span>
+                <span>{language === 'fr-FR' ? 'Reprendre' : 'Resume'}</span>
               </button>
             )}
 
@@ -610,14 +622,14 @@ export default function StudyTimerView({
                 className="px-5 py-3.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold text-xs sm:text-sm rounded-2xl transition-all cursor-pointer"
                 id="end-session-btn"
               >
-                End Session
+                {language === 'fr-FR' ? 'Terminer la session' : 'End Session'}
               </button>
             )}
 
             <button
               onClick={handleResetTimer}
               className="p-3.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] border border-[#E1E3E1] rounded-2xl transition-all cursor-pointer"
-              title="Reset Timer"
+              title={language === 'fr-FR' ? 'Réinitialiser le minuteur' : 'Reset Timer'}
               id="reset-timer-btn"
             >
               <RotateCcw className="w-5 h-5" />
@@ -627,7 +639,7 @@ export default function StudyTimerView({
           {isLogging && (
             <div className="flex items-center gap-2 text-xs font-bold text-[#6750A4] animate-pulse">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Saving focused study session...</span>
+              <span>{language === 'fr-FR' ? 'Enregistrement de la session...' : 'Saving focused study session...'}</span>
             </div>
           )}
         </div>
@@ -640,7 +652,7 @@ export default function StudyTimerView({
               <div className="flex items-center gap-2">
                 <Target className="w-5 h-5 text-[#6750A4]" />
                 <h4 className="text-sm font-black text-[#1D1B20] tracking-tight">
-                  Focus Mode
+                  {language === 'fr-FR' ? 'Mode concentration' : 'Focus Mode'}
                 </h4>
               </div>
 
@@ -661,15 +673,19 @@ export default function StudyTimerView({
             </div>
 
             <p className="text-xs text-[#49454F] font-medium leading-relaxed">
-              Stay focused and track your study session.
+              {language === 'fr-FR'
+                ? 'Restez concentré et enregistrez vos progrès d\'étude.'
+                : 'Stay focused and track your study session.'}
             </p>
 
             <div className="p-3 rounded-2xl bg-[#F3EDF7]/60 border border-[#E1E3E1] flex items-center gap-2 text-xs font-semibold text-[#1D1B20]">
               <Zap className="w-4 h-4 text-[#6750A4] shrink-0" />
               <span>
                 {isFocusModeEnabled
-                  ? 'Focus tracking active. Start timer when ready.'
-                  : 'Focus Mode paused.'}
+                  ? (language === 'fr-FR'
+                      ? 'Suivi actif. Lancez le minuteur lorsque vous êtes prêt.'
+                      : 'Focus tracking active. Start timer when ready.')
+                  : (language === 'fr-FR' ? 'Mode concentration suspendu.' : 'Focus Mode paused.')}
               </span>
             </div>
           </div>
@@ -679,10 +695,10 @@ export default function StudyTimerView({
             <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
               <h4 className="text-sm font-black text-[#1D1B20] tracking-tight flex items-center gap-2">
                 <Clock className="w-4 h-4 text-[#6750A4]" />
-                <span>Session History</span>
+                <span>{language === 'fr-FR' ? 'Historique des sessions' : 'Session History'}</span>
               </h4>
               <span className="text-xs font-bold text-[#79747E]">
-                {studySessions.length} Total
+                {studySessions.length} {language === 'fr-FR' ? 'au total' : 'Total'}
               </span>
             </div>
 
@@ -693,7 +709,7 @@ export default function StudyTimerView({
                   .reverse()
                   .map((session) => {
                     const course = courses.find((c) => c.id === session.courseId);
-                    const subjectName = session.subjectName || course?.name || 'General';
+                    const subjectName = session.subjectName || course?.name || (language === 'fr-FR' ? 'Général' : 'General');
                     const focusedMins = session.actualFocusedDurationSeconds
                       ? Math.round(session.actualFocusedDurationSeconds / 60)
                       : session.durationMinutes || 0;
@@ -714,7 +730,7 @@ export default function StudyTimerView({
                             </h5>
                           </div>
                           <div className="text-[11px] font-medium text-[#79747E]">
-                            {session.date} • {focusedMins} min focused
+                            {formatDate(session.date)} • {focusedMins} {language === 'fr-FR' ? 'min de révision' : 'min focused'}
                           </div>
                         </div>
 
@@ -725,14 +741,18 @@ export default function StudyTimerView({
                               : 'bg-emerald-100 text-emerald-800'
                           }`}
                         >
-                          {session.status === 'interrupted' ? 'Interrupted' : 'Completed'}
+                          {session.status === 'interrupted'
+                            ? (language === 'fr-FR' ? 'Interrompue' : 'Interrupted')
+                            : (language === 'fr-FR' ? 'Terminée' : 'Completed')}
                         </span>
                       </div>
                     );
                   })
               ) : (
                 <div className="text-center py-8 text-xs text-[#79747E] font-medium">
-                  No sessions recorded yet. Select a subject and start your first focus session!
+                  {language === 'fr-FR'
+                    ? 'Aucune session enregistrée pour le moment. Sélectionnez une matière et lancez votre première session !'
+                    : 'No sessions recorded yet. Select a subject and start your first focus session!'}
                 </div>
               )}
             </div>
@@ -749,18 +769,20 @@ export default function StudyTimerView({
             </div>
 
             <h3 className="text-xl font-black text-[#1D1B20] tracking-tight">
-              Study Session Complete! 🎉
+              {language === 'fr-FR' ? 'Session d\'étude terminée ! 🎉' : 'Study Session Complete! 🎉'}
             </h3>
 
             <div className="p-4 bg-[#F3EDF7] rounded-2xl border border-[#E1E3E1] space-y-1">
               <div className="text-xs font-bold text-[#79747E] uppercase tracking-wider">
-                {selectedCourse?.name || 'General'}
+                {selectedCourse?.name || (language === 'fr-FR' ? 'Général' : 'General')}
               </div>
               <div className="text-2xl font-black text-[#1D1B20]">
-                {lastCompletedMins} minutes focused
+                {lastCompletedMins} {language === 'fr-FR' ? 'minutes de concentration' : 'minutes focused'}
               </div>
               <p className="text-xs text-[#49454F] font-semibold pt-1">
-                Great job! Your focus time has been added to your subject statistics.
+                {language === 'fr-FR'
+                  ? 'Bravo ! Votre temps de travail a été ajouté aux statistiques de la matière.'
+                  : 'Great job! Your focus time has been added to your subject statistics.'}
               </p>
             </div>
 
@@ -773,7 +795,7 @@ export default function StudyTimerView({
                 className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-[#1D1B20] font-extrabold text-xs rounded-full transition-colors cursor-pointer"
                 id="completion-modal-done-btn"
               >
-                Done
+                {language === 'fr-FR' ? 'Terminé' : 'Done'}
               </button>
 
               <button
@@ -785,7 +807,7 @@ export default function StudyTimerView({
                 className="flex-1 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-extrabold text-xs rounded-full transition-colors shadow-xs cursor-pointer"
                 id="completion-modal-view-progress-btn"
               >
-                View Progress
+                {language === 'fr-FR' ? 'Voir mes progrès' : 'View Progress'}
               </button>
             </div>
           </div>
@@ -801,13 +823,13 @@ export default function StudyTimerView({
             </div>
 
             <h3 className="text-lg font-black text-[#1D1B20]">
-              End Study Session?
+              {language === 'fr-FR' ? 'Terminer la session d\'étude ?' : 'End Study Session?'}
             </h3>
 
             <p className="text-xs text-[#49454F] font-medium">
-              You studied for:{' '}
+              {language === 'fr-FR' ? 'Temps étudié :' : 'You studied for:'}{' '}
               <strong className="text-[#1D1B20]">
-                {Math.floor(actualFocusedSeconds / 60)} min {actualFocusedSeconds % 60} sec
+                {Math.floor(actualFocusedSeconds / 60)} min {actualFocusedSeconds % 60} {language === 'fr-FR' ? 's' : 'sec'}
               </strong>
             </p>
 
@@ -819,14 +841,14 @@ export default function StudyTimerView({
                 }}
                 className="w-full py-2.5 bg-[#6750A4] text-white font-extrabold text-xs rounded-full cursor-pointer shadow-xs"
               >
-                Continue Studying
+                {language === 'fr-FR' ? 'Continuer la session' : 'Continue Studying'}
               </button>
 
               <button
                 onClick={handleSaveInterruptedSession}
                 className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-[#1D1B20] font-extrabold text-xs rounded-full cursor-pointer"
               >
-                End &amp; Save
+                {language === 'fr-FR' ? 'Terminer & Enregistrer' : 'End & Save'}
               </button>
 
               <button
@@ -836,7 +858,7 @@ export default function StudyTimerView({
                 }}
                 className="w-full py-2 bg-transparent text-rose-600 hover:text-rose-700 font-bold text-xs cursor-pointer"
               >
-                Discard
+                {language === 'fr-FR' ? 'Abandonner' : 'Discard'}
               </button>
             </div>
           </div>
@@ -850,7 +872,7 @@ export default function StudyTimerView({
             <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
               <h3 className="text-base font-black text-[#1D1B20] flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-[#6750A4]" />
-                <span>Add New Subject</span>
+                <span>{language === 'fr-FR' ? 'Ajouter une matière' : 'Add New Subject'}</span>
               </h3>
               <button
                 onClick={() => setIsAddCourseModalOpen(false)}
@@ -863,21 +885,21 @@ export default function StudyTimerView({
             <form onSubmit={handleCreateSubject} className="space-y-4">
               <div>
                 <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
-                  Subject Name *
+                  {language === 'fr-FR' ? 'Nom de la matière *' : 'Subject Name *'}
                 </label>
                 <input
                   type="text"
                   required
                   value={newSubjectName}
                   onChange={(e) => setNewSubjectName(e.target.value)}
-                  placeholder="e.g. Mathematics, English, Physics"
+                  placeholder={language === 'fr-FR' ? 'ex. Mathématiques, Anglais, Physique' : 'e.g. Mathematics, English, Physics'}
                   className="w-full px-3.5 py-2.5 bg-white border border-[#E1E3E1] rounded-xl text-xs sm:text-sm text-[#1D1B20] focus:outline-none focus:border-[#6750A4]"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider mb-1.5">
-                  Badge Color
+                  {language === 'fr-FR' ? 'Couleur de l\'étiquette' : 'Badge Color'}
                 </label>
                 <div className="flex items-center gap-2">
                   {['#6750A4', '#2563eb', '#16a34a', '#d97706', '#dc2626', '#9333ea'].map((color) => (
@@ -900,14 +922,14 @@ export default function StudyTimerView({
                   onClick={() => setIsAddCourseModalOpen(false)}
                   className="px-4 py-2 text-xs font-bold text-[#49454F] hover:bg-slate-100 rounded-full cursor-pointer"
                 >
-                  Cancel
+                  {language === 'fr-FR' ? 'Annuler' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={!newSubjectName.trim()}
                   className="px-5 py-2 bg-[#6750A4] disabled:opacity-50 text-white text-xs font-extrabold rounded-full cursor-pointer shadow-xs"
                 >
-                  Create Subject
+                  {language === 'fr-FR' ? 'Créer la matière' : 'Create Subject'}
                 </button>
               </div>
             </form>

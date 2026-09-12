@@ -19,6 +19,7 @@ import {
 import { UserProfile } from '../types';
 import { drawerVariants, modalBackdropVariants } from '../lib/animations';
 import { AuthUserProfile } from '../lib/emailAuth';
+import { useTranslation } from '../lib/i18n';
 
 interface SidebarProps {
   activeTab: string;
@@ -44,20 +45,21 @@ export default function Sidebar({
   onSignOut,
 }: SidebarProps) {
   const isPremium = profile.subscription.subscriptionStatus === 'premium' || profile.subscription.plan === 'premium';
+  const { t, language } = useTranslation();
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'subjects', label: 'Subjects', icon: BookOpen },
-    { id: 'calendar', label: 'Calendar', icon: Calendar },
-    { id: 'timetable', label: 'Timetable', icon: CalendarDays },
-    { id: 'assignments', label: 'Assignments', icon: CheckSquare },
-    { id: 'exams', label: 'Exams', icon: GraduationCap },
-    { id: 'study-timer', label: 'Study Sessions', icon: Clock },
-    { id: 'audio-lectures', label: 'Audio Lectures', icon: Mic, isPremiumFeature: true },
-    { id: 'notes', label: 'Notes', icon: FileText },
-    { id: 'progress', label: 'Progress', icon: BarChart3 },
-    { id: 'mobile-companion', label: 'Mobile Companion', icon: Smartphone, isPremiumFeature: true },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
+    { id: 'subjects', label: t('nav.subjects'), icon: BookOpen },
+    { id: 'calendar', label: t('nav.calendar'), icon: Calendar },
+    { id: 'timetable', label: t('nav.timetable'), icon: CalendarDays },
+    { id: 'assignments', label: t('nav.assignments'), icon: CheckSquare },
+    { id: 'exams', label: t('nav.exams'), icon: GraduationCap },
+    { id: 'study-timer', label: t('nav.studySessions'), icon: Clock },
+    { id: 'audio-lectures', label: t('nav.audioLectures'), icon: Mic, isPremiumFeature: true },
+    { id: 'notes', label: t('nav.notes'), icon: FileText },
+    { id: 'progress', label: t('nav.progress'), icon: BarChart3 },
+    { id: 'mobile-companion', label: t('nav.mobileCompanion'), icon: Smartphone, isPremiumFeature: true },
+    { id: 'settings', label: t('nav.settings'), icon: Settings },
   ];
 
   const handleItemClick = (id: string) => {
@@ -92,7 +94,7 @@ export default function Sidebar({
             />
             <div className="min-w-0">
               <h1 className="text-sm font-extrabold tracking-tight text-[#1D1B20] leading-none truncate">Study Planner</h1>
-              <span className="text-[8px] font-mono font-bold tracking-wider text-[#6750A4] uppercase mt-0.5 block truncate">Timetable, Timer &amp; Notes</span>
+              <span className="text-[8px] font-mono font-bold tracking-wider text-[#6750A4] uppercase mt-0.5 block truncate">{t('app.subtitle')}</span>
             </div>
           </div>
           {isDrawer && (
@@ -163,13 +165,13 @@ export default function Sidebar({
             }}
             className="p-3 bg-emerald-50 border border-emerald-200/60 rounded-2xl flex items-center justify-between gap-2 text-emerald-800 transition-all card-interactive cursor-pointer hover:bg-emerald-100/70" 
             id={isDrawer ? "drawer-premium-active-card" : "sidebar-premium-active-card"}
-            title="Click to view subscription details"
+            title={t('settings.viewSubscriptionDetails')}
           >
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 animate-pulse" />
-              <span className="text-xs font-bold">Premium Active ✓</span>
+              <span className="text-xs font-bold">{t('settings.premiumActive')} ✓</span>
             </div>
-            <span className="text-[10px] text-emerald-700 font-semibold underline">Details</span>
+            <span className="text-[10px] text-emerald-700 font-semibold underline">{t('action.details')}</span>
           </div>
         ) : (
           <div className="p-3 bg-[#EADDFF]/30 border border-[#D0BCFF]/40 rounded-2xl transition-all card-interactive" id={isDrawer ? "drawer-premium-card" : "sidebar-premium-card"}>
@@ -178,17 +180,17 @@ export default function Sidebar({
               <span>Study Planner Premium</span>
             </div>
             <p className="text-[10px] text-[#49454F] font-medium mt-1 leading-snug">
-              Unlock advanced productivity tools
+              {t('premium.upgradeSubtitle')}
             </p>
             <ul className="mt-2 space-y-1 text-[9px] text-[#49454F] font-medium">
               <li className="flex items-center gap-1.5">
-                <span className="text-[#6750A4] font-bold">✓</span> Unlimited Notes
+                <span className="text-[#6750A4] font-bold">✓</span> {t('premium.unlimitedNotes')}
               </li>
               <li className="flex items-center gap-1.5">
-                <span className="text-[#6750A4] font-bold">✓</span> Advanced Study Analytics
+                <span className="text-[#6750A4] font-bold">✓</span> {t('premium.analytics')}
               </li>
               <li className="flex items-center gap-1.5">
-                <span className="text-[#6750A4] font-bold">✓</span> Smart Exam Planner
+                <span className="text-[#6750A4] font-bold">✓</span> {t('premium.unlimitedTasks')}
               </li>
             </ul>
             <button
@@ -199,7 +201,7 @@ export default function Sidebar({
               className="w-full mt-3 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold text-[10px] rounded-full uppercase tracking-wider transition-colors shadow-sm cursor-pointer btn-press"
               id={isDrawer ? "drawer-upgrade-button" : "sidebar-upgrade-button"}
             >
-              Upgrade
+              {t('action.upgrade')}
             </button>
           </div>
         )}
@@ -229,7 +231,7 @@ export default function Sidebar({
                 </span>
               ) : (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-[#79747E]/10 text-[#49454F] border border-[#79747E]/20 uppercase tracking-wider" id={isDrawer ? "drawer-badge-free" : "sidebar-badge-free"}>
-                  Free Plan
+                  {language === 'fr-FR' ? 'Gratuit' : 'Free Plan'}
                 </span>
               )}
 
@@ -237,19 +239,19 @@ export default function Sidebar({
                 <button
                   type="button"
                   onClick={onSignOut}
-                  title="Sign out of account"
+                  title={t('action.signOut')}
                   className="text-[10px] text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                 >
-                  Sign out
+                  {t('action.signOut')}
                 </button>
               ) : onSignIn ? (
                 <button
                   type="button"
                   onClick={onSignIn}
-                  title="Create or sign in to account"
+                  title={t('action.signIn')}
                   className="text-[10px] text-[#6750A4] hover:underline font-semibold cursor-pointer"
                 >
-                  Sign in
+                  {t('action.signIn')}
                 </button>
               ) : null}
             </div>

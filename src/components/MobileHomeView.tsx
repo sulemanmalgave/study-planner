@@ -19,6 +19,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { DatabaseSchema, DayOfWeek, Assignment, TimetablePeriod, Exam, Note } from '../types';
+import { formatFrDate, formatFrTime, formatFrDateTime, formatFrSlot } from '../lib/i18n';
 
 interface MobileHomeViewProps {
   dbState: DatabaseSchema;
@@ -72,7 +73,7 @@ export default function MobileHomeView({
         if (data.state) {
           onUpdateState(data.state);
         }
-        setLastSyncedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        setLastSyncedTime(formatFrTime(new Date()));
       }
     } catch (e) {
       console.warn('Sync failed:', e);
@@ -167,7 +168,7 @@ export default function MobileHomeView({
             {/* Welcome Banner */}
             <div className="p-4 bg-gradient-to-r from-[#6750A4] to-[#503E84] text-white rounded-2xl shadow-md space-y-1">
               <div className="flex justify-between items-center text-[10px] uppercase font-bold text-purple-200 tracking-wider">
-                <span>{todayDayName}, {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                <span>{todayDayName}, {formatFrDate(new Date(), { month: 'short', day: 'numeric' })}</span>
                 <span className="bg-white/20 px-2 py-0.5 rounded-full">Mobile Active</span>
               </div>
               <h2 className="text-base font-extrabold">Welcome, {dbState.profile.name}! 👋</h2>
@@ -197,7 +198,7 @@ export default function MobileHomeView({
                         <div className="space-y-0.5 min-w-0">
                           <h4 className="text-xs font-bold text-[#1D1B20] truncate">{item.subject}</h4>
                           <p className="text-[10px] text-slate-500 font-medium">
-                            ⏱️ {item.startTime} - {item.endTime}
+                            ⏱️ {formatFrSlot(item.startTime, item.endTime)}
                           </p>
                         </div>
                         {course && (
@@ -243,7 +244,7 @@ export default function MobileHomeView({
                       </button>
                       <div className="min-w-0 flex-1">
                         <h4 className="text-xs font-bold text-[#1D1B20] truncate">{task.title}</h4>
-                        <p className="text-[10px] text-slate-500">Due: {task.dueDate}</p>
+                        <p className="text-[10px] text-slate-500">Due: {formatFrDate(task.dueDate)}</p>
                       </div>
                       <span className={`px-2 py-0.5 text-[8px] font-bold rounded uppercase ${
                         task.priority === 'high' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
@@ -272,7 +273,7 @@ export default function MobileHomeView({
                     <div key={exam.id} className="p-3 bg-[#EADDFF]/30 rounded-xl border border-[#D0BCFF]/40 flex justify-between items-center">
                       <div>
                         <h4 className="text-xs font-bold text-[#21005D]">{exam.name}</h4>
-                        <p className="text-[10px] text-slate-600">Date: {exam.date}</p>
+                        <p className="text-[10px] text-slate-600">Date: {formatFrDateTime(exam.date)}</p>
                       </div>
                       <span className="text-[10px] font-bold bg-[#6750A4] text-white px-2 py-0.5 rounded-full">
                         Upcoming
@@ -305,7 +306,7 @@ export default function MobileHomeView({
                       <div key={item.id} className="flex justify-between items-center text-xs py-1">
                         <span className="font-bold text-[#1D1B20]">{item.subject}</span>
                         <span className="text-[10px] font-mono text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
-                          {item.startTime} - {item.endTime}
+                          {formatFrSlot(item.startTime, item.endTime)}
                         </span>
                       </div>
                     ))}
@@ -337,7 +338,7 @@ export default function MobileHomeView({
                     <h4 className={`text-xs font-bold ${task.status === 'completed' ? 'line-through text-slate-400' : 'text-[#1D1B20]'}`}>
                       {task.title}
                     </h4>
-                    <p className="text-[10px] text-slate-500">Due: {task.dueDate}</p>
+                    <p className="text-[10px] text-slate-500">Due: {formatFrDate(task.dueDate)}</p>
                   </div>
                 </div>
               ))}
@@ -358,7 +359,7 @@ export default function MobileHomeView({
                 <div key={exam.id} className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-2xs flex justify-between items-center">
                   <div>
                     <h4 className="text-xs font-bold text-[#1D1B20]">{exam.name}</h4>
-                    <p className="text-[10px] text-slate-500">Date: {exam.date}</p>
+                    <p className="text-[10px] text-slate-500">Date: {formatFrDateTime(exam.date)}</p>
                   </div>
                   <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-purple-100 text-[#21005D]">
                     {exam.status}

@@ -15,6 +15,7 @@ import { upload } from '@vercel/blob/client';
 import { Course, StudyMaterial, FREE_PLAN_LIMITS } from '../types';
 import SubjectSelect from './SubjectSelect';
 import { getAuthHeaders } from '../lib/emailAuth';
+import { useTranslation } from '../lib/i18n';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.webp', '.txt', '.csv'];
 
@@ -39,6 +40,7 @@ export default function StudyMaterialUploadModal({
   onUploadSuccess,
   onTriggerUpgrade,
 }: StudyMaterialUploadModalProps) {
+  const { t, language } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [subjectId, setSubjectId] = useState(courses[0]?.id || '');
@@ -58,12 +60,20 @@ export default function StudyMaterialUploadModal({
     const ext = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
 
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      setErrorMessage('Unsupported file format. Supported formats: PDF, Word (DOC, DOCX), Images (JPG, PNG, WEBP), Text (TXT), and CSV.');
+      setErrorMessage(
+        language === 'fr-FR'
+          ? 'Format de fichier non pris en charge. Formats acceptés : PDF, Word (DOC, DOCX), Images (JPG, PNG, WEBP), Texte (TXT) et CSV.'
+          : 'Unsupported file format. Supported formats: PDF, Word (DOC, DOCX), Images (JPG, PNG, WEBP), Text (TXT), and CSV.'
+      );
       return;
     }
 
     if (selectedFile.size > 30 * 1024 * 1024) {
-      setErrorMessage('File size exceeds the 30MB maximum limit. Please select a document under 30MB.');
+      setErrorMessage(
+        language === 'fr-FR'
+          ? 'La taille du fichier dépasse la limite maximale de 30 Mo. Veuillez sélectionner un document de moins de 30 Mo.'
+          : 'File size exceeds the 30MB maximum limit. Please select a document under 30MB.'
+      );
       return;
     }
 
@@ -101,8 +111,8 @@ export default function StudyMaterialUploadModal({
   const formatFileSize = (bytes: number) => {
     if (!bytes) return '0 B';
     if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + (language === 'fr-FR' ? ' Ko' : ' KB');
+    return (bytes / (1024 * 1024)).toFixed(1) + (language === 'fr-FR' ? ' Mo' : ' MB');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -114,7 +124,9 @@ export default function StudyMaterialUploadModal({
     }
 
     if (!file) {
-      setErrorMessage('Please select a file to upload.');
+      setErrorMessage(
+        language === 'fr-FR' ? 'Veuillez sélectionner un fichier à téléverser.' : 'Please select a file to upload.'
+      );
       return;
     }
 
@@ -123,7 +135,7 @@ export default function StudyMaterialUploadModal({
     setErrorMessage(null);
 
     const selectedCourse = courses.find((c) => c.id === subjectId);
-    const subjectName = selectedCourse?.name || 'General';
+    const subjectName = selectedCourse?.name || (language === 'fr-FR' ? 'Général' : 'General');
     const documentTitle = title.trim() || file.name.replace(/\.[^/.]+$/, '');
     const cleanExt = file.name.split('.').pop()?.toLowerCase() || 'pdf';
 
@@ -136,7 +148,7 @@ export default function StudyMaterialUploadModal({
       if (baseAuthHeaders['x-user-id']) tokenOnlyHeaders['x-user-id'] = baseAuthHeaders['x-user-id'];
       if (baseAuthHeaders['x-user-email']) tokenOnlyHeaders['x-user-email'] = baseAuthHeaders['x-user-email'];
 
-      // Strategy 1: Fast direct multipart server upload (supports up to 30MB, resilient local/cloud storage)
+      // Strategy 1: Fast direct multipart server upload
       try {
         setUploadProgress(40);
         const formData = new FormData();
@@ -160,8 +172,6 @@ export default function StudyMaterialUploadModal({
           onTriggerUpgrade();
           onClose();
           return;
-        } else {
-          console.warn('Multipart upload encountered an issue, trying alternative upload strategy:', data?.message || data?.error);
         }
       } catch (multipartErr: any) {
         console.warn('Multipart upload failed, attempting fallback upload:', multipartErr?.message);
@@ -179,7 +189,6 @@ export default function StudyMaterialUploadModal({
 
           setUploadProgress(80);
 
-          // Save material metadata with the permanent blob identifier & URL
           const metaResp = await fetch('/api/study-materials', {
             method: 'POST',
             headers: {
@@ -210,7 +219,7 @@ export default function StudyMaterialUploadModal({
         }
       }
 
-      // Strategy 3: Resilient client-side FileReader Base64 fallback (guarantees upload even if server limits or network issues occur)
+      // Strategy 3: Client-side FileReader Base64 fallback
       if (!savedMaterial) {
         setUploadProgress(70);
         const base64DataUrl = await new Promise<string>((resolve, reject) => {
@@ -248,14 +257,23 @@ export default function StudyMaterialUploadModal({
             onClose();
             return;
           }
-          throw new Error(errData.message || 'Unable to save this material. Please try again.');
+          throw new Error(
+            errData.message ||
+              (language === 'fr-FR'
+                ? 'Impossible d\'enregistrer ce document. Veuillez réessayer.'
+                : 'Unable to save this material. Please try again.')
+          );
         }
 
         savedMaterial = await metaResp.json();
       }
 
       if (!savedMaterial || !savedMaterial.id) {
-        throw new Error('Unable to save this material. Please try again.');
+        throw new Error(
+          language === 'fr-FR'
+            ? 'Impossible d\'enregistrer ce document. Veuillez réessayer.'
+            : 'Unable to save this material. Please try again.'
+        );
       }
 
       setUploadProgress(100);
@@ -263,7 +281,12 @@ export default function StudyMaterialUploadModal({
       onClose();
     } catch (err: any) {
       console.error('Study material upload failed:', err);
-      setErrorMessage(err.message || 'Unable to save this material. Please try again.');
+      setErrorMessage(
+        err.message ||
+          (language === 'fr-FR'
+            ? 'Impossible d\'enregistrer ce document. Veuillez réessayer.'
+            : 'Unable to save this material. Please try again.')
+      );
     } finally {
       setIsUploading(false);
     }
@@ -280,8 +303,12 @@ export default function StudyMaterialUploadModal({
               <Upload className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-black text-[#1D1B20]">Upload Study Material</h3>
-              <p className="text-[10px] text-[#49454F] font-medium">PDF, Word, Images, TXT, CSV up to 30MB</p>
+              <h3 className="text-sm font-black text-[#1D1B20]">
+                {language === 'fr-FR' ? 'Téléverser un document d\'étude' : 'Upload Study Material'}
+              </h3>
+              <p className="text-[10px] text-[#49454F] font-medium">
+                {language === 'fr-FR' ? 'PDF, Word, Images, TXT, CSV jusqu\'à 30 Mo' : 'PDF, Word, Images, TXT, CSV up to 30MB'}
+              </p>
             </div>
           </div>
           <button
@@ -299,14 +326,18 @@ export default function StudyMaterialUploadModal({
             <div className="flex items-center gap-2">
               <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <span className="text-[11px] font-medium">
-                Free Plan: <strong>{currentMaterialsCount}</strong> / {FREE_PLAN_LIMITS.studyMaterials} materials used
+                {language === 'fr-FR' ? (
+                  <>Offre gratuite : <strong>{currentMaterialsCount}</strong> / {FREE_PLAN_LIMITS.studyMaterials} documents utilisés</>
+                ) : (
+                  <>Free Plan: <strong>{currentMaterialsCount}</strong> / {FREE_PLAN_LIMITS.studyMaterials} materials used</>
+                )}
               </span>
             </div>
             <button
               onClick={onTriggerUpgrade}
               className="text-[10px] font-bold text-[#6750A4] hover:underline uppercase tracking-wide cursor-pointer"
             >
-              Get Unlimited
+              {language === 'fr-FR' ? 'Accès illimité' : 'Get Unlimited'}
             </button>
           </div>
         )}
@@ -363,7 +394,9 @@ export default function StudyMaterialUploadModal({
                     <span>•</span>
                     <span>{formatFileSize(file.size)}</span>
                   </div>
-                  <p className="text-[9px] text-emerald-600 font-semibold mt-1">Click or drop to replace file</p>
+                  <p className="text-[9px] text-emerald-600 font-semibold mt-1">
+                    {language === 'fr-FR' ? 'Cliquer ou glisser pour remplacer' : 'Click or drop to replace file'}
+                  </p>
                 </div>
               </div>
             ) : (
@@ -373,10 +406,14 @@ export default function StudyMaterialUploadModal({
                 </div>
                 <div>
                   <p className="text-xs font-bold text-[#1D1B20]">
-                    Drag &amp; drop your study document, or <span className="text-[#6750A4] underline">browse</span>
+                    {language === 'fr-FR' ? (
+                      <>Glissez-déposez votre document, ou <span className="text-[#6750A4] underline">parcourir</span></>
+                    ) : (
+                      <>Drag &amp; drop your study document, or <span className="text-[#6750A4] underline">browse</span></>
+                    )}
                   </p>
                   <p className="text-[10px] text-[#79747E] mt-1 font-mono">
-                    Supports PDF, Word, Images, TXT, CSV • Max 30MB
+                    {language === 'fr-FR' ? 'Prend en charge PDF, Word, Images, TXT, CSV • Max 30 Mo' : 'Supports PDF, Word, Images, TXT, CSV • Max 30MB'}
                   </p>
                 </div>
               </div>
@@ -387,13 +424,13 @@ export default function StudyMaterialUploadModal({
           <div className="space-y-3">
             <div>
               <label className="text-[10px] font-bold text-[#49454F] uppercase tracking-wider block mb-1">
-                Document Title
+                {language === 'fr-FR' ? 'Titre du document' : 'Document Title'}
               </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Chapter 4 - Derivatives & Integrals"
+                placeholder={language === 'fr-FR' ? 'ex. Chapitre 4 - Dérivées et intégrales' : 'e.g. Chapter 4 - Derivatives & Integrals'}
                 className="w-full bg-white border border-[#E1E3E1] text-xs font-medium text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-[#6750A4]/30 focus:border-[#6750A4] outline-none transition-all"
                 required
               />
@@ -406,20 +443,20 @@ export default function StudyMaterialUploadModal({
                   value={subjectId}
                   onChange={setSubjectId}
                   onAddCourse={onAddCourse}
-                  label="Subject / Class"
+                  label={language === 'fr-FR' ? 'Matière / Cours' : 'Subject / Class'}
                   id="material-subject-select"
                 />
               </div>
 
               <div>
                 <label className="text-[10px] font-bold text-[#49454F] uppercase tracking-wider block mb-1">
-                  Topic / Chapter (Optional)
+                  {language === 'fr-FR' ? 'Chapitre / Thème (Facultatif)' : 'Topic / Chapter (Optional)'}
                 </label>
                 <input
                   type="text"
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
-                  placeholder="e.g. Unit 3, Final Review"
+                  placeholder={language === 'fr-FR' ? 'ex. Module 3, Révision finale' : 'e.g. Unit 3, Final Review'}
                   className="w-full bg-white border border-[#E1E3E1] text-xs font-medium text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-[#6750A4]/30 focus:border-[#6750A4] outline-none transition-all"
                 />
               </div>
@@ -430,7 +467,7 @@ export default function StudyMaterialUploadModal({
           {isUploading && (
             <div className="space-y-1.5 pt-2">
               <div className="flex items-center justify-between text-[10px] font-mono text-[#49454F]">
-                <span>Uploading &amp; cloud syncing...</span>
+                <span>{language === 'fr-FR' ? 'Téléversement et synchronisation...' : 'Uploading & cloud syncing...'}</span>
                 <span>{uploadProgress}%</span>
               </div>
               <div className="w-full h-1.5 bg-[#E1E3E1] rounded-full overflow-hidden">
@@ -450,7 +487,7 @@ export default function StudyMaterialUploadModal({
               disabled={isUploading}
               className="px-4 py-2.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-bold text-[#1D1B20] rounded-xl border border-[#E1E3E1] transition-colors cursor-pointer"
             >
-              Cancel
+              {language === 'fr-FR' ? 'Annuler' : 'Cancel'}
             </button>
             <button
               type="submit"
@@ -461,12 +498,12 @@ export default function StudyMaterialUploadModal({
               {isUploading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Uploading Document...</span>
+                  <span>{language === 'fr-FR' ? 'Téléversement en cours...' : 'Uploading Document...'}</span>
                 </>
               ) : (
                 <>
                   <Upload className="w-4 h-4" />
-                  <span>Save to Materials</span>
+                  <span>{language === 'fr-FR' ? 'Enregistrer dans les documents' : 'Save to Materials'}</span>
                 </>
               )}
             </button>

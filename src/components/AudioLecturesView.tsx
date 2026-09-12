@@ -31,6 +31,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { AudioLecture, Course } from '../types';
+import { useTranslation } from '../lib/i18n';
 import {
   saveAudioBlob,
   deleteAudioBlob,
@@ -64,6 +65,9 @@ export default function AudioLecturesView({
   onDeleteLecture,
   onAddCourse
 }: AudioLecturesViewProps) {
+  const { t, language, formatDate } = useTranslation();
+  const isFr = language === 'fr-FR';
+
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('ALL');
@@ -167,11 +171,17 @@ export default function AudioLecturesView({
 
       await onUpdateLecture(selectedLecture.id, updates);
       setSelectedLecture((prev) => prev ? { ...prev, ...updates } : null);
-      setSaveSuccessMsg(`Saved ${field === 'notes' ? 'notes' : field} successfully`);
+      const fieldNamesFr: Record<string, string> = {
+        notes: 'notes',
+        transcript: 'transcription',
+        summary: 'résumé',
+        keyPoints: 'points clés'
+      };
+      setSaveSuccessMsg(isFr ? `Enregistrement réussi (${fieldNamesFr[field] || field})` : `Saved ${field === 'notes' ? 'notes' : field} successfully`);
       setTimeout(() => setSaveSuccessMsg(null), 2500);
     } catch (err) {
       console.error('Failed to save lecture notes:', err);
-      alert('Failed to save changes.');
+      alert(isFr ? 'Échec de l\'enregistrement des modifications.' : 'Failed to save changes.');
     } finally {
       setIsSavingNotes(false);
     }
@@ -183,7 +193,7 @@ export default function AudioLecturesView({
       setCopiedKey(key);
       setTimeout(() => setCopiedKey(null), 2000);
     }).catch(() => {
-      alert('Failed to copy to clipboard.');
+      alert(isFr ? 'Échec de la copie dans le presse-papiers.' : 'Failed to copy to clipboard.');
     });
   };
 
@@ -260,17 +270,41 @@ export default function AudioLecturesView({
 
       if (!res.ok) {
         // Handle Gemini not configured in production environment
-        if (data.error === 'GEMINI_NOT_CONFIGURED' || res.status === 503) {
+        if (data.error === 'GEMINI_NOT_CONFIGURED') {
           setAiWarningBanner(
-            'Gemini API key is not configured in production. Please set GEMINI_API_KEY in the Vercel environment variables.'
+            'Gemini API key is not configured in the server environment. Please configure GEMINI_API_KEY in the environment settings.'
           );
           return;
         }
 
-        // Handle quota / rate limit gracefully
+        // Handle temporary service high demand / capacity spikes (503)
+        if (data.error === 'AI_HIGH_DEMAND' || res.status === 503) {
+          setAiErrorBanner(
+            data.message || 'Gemini AI models are currently experiencing temporary high demand spikes. Please try again shortly.'
+          );
+          return;
+        }
+
+        // Handle quota / rate limit gracefully (Key exists and is valid)
         if (data.error === 'AI_QUOTA_EXCEEDED' || res.status === 429) {
           setAiErrorBanner(
-            'Gemini API rate limit or quota reached. Please wait 15-30 seconds and try again.'
+            'Gemini API daily quota reached. The API key is valid and configured, but the model request volume limit was exceeded.'
+          );
+          return;
+        }
+
+        // Handle invalid key / authentication failure
+        if (data.error === 'AI_AUTH_FAILED' || res.status === 401) {
+          setAiErrorBanner(
+            'Gemini API authentication failed. The configured key appears invalid, revoked, or expired.'
+          );
+          return;
+        }
+
+        // Handle permission denied / project disabled
+        if (data.error === 'AI_PERMISSION_DENIED') {
+          setAiErrorBanner(
+            'Gemini API permission denied. Ensure Generative Language API is enabled for your project.'
           );
           return;
         }
@@ -289,6 +323,9 @@ export default function AudioLecturesView({
         return;
       }
 
+      // Clear any prior configuration warning if call succeeded
+      setAiWarningBanner(null);
+
       // Success: populate corresponding state and persist
       const updates: Partial<AudioLecture> = {};
       const nowIso = new Date().toISOString();
@@ -299,7 +336,7 @@ export default function AudioLecturesView({
         updates.summaryGeneratedAt = nowIso;
         setSummaryText(val);
         setActiveNotesTab('summary');
-        setAiSuccessBanner('AI Summary generated and saved successfully.');
+        setAiSuccessBanner(isFr ? 'Résumé IA généré et enregistré avec succès.' : 'AI Summary generated and saved successfully.');
       } else if (type === 'keyPoints') {
         let val = data.keyPoints || '';
         if (Array.isArray(val)) {
@@ -317,21 +354,21 @@ export default function AudioLecturesView({
         updates.keyPointsGeneratedAt = nowIso;
         setKeyPointsText(val);
         setActiveNotesTab('keyPoints');
-        setAiSuccessBanner('AI Key Points generated and saved successfully.');
+        setAiSuccessBanner(isFr ? 'Points clés IA générés et enregistrés avec succès.' : 'AI Key Points generated and saved successfully.');
       } else if (type === 'studyNotes') {
         const val = typeof (data.studyNotes || data.notes) === 'string' ? (data.studyNotes || data.notes) : JSON.stringify(data.studyNotes || data.notes || '');
         updates.studyNotes = val;
         updates.studyNotesGeneratedAt = nowIso;
         setPersonalNotesText(val);
         setActiveNotesTab('notes');
-        setAiSuccessBanner('AI Study Notes generated and saved successfully.');
+        setAiSuccessBanner(isFr ? 'Notes d\'étude IA générées et enregistrées avec succès.' : 'AI Study Notes generated and saved successfully.');
       } else if (type === 'transcript') {
         const val = typeof data.transcript === 'string' ? data.transcript : JSON.stringify(data.transcript || '');
         updates.transcript = val;
         updates.transcriptGeneratedAt = nowIso;
         setTranscriptText(val);
         setActiveNotesTab('transcript');
-        setAiSuccessBanner('AI Transcript generated and saved successfully.');
+        setAiSuccessBanner(isFr ? 'Transcription IA générée et enregistrée avec succès.' : 'AI Transcript generated and saved successfully.');
       }
 
       await onUpdateLecture(selectedLecture.id, updates);
@@ -342,7 +379,7 @@ export default function AudioLecturesView({
       }, 4000);
     } catch (err: any) {
       console.error(`[AI ${type}] Request error:`, err);
-      setAiErrorBanner(err?.message || 'A network error occurred while contacting the AI service.');
+      setAiErrorBanner(err?.message || (isFr ? 'Une erreur réseau est survenue lors de la communication avec le service IA.' : 'A network error occurred while contacting the AI service.'));
     } finally {
       setAiLoadingType(null);
     }
@@ -372,7 +409,7 @@ export default function AudioLecturesView({
       const objectUrl = await getAudioObjectUrl(lecture.id, lecture.audioDataUrl);
 
       if (!objectUrl) {
-        alert('Could not load audio file for this lecture.');
+        alert(isFr ? 'Impossible de charger le fichier audio de ce cours.' : 'Could not load audio file for this lecture.');
         return;
       }
 
@@ -461,10 +498,10 @@ export default function AudioLecturesView({
 
   // Format file size
   const formatFileSize = (bytes?: number) => {
-    if (!bytes || bytes <= 0) return 'Unknown size';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (!bytes || bytes <= 0) return isFr ? 'Taille inconnue' : 'Unknown size';
+    if (bytes < 1024) return isFr ? `${bytes} o` : `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} ${isFr ? 'Ko' : 'KB'}`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} ${isFr ? 'Mo' : 'MB'}`;
   };
 
   // Sanitize characters for valid filename
@@ -487,7 +524,7 @@ export default function AudioLecturesView({
     }
 
     const parts = [subject, section, topic].filter((p) => p.length > 0);
-    const baseName = parts.length > 0 ? parts.join(' - ') : 'Audio Lecture';
+    const baseName = parts.length > 0 ? parts.join(' - ') : (isFr ? 'Cours audio' : 'Audio Lecture');
 
     return `${baseName}.${ext}`;
   };
@@ -497,7 +534,7 @@ export default function AudioLecturesView({
     try {
       const objectUrl = await getAudioObjectUrl(lecture.id, lecture.audioDataUrl);
       if (!objectUrl) {
-        alert('Could not retrieve audio file for download.');
+        alert(isFr ? 'Impossible de récupérer le fichier audio pour le téléchargement.' : 'Could not retrieve audio file for download.');
         return;
       }
 
@@ -510,7 +547,7 @@ export default function AudioLecturesView({
       document.body.removeChild(anchor);
     } catch (err) {
       console.error('Error downloading audio:', err);
-      alert('Failed to download audio file.');
+      alert(isFr ? 'Échec du téléchargement du fichier audio.' : 'Failed to download audio file.');
     }
   };
 
@@ -526,7 +563,7 @@ export default function AudioLecturesView({
 
     // Check if video file selected
     if (file.type.startsWith('video/') || /\.(mp4|avi|mov|mkv|webm|wmv|flv)$/i.test(file.name)) {
-      setFileError('Video files are not allowed. Please select an audio file (MP3, M4A, WAV, AAC, etc.).');
+      setFileError(isFr ? 'Les fichiers vidéo ne sont pas autorisés. Veuillez sélectionner un fichier audio (MP3, M4A, WAV, AAC, etc.).' : 'Video files are not allowed. Please select an audio file (MP3, M4A, WAV, AAC, etc.).');
       setSelectedFile(null);
       setDetectedDuration(0);
       e.target.value = '';
@@ -552,17 +589,17 @@ export default function AudioLecturesView({
   const handleSaveLecture = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTitle.trim()) {
-      alert('Please enter a Topic / Lecture Title.');
+      alert(isFr ? 'Veuillez saisir un thème / titre de cours.' : 'Please enter a Topic / Lecture Title.');
       return;
     }
     if (!selectedFile) {
-      alert('Please select an audio file.');
+      alert(isFr ? 'Veuillez sélectionner un fichier audio.' : 'Please select an audio file.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const subjectName = formSubjectName.trim() || 'General';
+      const subjectName = formSubjectName.trim() || (isFr ? 'Général' : 'General');
 
       const newLectureData = {
         courseId: formCourseId || '',
@@ -591,7 +628,7 @@ export default function AudioLecturesView({
       setIsAddModalOpen(false);
     } catch (err: any) {
       console.error('Error saving audio lecture:', err);
-      const msg = err?.message || 'An error occurred while saving the lecture.';
+      const msg = err?.message || (isFr ? 'Une erreur est survenue lors de l\'enregistrement du cours.' : 'An error occurred while saving the lecture.');
       if (!isPremium && (msg.includes('Free plan limit') || msg.includes('limit') || msg.includes('Upgrade to Pro'))) {
         setIsAddModalOpen(false);
         onUpgradeClick?.();
@@ -617,13 +654,13 @@ export default function AudioLecturesView({
     e.preventDefault();
     if (!editingLecture) return;
     if (!editTitle.trim()) {
-      alert('Please enter a Topic / Lecture Title.');
+      alert(isFr ? 'Veuillez saisir un thème / titre de cours.' : 'Please enter a Topic / Lecture Title.');
       return;
     }
 
     try {
       const updates = {
-        subjectName: editSubjectName.trim() || 'General',
+        subjectName: editSubjectName.trim() || (isFr ? 'Général' : 'General'),
         courseId: editCourseId || '',
         section: editSection.trim(),
         title: editTitle.trim(),
@@ -638,7 +675,7 @@ export default function AudioLecturesView({
       setEditingLecture(null);
     } catch (err) {
       console.error('Error updating lecture:', err);
-      alert('Failed to update lecture.');
+      alert(isFr ? 'Échec de la mise à jour du cours.' : 'Failed to update lecture.');
     }
   };
 
@@ -665,7 +702,7 @@ export default function AudioLecturesView({
       setDeletingLectureId(null);
     } catch (err) {
       console.error('Error deleting lecture:', err);
-      alert('Failed to delete lecture.');
+      alert(isFr ? 'Échec de la suppression du cours.' : 'Failed to delete lecture.');
     }
   };
 
@@ -716,11 +753,11 @@ export default function AudioLecturesView({
         <div>
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-xl sm:text-2xl font-black text-[#1D1B20] tracking-tight flex items-center gap-2.5">
-              <Mic className="w-6 h-6 text-[#6750A4]" /> Audio Lectures
+              <Mic className="w-6 h-6 text-[#6750A4]" /> {t('audio.headerTitle')}
             </h2>
             {isPremium ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#EADDFF] text-[#21005D] text-xs font-black rounded-full uppercase tracking-wider">
-                Pro Plan • Unlimited
+                {t('audio.proUnlimited')}
               </span>
             ) : (
               <span 
@@ -731,12 +768,12 @@ export default function AudioLecturesView({
                 }`} 
                 id="audio-lectures-usage-badge"
               >
-                {audioLectures.length} / 2 used
+                {t('audio.usageUsed', { used: audioLectures.length, total: 2 })}
               </span>
             )}
           </div>
           <p className="text-xs sm:text-sm text-[#49454F] font-medium mt-1">
-            Save, listen to, and organize your recorded lectures by subject and topic.
+            {t('audio.headerDesc')}
           </p>
         </div>
 
@@ -754,7 +791,7 @@ export default function AudioLecturesView({
           id="add-lecture-button"
         >
           <Plus className="w-4 h-4" />
-          <span>{isFreeLimitReached ? 'Add Lecture (Upgrade to Pro)' : 'Add Lecture'}</span>
+          <span>{isFreeLimitReached ? t('audio.addLectureUpgrade') : t('audio.addLecture')}</span>
         </button>
       </div>
 
@@ -771,9 +808,9 @@ export default function AudioLecturesView({
               <AlertCircle className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-amber-950">Free plan limit reached (2 Audio Lectures)</h4>
+              <h4 className="text-xs font-bold text-amber-950">{t('audio.limitReachedTitle')}</h4>
               <p className="text-[11px] text-amber-800 mt-0.5 font-medium">
-                Upgrade to Pro to add unlimited audio lectures. All existing recordings remain fully playable and downloadable.
+                {t('audio.limitReachedDesc')}
               </p>
             </div>
           </div>
@@ -783,7 +820,7 @@ export default function AudioLecturesView({
             id="audio-banner-upgrade-btn"
           >
             <Lock className="w-3.5 h-3.5" />
-            <span>Upgrade to Pro</span>
+            <span>{t('audio.upgradeToPro')}</span>
           </button>
         </motion.div>
       )}
@@ -796,7 +833,7 @@ export default function AudioLecturesView({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by subject, section, or topic title..."
+            placeholder={t('audio.searchPlaceholder')}
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#E1E3E1] rounded-full text-xs sm:text-sm text-[#1D1B20] placeholder-[#79747E] focus:outline-none focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4] transition-all"
             id="search-lectures-input"
           />
@@ -819,7 +856,7 @@ export default function AudioLecturesView({
               className="w-full py-1.5 bg-transparent text-xs sm:text-sm font-semibold text-[#1D1B20] focus:outline-none cursor-pointer"
               id="subject-filter-select"
             >
-              <option value="ALL">All Subjects</option>
+              <option value="ALL">{t('audio.allSubjects')}</option>
               {uniqueSubjects.map((subject) => (
                 <option key={subject} value={subject}>
                   {subject}
@@ -843,10 +880,10 @@ export default function AudioLecturesView({
             <Mic className="w-8 h-8" />
           </div>
           <h3 className="text-lg font-black text-[#1D1B20] tracking-tight" id="empty-state-title">
-            No lectures yet
+            {t('audio.noLectures')}
           </h3>
           <p className="text-xs sm:text-sm text-[#49454F] font-medium max-w-md mt-1.5 leading-relaxed" id="empty-state-subtitle">
-            Upload your first lecture and organize it by subject and topic for easy listening and revision.
+            {t('audio.noLecturesSubtitle')}
           </p>
           <button
             onClick={() => {
@@ -862,7 +899,7 @@ export default function AudioLecturesView({
             id="empty-state-add-button"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Lecture</span>
+            <span>{t('audio.addLecture')}</span>
           </button>
         </motion.div>
       ) : (
@@ -906,7 +943,7 @@ export default function AudioLecturesView({
                             ? 'bg-[#6750A4] text-white shadow-md'
                             : 'bg-[#EADDFF] text-[#21005D] hover:bg-[#D0BCFF]'
                         }`}
-                        title={isThisPlaying ? 'Pause' : 'Play'}
+                        title={isThisPlaying ? (isFr ? 'Pause' : 'Pause') : (isFr ? 'Lecture' : 'Play')}
                         id={`play-btn-${lecture.id}`}
                       >
                         {isThisPlaying ? (
@@ -938,7 +975,7 @@ export default function AudioLecturesView({
                             {formatTime(lecture.duration)}
                           </span>
                           <span>•</span>
-                          <span>Added {new Date(lecture.createdAt).toLocaleDateString()}</span>
+                          <span>{isFr ? 'Ajouté le ' : 'Added '}{formatDate(lecture.createdAt, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                           {lecture.fileSize ? (
                             <>
                               <span>•</span>
@@ -952,17 +989,17 @@ export default function AudioLecturesView({
                           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                             {hasNotes && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-[#49454F] text-[10px] font-semibold rounded-md border border-slate-200">
-                                <BookOpen className="w-3 h-3 text-[#6750A4]" /> Notes
+                                <BookOpen className="w-3 h-3 text-[#6750A4]" /> {t('audio.studyNotes')}
                               </span>
                             )}
                             {hasTranscript && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-[#49454F] text-[10px] font-semibold rounded-md border border-slate-200">
-                                <FileText className="w-3 h-3 text-[#6750A4]" /> Transcript
+                                <FileText className="w-3 h-3 text-[#6750A4]" /> {t('audio.transcript')}
                               </span>
                             )}
                             {hasSummary && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-[#49454F] text-[10px] font-semibold rounded-md border border-slate-200">
-                                <FileCheck className="w-3 h-3 text-[#6750A4]" /> Summary
+                                <FileCheck className="w-3 h-3 text-[#6750A4]" /> {t('audio.summary')}
                               </span>
                             )}
                           </div>
@@ -975,7 +1012,7 @@ export default function AudioLecturesView({
                       <button
                         onClick={() => handleDownloadAudio(lecture)}
                         className="p-2 text-[#49454F] hover:text-[#6750A4] hover:bg-[#F3EDF7] rounded-full transition-colors cursor-pointer"
-                        title="Download Audio"
+                        title={isFr ? "Télécharger l'audio" : "Download Audio"}
                         id={`download-btn-${lecture.id}`}
                       >
                         <Download className="w-4 h-4" />
@@ -984,7 +1021,7 @@ export default function AudioLecturesView({
                       <button
                         onClick={() => handleOpenEdit(lecture)}
                         className="p-2 text-[#49454F] hover:text-[#6750A4] hover:bg-[#F3EDF7] rounded-full transition-colors cursor-pointer"
-                        title="Edit Lecture"
+                        title={isFr ? "Modifier le cours" : "Edit Lecture"}
                         id={`edit-btn-${lecture.id}`}
                       >
                         <Edit3 className="w-4 h-4" />
@@ -993,7 +1030,7 @@ export default function AudioLecturesView({
                       <button
                         onClick={() => setDeletingLectureId(lecture.id)}
                         className="p-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-full transition-colors cursor-pointer"
-                        title="Delete Lecture"
+                        title={isFr ? "Supprimer le cours" : "Delete Lecture"}
                         id={`delete-btn-${lecture.id}`}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1128,7 +1165,7 @@ export default function AudioLecturesView({
                   <div><span className="text-[#79747E]">Section:</span> <strong className="text-[#1D1B20]">{selectedLecture.section || '—'}</strong></div>
                   <div><span className="text-[#79747E]">Topic:</span> <strong className="text-[#1D1B20]">{selectedLecture.title}</strong></div>
                   <div><span className="text-[#79747E]">Duration:</span> <strong className="text-[#1D1B20]">{formatTime(selectedLecture.duration)}</strong></div>
-                  <div><span className="text-[#79747E]">Date Added:</span> <strong className="text-[#1D1B20]">{new Date(selectedLecture.createdAt).toLocaleDateString()}</strong></div>
+                  <div><span className="text-[#79747E]">{isFr ? 'Date d\'ajout :' : 'Date Added:'}</span> <strong className="text-[#1D1B20]">{formatDate(selectedLecture.createdAt)}</strong></div>
                   <div className="truncate"><span className="text-[#79747E]">File:</span> <strong className="text-[#1D1B20] truncate">{selectedLecture.originalFileName}</strong></div>
                 </div>
               </div>

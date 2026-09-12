@@ -17,6 +17,7 @@ import { Course, Note, StudyMaterial } from '../types';
 import SubjectSelect from './SubjectSelect';
 import StudyMaterialsSection from './StudyMaterialsSection';
 import { pageVariants, listItemVariants } from '../lib/animations';
+import { useTranslation } from '../lib/i18n';
 
 interface NotesViewProps {
   courses: Course[];
@@ -47,6 +48,7 @@ export default function NotesView({
   onUpdateStudyMaterial = async () => {},
   onDeleteStudyMaterial = async () => {},
 }: NotesViewProps) {
+  const { t, language, formatDate, formatDateTime } = useTranslation();
   const [activeSection, setActiveSection] = useState<'notebook' | 'materials'>('notebook');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
@@ -297,7 +299,7 @@ export default function NotesView({
                         <p className="text-[10px] text-[#49454F] line-clamp-2 mt-1.5 leading-relaxed">{note.content || 'Empty note content...'}</p>
                         <div className="flex items-center gap-1.5 text-[9px] text-[#79747E] mt-2.5 font-medium font-mono">
                           <Clock className="w-3 h-3 text-[#79747E]" />
-                          <span>{new Date(note.updatedAt).toLocaleDateString()}</span>
+                          <span>{formatDate(note.updatedAt)}</span>
                         </div>
                       </motion.div>
                     );
@@ -414,7 +416,8 @@ export default function NotesView({
                             {courses.find(c => c.id === selectedNote.courseId)?.name || 'General Notes'}
                           </span>
                           <span className="text-[9px] text-[#79747E] font-mono font-medium">
-                            Updated {new Date(selectedNote.updatedAt).toLocaleString()}
+                            {language === 'fr-FR' ? 'Modifié le ' : 'Updated '}
+                            {formatDateTime(selectedNote.updatedAt)}
                           </span>
                         </div>
                       </div>

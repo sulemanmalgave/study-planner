@@ -19,6 +19,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Course, StudyMaterial, Note } from '../types';
+import { useTranslation } from '../lib/i18n';
 
 interface StudyMaterialReaderModalProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ export default function StudyMaterialReaderModal({
   onUpdateMaterial,
   onAddNoteFromAI,
 }: StudyMaterialReaderModalProps) {
+  const { t, language, formatDate, formatDateTime } = useTranslation();
   const [activeTab, setActiveTab] = useState<'document' | 'summary' | 'notes' | 'keypoints'>('document');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
@@ -121,15 +123,56 @@ export default function StudyMaterialReaderModal({
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        if (data.error === 'GEMINI_NOT_CONFIGURED' || response.status === 503) {
-          setAiError('Gemini API key is not configured in production. Please set GEMINI_API_KEY in the Vercel environment variables.');
+        if (data.error === 'GEMINI_NOT_CONFIGURED') {
+          setAiError(
+            language === 'fr-FR'
+              ? 'La clé API Gemini n\'est pas configurée dans l\'environnement serveur. Veuillez définir GEMINI_API_KEY dans les variables d\'environnement.'
+              : 'Gemini API key is not configured in the server environment. Please set GEMINI_API_KEY in the environment variables.'
+          );
+          return;
+        }
+        if (data.error === 'AI_QUOTA_EXCEEDED' || response.status === 429) {
+          setAiError(
+            language === 'fr-FR'
+              ? 'Le quota de requêtes Gemini API est temporairement atteint. La clé est bien configurée, mais la limite journalière du modèle gratuit a été dépassée.'
+              : 'Gemini API daily quota reached. The API key is configured and valid, but the free model request limit was reached. Please wait or check rate limits.'
+          );
+          return;
+        }
+        if (data.error === 'AI_AUTH_FAILED' || response.status === 401) {
+          setAiError(
+            language === 'fr-FR'
+              ? 'Authentification Gemini échouée. La clé API configurée semble invalide ou expirée.'
+              : 'Gemini API authentication failed. The configured API key appears invalid or expired.'
+          );
+          return;
+        }
+        if (data.error === 'AI_PERMISSION_DENIED') {
+          setAiError(
+            language === 'fr-FR'
+              ? 'Permission refusée par Gemini API. Vérifiez que l\'API Generative Language est activée dans votre projet Google Cloud.'
+              : 'Gemini API permission denied. Ensure the Generative Language API is enabled for your Google Cloud project.'
+          );
+          return;
+        }
+        if (data.error === 'AI_HIGH_DEMAND' || response.status === 503) {
+          setAiError(
+            data.message ||
+              (language === 'fr-FR'
+                ? 'Les serveurs IA Gemini connaissent une forte demande temporaire. Veuillez réessayer dans quelques instants.'
+                : 'Gemini AI models are currently experiencing temporary high demand. Please try again shortly.')
+          );
           return;
         }
         if (data.error === 'PREMIUM_REQUIRED' || data.error === 'PRO_FEATURE_REQUIRED' || response.status === 403) {
           onTriggerUpgrade();
           return;
         }
-        throw new Error(data.message || data.error || 'AI request failed');
+        throw new Error(
+          data.message ||
+            data.error ||
+            (language === 'fr-FR' ? 'Échec de la requête IA' : 'AI request failed')
+        );
       }
 
       // Update local and parent state
@@ -151,7 +194,10 @@ export default function StudyMaterialReaderModal({
       }
     } catch (err: any) {
       console.error('AI Error:', err);
-      setAiError(err.message || 'Failed to process AI request.');
+      setAiError(
+        err.message ||
+          (language === 'fr-FR' ? 'Échec du traitement de la requête IA.' : 'Failed to process AI request.')
+      );
     } finally {
       setIsAiLoading(false);
     }
@@ -161,18 +207,26 @@ export default function StudyMaterialReaderModal({
     if (!material.studyNotes || !onAddNoteFromAI) return;
     try {
       const result = await onAddNoteFromAI({
-        title: `AI Notes: ${material.name}`,
+        title: language === 'fr-FR' ? `Notes IA : ${material.name}` : `AI Notes: ${material.name}`,
         content: material.studyNotes,
         courseId: material.subjectId || courses[0]?.id || '',
       });
       if (result.success) {
-        setNoteCreatedNotice('Saved to your Notebook Pages!');
+        setNoteCreatedNotice(
+          language === 'fr-FR' ? 'Enregistré dans vos fiches de cours !' : 'Saved to your Notebook Pages!'
+        );
         setTimeout(() => setNoteCreatedNotice(null), 4000);
       } else {
-        setAiError(result.error || 'Failed to save note.');
+        setAiError(
+          result.error ||
+            (language === 'fr-FR' ? 'Échec de l\'enregistrement de la fiche.' : 'Failed to save note.')
+        );
       }
     } catch (e: any) {
-      setAiError(e.message || 'Failed to save note.');
+      setAiError(
+        e.message ||
+          (language === 'fr-FR' ? 'Échec de l\'enregistrement de la fiche.' : 'Failed to save note.')
+      );
     }
   };
 
@@ -240,7 +294,7 @@ export default function StudyMaterialReaderModal({
                 )}
                 <span>•</span>
                 <span className="font-mono text-[9px] text-[#79747E]">
-                  {(material.fileSize / (1024 * 1024)).toFixed(1)} MB
+                  {(material.fileSize / (1024 * 1024)).toFixed(1)} {language === 'fr-FR' ? 'Mo' : 'MB'}
                 </span>
               </div>
             </div>
@@ -252,11 +306,11 @@ export default function StudyMaterialReaderModal({
               href={`/api/study-materials/${material.id}/download`}
               download={material.originalFileName}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#F3EDF7] text-xs font-bold text-[#1D1B20] border border-[#E1E3E1] rounded-xl transition-colors shadow-xs"
-              title="Download original file"
+              title={language === 'fr-FR' ? 'Télécharger le fichier original' : 'Download original file'}
               id="download-material-btn"
             >
               <Download className="w-3.5 h-3.5 text-[#6750A4]" />
-              <span className="hidden sm:inline">Download</span>
+              <span className="hidden sm:inline">{language === 'fr-FR' ? 'Télécharger' : 'Download'}</span>
             </a>
 
             <a
@@ -264,7 +318,7 @@ export default function StudyMaterialReaderModal({
               target="_blank"
               rel="noopener noreferrer"
               className="p-1.5 sm:p-2 bg-white hover:bg-[#F3EDF7] text-[#49454F] border border-[#E1E3E1] rounded-xl transition-colors shadow-xs"
-              title="Open in new window"
+              title={language === 'fr-FR' ? 'Ouvrir dans un nouvel onglet' : 'Open in new window'}
               id="open-in-tab-btn"
             >
               <ExternalLink className="w-4 h-4" />
@@ -272,8 +326,8 @@ export default function StudyMaterialReaderModal({
 
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
-              className="p-1.5 sm:p-2 bg-white hover:bg-[#F3EDF7] text-[#49454F] border border-[#E1E3E1] rounded-xl transition-colors shadow-xs"
-              title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              className="p-1.5 sm:p-2 bg-white hover:bg-[#F3EDF7] text-[#49454F] border border-[#E1E3E1] rounded-xl transition-colors shadow-xs cursor-pointer"
+              title={isFullscreen ? (language === 'fr-FR' ? 'Quitter le plein écran' : 'Exit Fullscreen') : (language === 'fr-FR' ? 'Plein écran' : 'Fullscreen')}
               id="fullscreen-reader-btn"
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -282,6 +336,7 @@ export default function StudyMaterialReaderModal({
             <button
               onClick={onClose}
               className="p-1.5 sm:p-2 text-[#49454F] hover:text-[#1D1B20] hover:bg-[#EADDFF]/60 rounded-full transition-colors ml-1 cursor-pointer"
+              title={language === 'fr-FR' ? 'Fermer' : 'Close'}
               id="close-reader-modal-btn"
             >
               <X className="w-5 h-5" />
@@ -301,7 +356,7 @@ export default function StudyMaterialReaderModal({
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>Document</span>
+              <span>{language === 'fr-FR' ? 'Document' : 'Document'}</span>
             </button>
 
             <button
@@ -313,7 +368,7 @@ export default function StudyMaterialReaderModal({
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
-              <span>AI Summary</span>
+              <span>{language === 'fr-FR' ? 'Résumé IA' : 'AI Summary'}</span>
               {material.summary && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               )}
@@ -328,7 +383,7 @@ export default function StudyMaterialReaderModal({
               }`}
             >
               <BookOpen className="w-3.5 h-3.5 text-[#6750A4]" />
-              <span>AI Study Notes</span>
+              <span>{language === 'fr-FR' ? 'Fiche de cours IA' : 'AI Study Notes'}</span>
               {material.studyNotes && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               )}
@@ -343,7 +398,7 @@ export default function StudyMaterialReaderModal({
               }`}
             >
               <Layers className="w-3.5 h-3.5 text-[#6750A4]" />
-              <span>Key Points</span>
+              <span>{language === 'fr-FR' ? 'Points clés' : 'Key Points'}</span>
               {material.keyPoints && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               )}
@@ -351,7 +406,7 @@ export default function StudyMaterialReaderModal({
           </div>
 
           <div className="hidden md:flex items-center gap-1 text-[10px] text-[#79747E] font-mono">
-            <span>Explicit AI processing only</span>
+            <span>{language === 'fr-FR' ? 'Traitement IA à la demande' : 'Explicit AI processing only'}</span>
           </div>
         </div>
 
@@ -388,7 +443,9 @@ export default function StudyMaterialReaderModal({
                     {isLoadingPreview ? (
                       <div className="py-20 flex flex-col items-center justify-center space-y-3">
                         <Loader2 className="w-8 h-8 animate-spin text-[#6750A4]" />
-                        <p className="text-xs text-[#49454F] font-mono">Rendering Word document preview...</p>
+                        <p className="text-xs text-[#49454F] font-mono">
+                          {language === 'fr-FR' ? 'Génération de l\'aperçu du document Word...' : 'Rendering Word document preview...'}
+                        </p>
                       </div>
                     ) : htmlContent ? (
                       <div
@@ -399,9 +456,11 @@ export default function StudyMaterialReaderModal({
                       <div className="text-center py-12 space-y-4">
                         <FileText className="w-12 h-12 text-[#6750A4] mx-auto" />
                         <div>
-                          <h4 className="text-sm font-bold text-[#1D1B20]">Word Document (DOCX)</h4>
+                          <h4 className="text-sm font-bold text-[#1D1B20]">
+                            {language === 'fr-FR' ? 'Document Word (DOCX)' : 'Word Document (DOCX)'}
+                          </h4>
                           <p className="text-xs text-[#49454F] mt-1">
-                            {material.originalFileName} ({(material.fileSize / (1024 * 1024)).toFixed(1)} MB)
+                            {material.originalFileName} ({(material.fileSize / (1024 * 1024)).toFixed(1)} {language === 'fr-FR' ? 'Mo' : 'MB'})
                           </p>
                         </div>
                         <a
@@ -409,7 +468,7 @@ export default function StudyMaterialReaderModal({
                           className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#6750A4] text-white text-xs font-bold rounded-xl shadow-sm hover:bg-[#503E84]"
                         >
                           <Download className="w-4 h-4" />
-                          <span>Download to Open in Microsoft Word</span>
+                          <span>{language === 'fr-FR' ? 'Télécharger pour ouvrir dans Microsoft Word' : 'Download to Open in Microsoft Word'}</span>
                         </a>
                       </div>
                     )}
@@ -424,7 +483,9 @@ export default function StudyMaterialReaderModal({
                   <div>
                     <h4 className="text-base font-bold text-[#1D1B20]">{material.name}</h4>
                     <p className="text-xs text-[#49454F] mt-1 max-w-md">
-                      This is a Microsoft Word DOC file ({material.originalFileName}). Download the original document to view and edit in your native word processor.
+                      {language === 'fr-FR'
+                        ? `Il s'agit d'un fichier Microsoft Word DOC (${material.originalFileName}). Téléchargez le document original pour l'ouvrir dans votre logiciel de traitement de texte.`
+                        : `This is a Microsoft Word DOC file (${material.originalFileName}). Download the original document to view and edit in your native word processor.`}
                     </p>
                   </div>
                   <a
@@ -432,7 +493,7 @@ export default function StudyMaterialReaderModal({
                     className="flex items-center gap-2 px-6 py-3 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-bold rounded-2xl shadow-sm transition-all"
                   >
                     <Download className="w-4 h-4" />
-                    <span>Download Original Document</span>
+                    <span>{language === 'fr-FR' ? 'Télécharger le document original' : 'Download Original Document'}</span>
                   </a>
                 </div>
               )}
@@ -449,12 +510,14 @@ export default function StudyMaterialReaderModal({
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-[#6750A4]" />
                       <h4 className="text-sm font-black text-[#1D1B20] uppercase tracking-wide">
-                        AI Document Summary
+                        {language === 'fr-FR' ? 'Résumé IA du document' : 'AI Document Summary'}
                       </h4>
                     </div>
                     {material.summaryGeneratedAt && (
                       <p className="text-[10px] text-[#79747E] font-mono mt-0.5">
-                        Generated {new Date(material.summaryGeneratedAt).toLocaleString()}
+                        {language === 'fr-FR'
+                          ? `Généré le ${formatDateTime(material.summaryGeneratedAt)}`
+                          : `Generated ${formatDateTime(material.summaryGeneratedAt)}`}
                       </p>
                     )}
                   </div>
@@ -464,27 +527,27 @@ export default function StudyMaterialReaderModal({
                       <>
                         <button
                           onClick={() => handleCopy(material.summary!, 'summary')}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-bold text-[#1D1B20] rounded-xl border border-[#E1E3E1] transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-bold text-[#1D1B20] rounded-xl border border-[#E1E3E1] transition-colors cursor-pointer"
                         >
                           {copiedKey === 'summary' ? (
                             <>
                               <Check className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>Copied</span>
+                              <span>{language === 'fr-FR' ? 'Copié' : 'Copied'}</span>
                             </>
                           ) : (
                             <>
                               <Copy className="w-3.5 h-3.5" />
-                              <span>Copy</span>
+                              <span>{language === 'fr-FR' ? 'Copier' : 'Copy'}</span>
                             </>
                           )}
                         </button>
                         <button
                           onClick={() => handleTriggerAi('summary')}
                           disabled={isAiLoading}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-[#F3EDF7] text-xs font-bold text-[#6750A4] rounded-xl border border-[#E1E3E1] transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-[#F3EDF7] text-xs font-bold text-[#6750A4] rounded-xl border border-[#E1E3E1] transition-colors cursor-pointer"
                         >
                           <RotateCw className={`w-3.5 h-3.5 ${isAiLoading ? 'animate-spin' : ''}`} />
-                          <span>Regenerate</span>
+                          <span>{language === 'fr-FR' ? 'Régénérer' : 'Regenerate'}</span>
                         </button>
                       </>
                     )}
@@ -501,8 +564,12 @@ export default function StudyMaterialReaderModal({
                 {isAiLoading ? (
                   <div className="py-16 text-center space-y-3">
                     <Loader2 className="w-8 h-8 animate-spin text-[#6750A4] mx-auto" />
-                    <p className="text-xs font-bold text-[#1D1B20]">Gemini is analyzing your document...</p>
-                    <p className="text-[10px] text-[#79747E] font-mono">Synthesizing core themes and takeaways</p>
+                    <p className="text-xs font-bold text-[#1D1B20]">
+                      {language === 'fr-FR' ? 'Gemini analyse votre document...' : 'Gemini is analyzing your document...'}
+                    </p>
+                    <p className="text-[10px] text-[#79747E] font-mono">
+                      {language === 'fr-FR' ? 'Synthèse des thèmes principaux et notions clés' : 'Synthesizing core themes and takeaways'}
+                    </p>
                   </div>
                 ) : material.summary ? (
                   <div className="prose prose-sm max-w-none text-[#1D1B20] font-sans leading-relaxed whitespace-pre-wrap">
@@ -514,9 +581,13 @@ export default function StudyMaterialReaderModal({
                       <Sparkles className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-[#1D1B20]">No Summary Generated Yet</h4>
+                      <h4 className="text-sm font-bold text-[#1D1B20]">
+                        {language === 'fr-FR' ? 'Aucun résumé généré pour le moment' : 'No Summary Generated Yet'}
+                      </h4>
                       <p className="text-xs text-[#49454F] max-w-md mx-auto mt-1">
-                        Generate an instant, high-yield academic summary of "{material.name}" using Gemini.
+                        {language === 'fr-FR'
+                          ? `Générez un résumé académique instantané et structuré de « ${material.name} » avec Gemini.`
+                          : `Generate an instant, high-yield academic summary of "${material.name}" using Gemini.`}
                       </p>
                     </div>
                     <button
@@ -525,7 +596,7 @@ export default function StudyMaterialReaderModal({
                       id="generate-ai-summary-btn"
                     >
                       <Sparkles className="w-4 h-4" />
-                      <span>Generate AI Summary with Gemini</span>
+                      <span>{language === 'fr-FR' ? 'Générer le résumé IA avec Gemini' : 'Generate AI Summary with Gemini'}</span>
                     </button>
                   </div>
                 )}
@@ -543,12 +614,14 @@ export default function StudyMaterialReaderModal({
                     <div className="flex items-center gap-2">
                       <BookOpen className="w-4 h-4 text-[#6750A4]" />
                       <h4 className="text-sm font-black text-[#1D1B20] uppercase tracking-wide">
-                        Structured Study Notes
+                        {language === 'fr-FR' ? 'Fiche de cours structurée' : 'Structured Study Notes'}
                       </h4>
                     </div>
                     {material.studyNotesGeneratedAt && (
                       <p className="text-[10px] text-[#79747E] font-mono mt-0.5">
-                        Generated {new Date(material.studyNotesGeneratedAt).toLocaleString()}
+                        {language === 'fr-FR'
+                          ? `Généré le ${formatDateTime(material.studyNotesGeneratedAt)}`
+                          : `Generated ${formatDateTime(material.studyNotesGeneratedAt)}`}
                       </p>
                     )}
                   </div>
@@ -558,35 +631,35 @@ export default function StudyMaterialReaderModal({
                       <>
                         <button
                           onClick={handleCreateNotebookPageFromNotes}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-xl shadow-xs transition-colors"
-                          title="Save as a new page in your Notebook"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-xl shadow-xs transition-colors cursor-pointer"
+                          title={language === 'fr-FR' ? 'Enregistrer en tant que nouvelle fiche de cours' : 'Save as a new page in your Notebook'}
                         >
                           <PlusCircle className="w-3.5 h-3.5" />
-                          <span>Save to Notebook</span>
+                          <span>{language === 'fr-FR' ? 'Enregistrer dans les fiches' : 'Save to Notebook'}</span>
                         </button>
                         <button
                           onClick={() => handleCopy(material.studyNotes!, 'notes')}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-bold text-[#1D1B20] rounded-xl border border-[#E1E3E1] transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-bold text-[#1D1B20] rounded-xl border border-[#E1E3E1] transition-colors cursor-pointer"
                         >
                           {copiedKey === 'notes' ? (
                             <>
                               <Check className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>Copied</span>
+                              <span>{language === 'fr-FR' ? 'Copié' : 'Copied'}</span>
                             </>
                           ) : (
                             <>
                               <Copy className="w-3.5 h-3.5" />
-                              <span>Copy</span>
+                              <span>{language === 'fr-FR' ? 'Copier' : 'Copy'}</span>
                             </>
                           )}
                         </button>
                         <button
                           onClick={() => handleTriggerAi('notes')}
                           disabled={isAiLoading}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-[#F3EDF7] text-xs font-bold text-[#6750A4] rounded-xl border border-[#E1E3E1] transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-[#F3EDF7] text-xs font-bold text-[#6750A4] rounded-xl border border-[#E1E3E1] transition-colors cursor-pointer"
                         >
                           <RotateCw className={`w-3.5 h-3.5 ${isAiLoading ? 'animate-spin' : ''}`} />
-                          <span>Regenerate</span>
+                          <span>{language === 'fr-FR' ? 'Régénérer' : 'Regenerate'}</span>
                         </button>
                       </>
                     )}
@@ -610,8 +683,12 @@ export default function StudyMaterialReaderModal({
                 {isAiLoading ? (
                   <div className="py-16 text-center space-y-3">
                     <Loader2 className="w-8 h-8 animate-spin text-[#6750A4] mx-auto" />
-                    <p className="text-xs font-bold text-[#1D1B20]">Generating comprehensive study notes...</p>
-                    <p className="text-[10px] text-[#79747E] font-mono">Organizing formulas, definitions, and mechanisms</p>
+                    <p className="text-xs font-bold text-[#1D1B20]">
+                      {language === 'fr-FR' ? 'Génération de la fiche de cours complète...' : 'Generating comprehensive study notes...'}
+                    </p>
+                    <p className="text-[10px] text-[#79747E] font-mono">
+                      {language === 'fr-FR' ? 'Organisation des formules, définitions et concepts clés' : 'Organizing formulas, definitions, and mechanisms'}
+                    </p>
                   </div>
                 ) : material.studyNotes ? (
                   <div className="prose prose-sm max-w-none text-[#1D1B20] font-sans leading-relaxed whitespace-pre-wrap">
@@ -623,9 +700,13 @@ export default function StudyMaterialReaderModal({
                       <BookOpen className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-[#1D1B20]">No Study Notes Generated Yet</h4>
+                      <h4 className="text-sm font-bold text-[#1D1B20]">
+                        {language === 'fr-FR' ? 'Aucune fiche de cours générée pour le moment' : 'No Study Notes Generated Yet'}
+                      </h4>
                       <p className="text-xs text-[#49454F] max-w-md mx-auto mt-1">
-                        Turn this document into in-depth study notes with concepts, definitions, and exam formulas.
+                        {language === 'fr-FR'
+                          ? 'Transformez ce document en fiche de révision approfondie avec définitions et formules pour vos examens.'
+                          : 'Turn this document into in-depth study notes with concepts, definitions, and exam formulas.'}
                       </p>
                     </div>
                     <button
@@ -634,7 +715,7 @@ export default function StudyMaterialReaderModal({
                       id="generate-ai-notes-btn"
                     >
                       <Sparkles className="w-4 h-4" />
-                      <span>Generate Study Notes with Gemini</span>
+                      <span>{language === 'fr-FR' ? 'Générer la fiche de cours avec Gemini' : 'Generate Study Notes with Gemini'}</span>
                     </button>
                   </div>
                 )}
@@ -652,12 +733,14 @@ export default function StudyMaterialReaderModal({
                     <div className="flex items-center gap-2">
                       <Layers className="w-4 h-4 text-[#6750A4]" />
                       <h4 className="text-sm font-black text-[#1D1B20] uppercase tracking-wide">
-                        Key Points &amp; Flashcard Concepts
+                        {language === 'fr-FR' ? 'Points clés & Notions de révision' : 'Key Points & Flashcard Concepts'}
                       </h4>
                     </div>
                     {material.keyPointsGeneratedAt && (
                       <p className="text-[10px] text-[#79747E] font-mono mt-0.5">
-                        Generated {new Date(material.keyPointsGeneratedAt).toLocaleString()}
+                        {language === 'fr-FR'
+                          ? `Généré le ${formatDateTime(material.keyPointsGeneratedAt)}`
+                          : `Generated ${formatDateTime(material.keyPointsGeneratedAt)}`}
                       </p>
                     )}
                   </div>
@@ -667,27 +750,27 @@ export default function StudyMaterialReaderModal({
                       <>
                         <button
                           onClick={() => handleCopy(material.keyPoints!, 'keypoints')}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-bold text-[#1D1B20] rounded-xl border border-[#E1E3E1] transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-bold text-[#1D1B20] rounded-xl border border-[#E1E3E1] transition-colors cursor-pointer"
                         >
                           {copiedKey === 'keypoints' ? (
                             <>
                               <Check className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>Copied</span>
+                              <span>{language === 'fr-FR' ? 'Copié' : 'Copied'}</span>
                             </>
                           ) : (
                             <>
                               <Copy className="w-3.5 h-3.5" />
-                              <span>Copy</span>
+                              <span>{language === 'fr-FR' ? 'Copier' : 'Copy'}</span>
                             </>
                           )}
                         </button>
                         <button
                           onClick={() => handleTriggerAi('key-points')}
                           disabled={isAiLoading}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-[#F3EDF7] text-xs font-bold text-[#6750A4] rounded-xl border border-[#E1E3E1] transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-[#F3EDF7] text-xs font-bold text-[#6750A4] rounded-xl border border-[#E1E3E1] transition-colors cursor-pointer"
                         >
                           <RotateCw className={`w-3.5 h-3.5 ${isAiLoading ? 'animate-spin' : ''}`} />
-                          <span>Regenerate</span>
+                          <span>{language === 'fr-FR' ? 'Régénérer' : 'Regenerate'}</span>
                         </button>
                       </>
                     )}
@@ -704,8 +787,12 @@ export default function StudyMaterialReaderModal({
                 {isAiLoading ? (
                   <div className="py-16 text-center space-y-3">
                     <Loader2 className="w-8 h-8 animate-spin text-[#6750A4] mx-auto" />
-                    <p className="text-xs font-bold text-[#1D1B20]">Extracting high-yield key points...</p>
-                    <p className="text-[10px] text-[#79747E] font-mono">Filtering definitions and exam facts</p>
+                    <p className="text-xs font-bold text-[#1D1B20]">
+                      {language === 'fr-FR' ? 'Extraction des points clés essentiels...' : 'Extracting high-yield key points...'}
+                    </p>
+                    <p className="text-[10px] text-[#79747E] font-mono">
+                      {language === 'fr-FR' ? 'Sélection des définitions et notions d\'examen' : 'Filtering definitions and exam facts'}
+                    </p>
                   </div>
                 ) : material.keyPoints ? (
                   <div className="prose prose-sm max-w-none text-[#1D1B20] font-sans leading-relaxed whitespace-pre-wrap">
@@ -717,9 +804,13 @@ export default function StudyMaterialReaderModal({
                       <Layers className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-[#1D1B20]">No Key Points Extracted Yet</h4>
+                      <h4 className="text-sm font-bold text-[#1D1B20]">
+                        {language === 'fr-FR' ? 'Aucun point clé extrait pour le moment' : 'No Key Points Extracted Yet'}
+                      </h4>
                       <p className="text-xs text-[#49454F] max-w-md mx-auto mt-1">
-                        Extract bulleted cheat sheets and exam review takeaways from "{material.name}".
+                        {language === 'fr-FR'
+                          ? `Extrayez les points essentiels et fiches synthétiques pour réviser « ${material.name} ».`
+                          : `Extract bulleted cheat sheets and exam review takeaways from "${material.name}".`}
                       </p>
                     </div>
                     <button
@@ -728,7 +819,7 @@ export default function StudyMaterialReaderModal({
                       id="generate-ai-keypoints-btn"
                     >
                       <Sparkles className="w-4 h-4" />
-                      <span>Extract Key Points with Gemini</span>
+                      <span>{language === 'fr-FR' ? 'Extraire les points clés avec Gemini' : 'Extract Key Points with Gemini'}</span>
                     </button>
                   </div>
                 )}

@@ -4,6 +4,7 @@ import { pageVariants, listItemVariants, modalVariants } from '../lib/animations
 import { GraduationCap, Plus, Trash2, Edit2, Trophy, Clock, Loader2, AlertCircle } from 'lucide-react';
 import { Course, Exam } from '../types';
 import SubjectSelect from './SubjectSelect';
+import { useTranslation } from '../lib/i18n';
 
 interface ExamsViewProps {
   courses: Course[];
@@ -26,6 +27,7 @@ export default function ExamsView({
   onDeleteExam,
   onTriggerUpgrade
 }: ExamsViewProps) {
+  const { t, language, formatDate, formatDateTime } = useTranslation();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,7 +73,7 @@ export default function ExamsView({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name) {
-      setErrorMessage('Please enter an exam title.');
+      setErrorMessage(language === 'fr-FR' ? 'Veuillez saisir le nom de l\'examen.' : 'Please enter an exam title.');
       return;
     }
 
@@ -100,14 +102,14 @@ export default function ExamsView({
           if (result.error === 'LIMIT_REACHED') {
             onTriggerUpgrade();
           } else {
-            setErrorMessage(result.error || 'Failed to schedule exam.');
+            setErrorMessage(result.error || (language === 'fr-FR' ? 'Impossible de programmer l\'examen.' : 'Failed to schedule exam.'));
           }
         } else {
           setIsFormOpen(false);
         }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'An error occurred.');
+      setErrorMessage(err.message || (language === 'fr-FR' ? 'Une erreur est survenue.' : 'An error occurred.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -123,15 +125,15 @@ export default function ExamsView({
     const now = new Date().getTime();
     const diff = target - now;
 
-    if (diff <= 0) return 'Concluded';
+    if (diff <= 0) return language === 'fr-FR' ? 'Passé' : 'Concluded';
 
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
 
     if (days === 0) {
-      return `${hours} hrs remaining`;
+      return language === 'fr-FR' ? `${hours} h restantes` : `${hours} hrs remaining`;
     }
-    return `${days}d ${hours}h remaining`;
+    return language === 'fr-FR' ? `${days} j ${hours} h restants` : `${days}d ${hours}h remaining`;
   };
 
   return (
@@ -151,8 +153,8 @@ export default function ExamsView({
             <GraduationCap className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-[#1D1B20] tracking-wide uppercase">Exam Schedule Boards</h2>
-            <p className="text-[10px] font-mono text-[#49454F] mt-1 uppercase">Monitor test bounds & revision timelines</p>
+            <h2 className="text-sm font-bold text-[#1D1B20] tracking-wide uppercase">{t('exams.title')}</h2>
+            <p className="text-[10px] font-mono text-[#49454F] mt-1 uppercase">{t('exams.subtitle')}</p>
           </div>
         </div>
 
@@ -162,7 +164,7 @@ export default function ExamsView({
           id="add-exam-button"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Exam Date</span>
+          <span>{t('exams.addExam')}</span>
         </button>
       </div>
 
@@ -179,9 +181,13 @@ export default function ExamsView({
           >
             <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-2">
               <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
-                {editingExam ? 'Modify Exam Entry' : 'Create New Exam Board'}
+                {editingExam
+                  ? (language === 'fr-FR' ? 'Modifier l\'examen' : 'Modify Exam Entry')
+                  : (language === 'fr-FR' ? 'Ajouter une date d\'examen' : 'Create New Exam Board')}
               </h3>
-              <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium btn-press cursor-pointer">Cancel</button>
+              <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium btn-press cursor-pointer">
+                {t('action.cancel')}
+              </button>
             </div>
 
             {errorMessage && (
@@ -194,12 +200,14 @@ export default function ExamsView({
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Title */}
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Exam Title</label>
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">
+                  {language === 'fr-FR' ? 'Nom de l\'examen' : 'Exam Title'}
+                </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Linear Algebra Finals"
+                  placeholder={language === 'fr-FR' ? 'ex. : Examen final d\'algèbre linéaire' : 'e.g. Linear Algebra Finals'}
                   className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
                 />
               </div>
@@ -210,13 +218,15 @@ export default function ExamsView({
                 value={courseId}
                 onChange={setCourseId}
                 onAddCourse={onAddCourse}
-                label="Related Subject"
+                label={language === 'fr-FR' ? 'Matière associée' : 'Related Subject'}
                 id="exam-course-select"
               />
 
               {/* Date */}
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Exam Date & Time</label>
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">
+                  {language === 'fr-FR' ? 'Date et heure de l\'épreuve' : 'Exam Date & Time'}
+                </label>
                 <input
                   type="datetime-local"
                   value={date}
@@ -227,12 +237,14 @@ export default function ExamsView({
 
               {/* Description */}
               <div className="space-y-1 md:col-span-2">
-                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Revision Topics & Study Instructions</label>
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">
+                  {language === 'fr-FR' ? 'Thèmes à réviser & Consignes' : 'Revision Topics & Study Instructions'}
+                </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
-                  placeholder="Formulas to remember, locations, required stationary..."
+                  placeholder={language === 'fr-FR' ? 'Formules à retenir, salle d\'examen, matériel autorisé...' : 'Formulas to remember, locations, required stationary...'}
                   className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none resize-none"
                 />
               </div>
@@ -246,7 +258,11 @@ export default function ExamsView({
                   {isSubmitting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <span>{editingExam ? 'Save Changes' : 'Schedule Exam'}</span>
+                    <span>
+                      {editingExam
+                        ? (language === 'fr-FR' ? 'Enregistrer les modifications' : 'Save Changes')
+                        : (language === 'fr-FR' ? 'Programmer l\'épreuve' : 'Schedule Exam')}
+                    </span>
                   )}
                 </button>
               </div>
@@ -284,7 +300,7 @@ export default function ExamsView({
                           {exam.name}
                         </h4>
                         <span className="text-[9px] font-bold px-2 py-0.5 rounded-full mt-1.5 inline-block" style={{ backgroundColor: color + '15', color }}>
-                          {courses.find(c => c.id === exam.courseId)?.name || 'Subject'}
+                          {courses.find(c => c.id === exam.courseId)?.name || (language === 'fr-FR' ? 'Matière' : 'Subject')}
                         </span>
                       </div>
 
@@ -296,7 +312,9 @@ export default function ExamsView({
                             : 'bg-[#FFF4E5] border-[#FFE2CC] text-[#D05C00] hover:bg-[#FFF4E5]/80'
                         }`}
                       >
-                        {isCompleted ? 'Completed' : 'Upcoming'}
+                        {isCompleted
+                          ? (language === 'fr-FR' ? 'Terminé' : 'Completed')
+                          : (language === 'fr-FR' ? 'À venir' : 'Upcoming')}
                       </button>
                     </div>
 
@@ -308,7 +326,9 @@ export default function ExamsView({
                   <div className="border-t border-[#E1E3E1] pt-3 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 text-[10px] text-[#49454F] font-mono font-medium">
                       <Clock className="w-3.5 h-3.5 text-[#79747E]" />
-                      <span>{new Date(exam.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                      <span>
+                        {formatDateTime(exam.date)}
+                      </span>
                     </div>
 
                     {!isCompleted && (
@@ -323,12 +343,14 @@ export default function ExamsView({
                     <button
                       onClick={() => handleOpenEdit(exam)}
                       className="p-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-lg border border-[#E1E3E1] transition-colors btn-press cursor-pointer"
+                      title={language === 'fr-FR' ? 'Modifier l\'examen' : 'Edit Exam'}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => onDeleteExam(exam.id)}
                       className="p-1.5 bg-[#FDECEB] hover:bg-[#F9DEDC] text-[#B3261E] rounded-lg border border-[#F9DEDC] transition-colors btn-press cursor-pointer"
+                      title={language === 'fr-FR' ? 'Supprimer l\'examen' : 'Delete Exam'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -340,8 +362,14 @@ export default function ExamsView({
         ) : (
           <div className="p-8 bg-white border border-[#E1E3E1] rounded-2xl text-center space-y-3 col-span-full" id="exams-empty-state">
             <GraduationCap className="w-10 h-10 text-[#79747E] mx-auto" />
-            <h4 className="text-xs font-bold text-[#1D1B20]">No scheduled exam boards!</h4>
-            <p className="text-[10px] text-[#49454F] max-w-sm mx-auto">Create exam alerts to get live notifications and countdown clocks.</p>
+            <h4 className="text-xs font-bold text-[#1D1B20]">
+              {language === 'fr-FR' ? 'Aucune épreuve planifiée !' : 'No scheduled exam boards!'}
+            </h4>
+            <p className="text-[10px] text-[#49454F] max-w-sm mx-auto">
+              {language === 'fr-FR'
+                ? 'Ajoutez des dates d\'examens pour suivre le compte à rebours et planifier vos révisions.'
+                : 'Create exam alerts to get live notifications and countdown clocks.'}
+            </p>
           </div>
         )}
       </div>

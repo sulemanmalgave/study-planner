@@ -21,6 +21,7 @@ import { Course, StudyMaterial, Note } from '../types';
 import StudyMaterialUploadModal from './StudyMaterialUploadModal';
 import StudyMaterialEditModal from './StudyMaterialEditModal';
 import StudyMaterialReaderModal from './StudyMaterialReaderModal';
+import { useTranslation } from '../lib/i18n';
 
 interface StudyMaterialsSectionProps {
   courses: Course[];
@@ -45,6 +46,7 @@ export default function StudyMaterialsSection({
   onTriggerUpgrade,
   onAddNoteFromAI,
 }: StudyMaterialsSectionProps) {
+  const { t, language, formatDate } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('all');
   const [selectedTopic, setSelectedTopic] = useState<string>('all');
@@ -117,8 +119,8 @@ export default function StudyMaterialsSection({
   const formatFileSize = (bytes: number) => {
     if (!bytes) return '0 B';
     if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
   };
 
   const getFileTypeBadge = (ext: string) => {
@@ -145,7 +147,11 @@ export default function StudyMaterialsSection({
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
+    const confirmText =
+      language === 'fr-FR'
+        ? `Voulez-vous vraiment supprimer « ${name} » ? Cette action est irréversible.`
+        : `Are you sure you want to delete "${name}"? This action cannot be undone.`;
+    if (window.confirm(confirmText)) {
       setDeletingId(id);
       try {
         await onDeleteMaterial(id);
@@ -167,7 +173,11 @@ export default function StudyMaterialsSection({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search documents, topics, or subjects..."
+            placeholder={
+              language === 'fr-FR'
+                ? 'Rechercher des documents, chapitres ou matières...'
+                : 'Search documents, topics, or subjects...'
+            }
             className="w-full bg-[#F3EDF7]/50 border border-[#E1E3E1] rounded-2xl pl-10 pr-4 py-2 text-xs font-medium text-[#1D1B20] placeholder-[#79747E] focus:outline-none focus:ring-2 focus:ring-[#6750A4]/30 focus:border-[#6750A4] transition-all"
             id="search-materials-input"
           />
@@ -185,7 +195,9 @@ export default function StudyMaterialsSection({
             className="bg-[#F3EDF7]/50 border border-[#E1E3E1] text-[#1D1B20] text-xs font-bold rounded-2xl px-3 py-2 outline-none focus:ring-2 focus:ring-[#6750A4]/30 cursor-pointer"
             id="subject-filter-select"
           >
-            <option value="all">All Subjects ({materials.length})</option>
+            <option value="all">
+              {language === 'fr-FR' ? `Toutes les matières (${materials.length})` : `All Subjects (${materials.length})`}
+            </option>
             {courses.map((c) => {
               const count = materials.filter((m) => m.subjectId === c.id).length;
               return (
@@ -204,7 +216,7 @@ export default function StudyMaterialsSection({
               className="bg-[#F3EDF7]/50 border border-[#E1E3E1] text-[#1D1B20] text-xs font-bold rounded-2xl px-3 py-2 outline-none focus:ring-2 focus:ring-[#6750A4]/30 cursor-pointer"
               id="topic-filter-select"
             >
-              <option value="all">All Topics</option>
+              <option value="all">{language === 'fr-FR' ? 'Tous les chapitres' : 'All Topics'}</option>
               {availableTopics.map((t) => (
                 <option key={t} value={t}>
                   {t}
@@ -222,10 +234,10 @@ export default function StudyMaterialsSection({
               className="bg-transparent text-[#1D1B20] text-xs font-bold outline-none cursor-pointer"
               id="sort-materials-select"
             >
-              <option value="newest">Newest</option>
-              <option value="oldest">Oldest</option>
-              <option value="name">Name (A-Z)</option>
-              <option value="size">Size</option>
+              <option value="newest">{language === 'fr-FR' ? 'Plus récents' : 'Newest'}</option>
+              <option value="oldest">{language === 'fr-FR' ? 'Plus anciens' : 'Oldest'}</option>
+              <option value="name">{language === 'fr-FR' ? 'Nom (A-Z)' : 'Name (A-Z)'}</option>
+              <option value="size">{language === 'fr-FR' ? 'Taille' : 'Size'}</option>
             </select>
           </div>
 
@@ -236,7 +248,7 @@ export default function StudyMaterialsSection({
             id="open-upload-modal-btn"
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Upload Document</span>
+            <span>{language === 'fr-FR' ? 'Téléverser un document' : 'Upload Document'}</span>
           </button>
         </div>
       </div>
@@ -250,13 +262,13 @@ export default function StudyMaterialsSection({
           <div className="space-y-1">
             <h4 className="text-sm font-black text-[#1D1B20]">
               {searchQuery || selectedSubjectId !== 'all'
-                ? 'No documents matched your filter'
-                : 'No Study Materials Uploaded Yet'}
+                ? (language === 'fr-FR' ? 'Aucun document ne correspond à vos filtres' : 'No documents matched your filter')
+                : (language === 'fr-FR' ? 'Aucun document de révision pour le moment' : 'No Study Materials Uploaded Yet')}
             </h4>
             <p className="text-xs text-[#49454F] max-w-md mx-auto">
               {searchQuery || selectedSubjectId !== 'all'
-                ? 'Try clearing your search filters to see all study materials.'
-                : 'Upload PDF and Word documents (DOC, DOCX) to organize them by subject, read inside the app, and generate on-demand AI summaries.'}
+                ? (language === 'fr-FR' ? 'Essayez de réinitialiser vos filtres pour afficher tous vos documents.' : 'Try clearing your search filters to see all study materials.')
+                : (language === 'fr-FR' ? 'Importez vos documents PDF, Word, images ou texte pour les organiser par matière, les lire dans l\'application et générer des résumés IA.' : 'Upload PDF and Word documents (DOC, DOCX) to organize them by subject, read inside the app, and generate on-demand AI summaries.')}
             </p>
           </div>
           <button
@@ -264,7 +276,7 @@ export default function StudyMaterialsSection({
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
           >
             <Upload className="w-4 h-4" />
-            <span>Upload Your First Document</span>
+            <span>{language === 'fr-FR' ? 'Téléverser votre premier document' : 'Upload Your First Document'}</span>
           </button>
         </div>
       ) : (
@@ -298,16 +310,16 @@ export default function StudyMaterialsSection({
                     <div className="flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => setEditingMaterial(item)}
-                        className="p-1.5 text-[#49454F] hover:text-[#1D1B20] hover:bg-[#F3EDF7] rounded-lg transition-colors"
-                        title="Edit Details"
+                        className="p-1.5 text-[#49454F] hover:text-[#1D1B20] hover:bg-[#F3EDF7] rounded-lg transition-colors cursor-pointer"
+                        title={language === 'fr-FR' ? 'Modifier les détails' : 'Edit Details'}
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDelete(item.id, item.name)}
                         disabled={isDeleting}
-                        className="p-1.5 text-[#49454F] hover:text-[#B3261E] hover:bg-[#FDECEB] rounded-lg transition-colors"
-                        title="Delete Document"
+                        className="p-1.5 text-[#49454F] hover:text-[#B3261E] hover:bg-[#FDECEB] rounded-lg transition-colors cursor-pointer"
+                        title={language === 'fr-FR' ? 'Supprimer le document' : 'Delete Document'}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -335,19 +347,19 @@ export default function StudyMaterialsSection({
                     {item.summary && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9px] font-bold">
                         <Sparkles className="w-2.5 h-2.5" />
-                        <span>Summary</span>
+                        <span>{language === 'fr-FR' ? 'Résumé' : 'Summary'}</span>
                       </span>
                     )}
                     {item.studyNotes && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-[#6750A4] text-[9px] font-bold">
                         <BookOpen className="w-2.5 h-2.5" />
-                        <span>AI Notes</span>
+                        <span>{language === 'fr-FR' ? 'Notes IA' : 'AI Notes'}</span>
                       </span>
                     )}
                     {item.keyPoints && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-700 text-[9px] font-bold">
                         <Layers className="w-2.5 h-2.5" />
-                        <span>Key Points</span>
+                        <span>{language === 'fr-FR' ? 'Points clés' : 'Key Points'}</span>
                       </span>
                     )}
                   </div>
@@ -358,7 +370,7 @@ export default function StudyMaterialsSection({
                   <div className="font-mono">
                     <span>{formatFileSize(item.fileSize)}</span>
                     <span className="mx-1.5">•</span>
-                    <span>{new Date(item.uploadedAt || item.createdAt).toLocaleDateString()}</span>
+                    <span>{formatDate(new Date(item.uploadedAt || item.createdAt))}</span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
@@ -366,7 +378,7 @@ export default function StudyMaterialsSection({
                       href={`/api/study-materials/${item.id}/download`}
                       download={item.originalFileName}
                       className="p-1.5 text-[#49454F] hover:text-[#1D1B20] hover:bg-[#F3EDF7] rounded-lg transition-colors"
-                      title="Download original file"
+                      title={language === 'fr-FR' ? 'Télécharger le fichier original' : 'Download original file'}
                     >
                       <Download className="w-3.5 h-3.5" />
                     </a>
@@ -375,7 +387,7 @@ export default function StudyMaterialsSection({
                       className="flex items-center gap-1 px-2.5 py-1 bg-[#6750A4] hover:bg-[#503E84] text-white font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
                     >
                       <Eye className="w-3 h-3" />
-                      <span>Read &amp; AI</span>
+                      <span>{language === 'fr-FR' ? 'Lire & IA' : 'Read & AI'}</span>
                     </button>
                   </div>
                 </div>

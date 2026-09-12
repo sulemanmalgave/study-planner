@@ -26,6 +26,7 @@ import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
 import { AuthUserProfile } from '../lib/emailAuth';
 import { getStoredEntitlement, isEntitlementActive, saveStoredEntitlement } from '../lib/entitlement';
 import EmailAuthCard from './EmailAuthCard';
+import { useTranslation, formatFrDate } from '../lib/i18n';
 
 interface UpgradeModalProps {
   isOpen: boolean;
@@ -97,17 +98,7 @@ const safeFetchJson = async (url: string, options?: RequestInit) => {
 
 const formatDate = (isoString?: string) => {
   if (!isoString) return 'Lifetime / Recurring';
-  try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
-    return d.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  } catch {
-    return isoString;
-  }
+  return formatFrDate(isoString);
 };
 
 export default function UpgradeModal({ 
@@ -123,6 +114,7 @@ export default function UpgradeModal({
   subscription,
   profile,
 }: UpgradeModalProps) {
+  const { t, language } = useTranslation();
   const [billingCountry, setBillingCountry] = useState<string>('US');
   const [selectedPlanId, setSelectedPlanId] = useState<'monthly' | 'quarterly' | 'yearly'>('yearly');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -470,12 +462,12 @@ export default function UpgradeModal({
                     {isUserPremium && (
                       <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1">
                         <Sparkles className="w-3 h-3 text-emerald-600" />
-                        <span>Active</span>
+                        <span>{language === 'fr-FR' ? 'Actif' : 'Active'}</span>
                       </span>
                     )}
                   </div>
                   <p className="text-[11px] text-[#49454F]">
-                    {isUserPremium ? 'Your Premium subscription is active.' : 'Unlock unlimited academic potential'}
+                    {isUserPremium ? (language === 'fr-FR' ? 'Votre abonnement Premium est actif.' : 'Your Premium subscription is active.') : t('premium.upgradeSubtitle')}
                   </p>
                 </div>
               </div>
@@ -483,7 +475,7 @@ export default function UpgradeModal({
                 onClick={onClose}
                 className="w-8 h-8 rounded-full bg-white border border-slate-200/70 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
                 id="close-upgrade-modal-btn"
-                title="Close"
+                title={t('action.cancel')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -506,24 +498,24 @@ export default function UpgradeModal({
                       </div>
                       <div>
                         <div className="text-xs font-extrabold text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
-                          <span>PREMIUM ACTIVE ✓</span>
+                          <span>{language === 'fr-FR' ? 'PREMIUM ACTIF ✓' : 'PREMIUM ACTIVE ✓'}</span>
                         </div>
                         <h4 className="text-sm font-bold text-slate-900 mt-0.5">
-                          Your Premium subscription is active.
+                          {language === 'fr-FR' ? 'Votre abonnement Premium est actif.' : 'Your Premium subscription is active.'}
                         </h4>
                       </div>
                     </div>
                     <p className="text-xs text-emerald-950/80 leading-relaxed">
-                      You have complete, unlimited access to all Study Planner features. Your active subscription is securely linked to your workspace.
+                      {language === 'fr-FR' ? 'Vous disposez d\'un accès illimité et complet à l\'ensemble des fonctionnalités de Study Planner. Votre abonnement est relié en toute sécurité à votre espace de travail.' : 'You have complete, unlimited access to all Study Planner features. Your active subscription is securely linked to your workspace.'}
                     </p>
                   </div>
 
                   {/* Authoritative Subscription Details Breakdown */}
                   <div className="p-4.5 bg-slate-50/90 rounded-2xl border border-slate-200/80 space-y-3" id="subscription-details-breakdown">
                     <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                      <span>Subscription Details</span>
+                      <span>{t('settings.subscriptionStatus')}</span>
                       <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100/80 px-2 py-0.5 rounded-full">
-                        Authoritative Status
+                        {language === 'fr-FR' ? 'Statut certifié' : 'Authoritative Status'}
                       </span>
                     </div>
 
@@ -531,31 +523,31 @@ export default function UpgradeModal({
                       <div className="flex items-center justify-between pt-1">
                         <span className="text-slate-500 font-medium flex items-center gap-1.5">
                           <Zap className="w-3.5 h-3.5 text-[#6750A4]" />
-                          Plan
+                          {t('settings.planLabel')}
                         </span>
                         <span className="font-bold text-slate-900 capitalize">
                           {effectiveSubscription?.plan === 'yearly' || (!effectiveSubscription?.plan && effectiveSubscription?.type === 'yearly')
-                            ? 'Yearly Plan (Unlimited)'
+                            ? (language === 'fr-FR' ? 'Formule annuelle (Illimitée)' : 'Yearly Plan (Unlimited)')
                             : effectiveSubscription?.plan 
-                              ? `${effectiveSubscription.plan} Plan` 
-                              : 'Yearly Plan (Unlimited)'}
+                              ? `${effectiveSubscription.plan}` 
+                              : (language === 'fr-FR' ? 'Formule annuelle (Illimitée)' : 'Yearly Plan (Unlimited)')}
                         </span>
                       </div>
 
                       <div className="flex items-center justify-between pt-2">
                         <span className="text-slate-500 font-medium flex items-center gap-1.5">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          Status
+                          {language === 'fr-FR' ? 'Statut' : 'Status'}
                         </span>
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                          Active ✓
+                          {language === 'fr-FR' ? 'Actif ✓' : 'Active ✓'}
                         </span>
                       </div>
 
                       <div className="flex items-center justify-between pt-2">
                         <span className="text-slate-500 font-medium flex items-center gap-1.5">
                           <CreditCard className="w-3.5 h-3.5 text-slate-500" />
-                          Payment Gateway
+                          {t('settings.gatewayLabel')}
                         </span>
                         <span className="font-bold text-slate-900 uppercase">
                           {effectiveSubscription?.paymentGateway || (effectiveSubscription as any)?.paymentProvider || 'Razorpay'}
@@ -566,7 +558,7 @@ export default function UpgradeModal({
                         <div className="flex items-center justify-between pt-2">
                           <span className="text-slate-500 font-medium flex items-center gap-1.5">
                             <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                            Renewal / Valid Until
+                            {t('settings.validUntil')}
                           </span>
                           <span className="font-bold text-slate-900">
                             {formatDate(effectiveSubscription.expiryDate)}
@@ -578,7 +570,7 @@ export default function UpgradeModal({
                         <div className="flex items-center justify-between pt-2">
                           <span className="text-slate-500 font-medium flex items-center gap-1.5">
                             <Hash className="w-3.5 h-3.5 text-slate-500" />
-                            Transaction Ref
+                            {t('settings.refLabel')}
                           </span>
                           <span className="font-mono text-[11px] text-slate-700 bg-slate-200/60 px-2 py-0.5 rounded-md truncate max-w-[180px]">
                             {effectiveSubscription?.transactionId || (effectiveSubscription as any)?.paymentId}
@@ -589,10 +581,10 @@ export default function UpgradeModal({
                       <div className="flex items-center justify-between pt-2">
                         <span className="text-slate-500 font-medium flex items-center gap-1.5">
                           <Globe className="w-3.5 h-3.5 text-slate-500" />
-                          Account
+                          {language === 'fr-FR' ? 'Compte' : 'Account'}
                         </span>
                         <span className="font-medium text-slate-800 truncate max-w-[200px]">
-                          {authUser?.email || profile?.email || 'Active Workspace User'}
+                          {authUser?.email || profile?.email || (language === 'fr-FR' ? 'Utilisateur actif' : 'Active Workspace User')}
                         </span>
                       </div>
                     </div>
@@ -601,8 +593,8 @@ export default function UpgradeModal({
                   {/* Account & Entitlement Association Card */}
                   <div className="space-y-1.5">
                     <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                      <span>Account Management</span>
-                      <span className="text-[10px] text-slate-400 font-medium">Verified Identity</span>
+                      <span>{language === 'fr-FR' ? 'Gestion du compte' : 'Account Management'}</span>
+                      <span className="text-[10px] text-slate-400 font-medium">{language === 'fr-FR' ? 'Identité vérifiée' : 'Verified Identity'}</span>
                     </div>
 
                     <EmailAuthCard
@@ -623,33 +615,33 @@ export default function UpgradeModal({
                   <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
                       <Zap className="w-4 h-4 text-[#6750A4]" />
-                      <span>All Premium Privileges Active:</span>
+                      <span>{language === 'fr-FR' ? 'Tous les privilèges Premium activés :' : 'All Premium Privileges Active:'}</span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-xs text-[#1D1B20] font-medium">
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Unlimited Subjects &amp; Courses</span>
+                        <span>{language === 'fr-FR' ? 'Matières & Cours illimités' : 'Unlimited Subjects & Courses'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Unlimited Timetables</span>
+                        <span>{t('premium.unlimitedTimetable')}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Unlimited Assignments &amp; Tasks</span>
+                        <span>{language === 'fr-FR' ? 'Devoirs & Tâches illimités' : 'Unlimited Assignments & Tasks'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Unlimited Notes &amp; Pages</span>
+                        <span>{t('premium.unlimitedNotes')}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Unlimited Exams &amp; Reminders</span>
+                        <span>{language === 'fr-FR' ? 'Examens & Rappels illimités' : 'Unlimited Exams & Reminders'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Full Lifetime Analytics</span>
+                        <span>{t('premium.analytics')}</span>
                       </div>
                     </div>
                   </div>
@@ -658,7 +650,7 @@ export default function UpgradeModal({
                   <div className="p-3 bg-emerald-50/70 border border-emerald-200/60 rounded-xl text-xs text-emerald-800 flex items-start gap-2">
                     <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                     <span>
-                      <strong>Protected Subscription:</strong> Your Premium account is active. You will never be asked to pay again for this active period.
+                      <strong>{language === 'fr-FR' ? 'Abonnement protégé :' : 'Protected Subscription:'}</strong> {language === 'fr-FR' ? 'Votre compte Premium est actif. Aucun paiement supplémentaire ne vous sera demandé pour cette période.' : 'Your Premium account is active. You will never be asked to pay again for this active period.'}
                     </span>
                   </div>
 
@@ -674,7 +666,7 @@ export default function UpgradeModal({
                     <div className="p-3.5 bg-amber-50 border border-amber-200/90 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900" id="limit-reason-banner">
                       <Zap className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                       <div>
-                        <span className="font-bold">Free Plan Limit Reached: </span>
+                        <span className="font-bold">{language === 'fr-FR' ? 'Limite du forfait gratuit atteinte : ' : 'Free Plan Limit Reached: '}</span>
                         <span>{limitReason}</span>
                       </div>
                     </div>
@@ -683,8 +675,8 @@ export default function UpgradeModal({
                   {/* Pricing Cards Selection */}
                   <div className="space-y-2">
                     <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                      <span>Select Subscription Plan</span>
-                      <span className="text-[10px] text-slate-400 font-medium">Billed in {countryConfig.currency}</span>
+                      <span>{language === 'fr-FR' ? 'Sélectionnez votre formule' : 'Select Subscription Plan'}</span>
+                      <span className="text-[10px] text-slate-400 font-medium">{language === 'fr-FR' ? `Facturé en ${countryConfig.currency}` : `Billed in ${countryConfig.currency}`}</span>
                     </div>
 
                     <div className="grid grid-cols-1 gap-2.5">
@@ -710,7 +702,7 @@ export default function UpgradeModal({
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[11px] text-[#49454F]">{plan.savingsText || plan.billingText || 'Full uninterrupted access'}</p>
+                              <p className="text-[11px] text-[#49454F]">{plan.savingsText || plan.billingText || (language === 'fr-FR' ? 'Accès complet sans interruption' : 'Full uninterrupted access')}</p>
                             </div>
 
                             <div className="text-right">
@@ -719,7 +711,7 @@ export default function UpgradeModal({
                               </div>
                               {plan.monthlyEquivalent && (
                                 <div className="text-[10px] text-[#6750A4] font-medium">
-                                  {plan.monthlyEquivalent} equivalent
+                                  {language === 'fr-FR' ? `Équivalent ${plan.monthlyEquivalent}` : `${plan.monthlyEquivalent} equivalent`}
                                 </div>
                               )}
                             </div>
@@ -732,8 +724,8 @@ export default function UpgradeModal({
                   {/* Simple Email Account & Verification Section */}
                   <div className="space-y-1.5">
                     <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                      <span>Account &amp; Entitlement Protection</span>
-                      <span className="text-[10px] text-slate-400 font-medium">Verified Email</span>
+                      <span>{t('settings.accountProtection')}</span>
+                      <span className="text-[10px] text-slate-400 font-medium">{language === 'fr-FR' ? 'E-mail vérifié' : 'Verified Email'}</span>
                     </div>
 
                     <EmailAuthCard
@@ -754,33 +746,33 @@ export default function UpgradeModal({
                   <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
                       <Zap className="w-4 h-4 text-[#6750A4]" />
-                      <span>Everything Included in Premium:</span>
+                      <span>{language === 'fr-FR' ? 'Inclus dans l\'abonnement Premium :' : 'Everything Included in Premium:'}</span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-xs text-[#1D1B20] font-medium">
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Unlimited Active Tasks</span>
+                        <span>{t('premium.unlimitedTasks')}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Unlimited Timetables</span>
+                        <span>{t('premium.unlimitedTimetable')}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Unlimited Assignments</span>
+                        <span>{language === 'fr-FR' ? 'Devoirs illimités' : 'Unlimited Assignments'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Unlimited Notes &amp; Pages</span>
+                        <span>{t('premium.unlimitedNotes')}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Unlimited Exams</span>
+                        <span>{language === 'fr-FR' ? 'Examens illimités' : 'Unlimited Exams'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Full Lifetime Analytics</span>
+                        <span>{t('premium.analytics')}</span>
                       </div>
                     </div>
                   </div>
@@ -829,13 +821,13 @@ export default function UpgradeModal({
                     id="premium-active-done-btn"
                   >
                     <Check className="w-4 h-4" />
-                    <span>Premium Active — Return to App</span>
+                    <span>{language === 'fr-FR' ? 'Premium actif — Retourner à l\'application' : 'Premium Active — Return to App'}</span>
                   </button>
 
                   <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
                     <div className="flex items-center gap-1.5">
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Active Subscription in Good Standing</span>
+                      <span>{language === 'fr-FR' ? 'Abonnement actif en règle' : 'Active Subscription in Good Standing'}</span>
                     </div>
                     {onOpenRestore && (
                       <button
@@ -843,7 +835,7 @@ export default function UpgradeModal({
                         onClick={onOpenRestore}
                         className="text-[#6750A4] hover:underline font-semibold cursor-pointer"
                       >
-                        Restore purchase
+                        {t('settings.restorePurchase')}
                       </button>
                     )}
                   </div>
@@ -862,18 +854,18 @@ export default function UpgradeModal({
                     {isLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Securing Payment Connection...</span>
+                        <span>{language === 'fr-FR' ? 'Sécurisation de la connexion de paiement...' : 'Securing Payment Connection...'}</span>
                       </>
                     ) : !authUser ? (
                       <>
-                        <span>Verify Account to Continue ({activePlan.formattedPrice})</span>
+                        <span>{language === 'fr-FR' ? `Vérifier le compte pour continuer (${activePlan.formattedPrice})` : `Verify Account to Continue (${activePlan.formattedPrice})`}</span>
                         <ArrowRight className="w-4 h-4" />
                       </>
                     ) : (
                       <>
                         <CreditCard className="w-4 h-4" />
                         <span>
-                          Pay {activePlan.formattedPrice} with {activeGateway.name}
+                          {language === 'fr-FR' ? `Régler ${activePlan.formattedPrice} avec ${activeGateway.name}` : `Pay ${activePlan.formattedPrice} with ${activeGateway.name}`}
                         </span>
                         <ArrowRight className="w-4 h-4" />
                       </>
@@ -882,7 +874,7 @@ export default function UpgradeModal({
 
                   <div className="flex items-center justify-center gap-2 text-[10px] text-[#49454F]">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Encrypted 256-bit bank grade transaction</span>
+                    <span>{language === 'fr-FR' ? 'Transaction chiffrée 256 bits conforme aux normes bancaires' : 'Encrypted 256-bit bank grade transaction'}</span>
                     <span>•</span>
                     {onOpenRestore && (
                       <button
@@ -890,7 +882,7 @@ export default function UpgradeModal({
                         onClick={onOpenRestore}
                         className="text-[#6750A4] hover:underline font-semibold cursor-pointer"
                       >
-                        Restore purchase
+                        {t('settings.restorePurchase')}
                       </button>
                     )}
                   </div>

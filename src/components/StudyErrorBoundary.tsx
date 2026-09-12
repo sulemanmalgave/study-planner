@@ -33,6 +33,7 @@ export class StudyErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
+      const isFrench = typeof window !== 'undefined' && localStorage.getItem('studyflow_language') === 'fr-FR';
       return (
         <div className="min-h-[400px] flex items-center justify-center p-6 bg-slate-50/50 rounded-3xl border border-slate-200/60 my-4">
           <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center space-y-4 shadow-xl border border-slate-200">
@@ -40,9 +41,11 @@ export class StudyErrorBoundary extends Component<Props, State> {
               <AlertTriangle className="w-7 h-7" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-lg font-black text-slate-900">Something went wrong loading Study</h3>
+              <h3 className="text-lg font-black text-slate-900">
+                {isFrench ? 'Une erreur est survenue lors du chargement' : 'Something went wrong loading Study'}
+              </h3>
               <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                {this.state.error?.message || 'An unexpected error occurred in the study timer section.'}
+                {this.state.error?.message || (isFrench ? 'Une erreur inattendue est survenue dans cette section.' : 'An unexpected error occurred in the study timer section.')}
               </p>
             </div>
             <button
@@ -50,7 +53,7 @@ export class StudyErrorBoundary extends Component<Props, State> {
               className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-bold rounded-full transition-colors cursor-pointer shadow-md"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>Retry</span>
+              <span>{isFrench ? 'Réessayer' : 'Retry'}</span>
             </button>
           </div>
         </div>

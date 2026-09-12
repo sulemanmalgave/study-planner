@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { pageVariants } from '../lib/animations';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckSquare, GraduationCap, CalendarDays } from 'lucide-react';
 import { Course, TimetablePeriod, Assignment, Exam } from '../types';
+import { useTranslation } from '../lib/i18n';
 
 interface CalendarViewProps {
   courses: Course[];
@@ -12,15 +13,23 @@ interface CalendarViewProps {
 }
 
 export default function CalendarView({ courses, timetable, assignments, exams }: CalendarViewProps) {
+  const { t, language } = useTranslation();
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
-  const monthNames = [
+  const monthNames = language === 'fr-FR' ? [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+  ] : [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
+
+  const daysOfWeekLabels = language === 'fr-FR' 
+    ? ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+    : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayIndex = new Date(year, month, 1).getDay(); // Day of week (0-6)
@@ -115,8 +124,10 @@ export default function CalendarView({ courses, timetable, assignments, exams }:
             <CalendarIcon className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-[#1D1B20] tracking-wide uppercase">Academic Calendar</h2>
-            <p className="text-[10px] font-mono text-[#49454F] mt-1 uppercase">Track assignment releases, exam boards & classes</p>
+            <h2 className="text-sm font-bold text-[#1D1B20] tracking-wide uppercase">{t('calendar.title')}</h2>
+            <p className="text-[10px] font-mono text-[#49454F] mt-1 uppercase">
+              {language === 'fr-FR' ? 'Suivi des cours, devoirs et sessions d\'examens' : 'Track assignment releases, exam boards & classes'}
+            </p>
           </div>
         </div>
 
@@ -125,6 +136,7 @@ export default function CalendarView({ courses, timetable, assignments, exams }:
             onClick={handlePrevMonth}
             className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-full transition-colors border border-[#E1E3E1] btn-press cursor-pointer"
             id="prev-month-button"
+            title={language === 'fr-FR' ? 'Mois précédent' : 'Previous month'}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -135,6 +147,7 @@ export default function CalendarView({ courses, timetable, assignments, exams }:
             onClick={handleNextMonth}
             className="p-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-full transition-colors border border-[#E1E3E1] btn-press cursor-pointer"
             id="next-month-button"
+            title={language === 'fr-FR' ? 'Mois suivant' : 'Next month'}
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -146,7 +159,7 @@ export default function CalendarView({ courses, timetable, assignments, exams }:
         
         {/* Days of Week Headers */}
         <div className="grid grid-cols-7 gap-2 text-center pb-3 border-b border-[#E1E3E1] mb-2">
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+          {daysOfWeekLabels.map(day => (
             <span key={day} className="text-[10px] font-black text-[#49454F] uppercase tracking-widest">{day}</span>
           ))}
         </div>
@@ -190,7 +203,7 @@ export default function CalendarView({ courses, timetable, assignments, exams }:
                             key={cl.id}
                             className="w-1.5 h-1.5 rounded-full"
                             style={{ backgroundColor: getCourseColor(cl.courseId) }}
-                            title={`Class: ${cl.subject}`}
+                            title={`${language === 'fr-FR' ? 'Cours :' : 'Class:'} ${cl.subject}`}
                           />
                         ))}
                       </div>
@@ -206,7 +219,7 @@ export default function CalendarView({ courses, timetable, assignments, exams }:
                           borderColor: getCourseColor(as.courseId) + '30',
                           color: getCourseColor(as.courseId),
                         }}
-                        title={`Task: ${as.title}`}
+                        title={`${language === 'fr-FR' ? 'Devoir :' : 'Task:'} ${as.title}`}
                       >
                         ✓ {as.title}
                       </div>
@@ -217,7 +230,7 @@ export default function CalendarView({ courses, timetable, assignments, exams }:
                       <div
                         key={ex.id}
                         className="px-1 py-0.5 text-[8px] font-black tracking-wide rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 leading-none truncate"
-                        title={`Exam: ${ex.name}`}
+                        title={`${language === 'fr-FR' ? 'Examen :' : 'Exam:'} ${ex.name}`}
                       >
                         🏆 {ex.name}
                       </div>

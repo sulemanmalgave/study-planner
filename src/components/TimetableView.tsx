@@ -4,6 +4,7 @@ import { pageVariants, listItemVariants, modalVariants } from '../lib/animations
 import { CalendarDays, Plus, Trash2, Edit2, Clock, MapPin, Loader2, Sparkles, AlertCircle, Lock } from 'lucide-react';
 import { Course, TimetablePeriod, DayOfWeek } from '../types';
 import SubjectSelect from './SubjectSelect';
+import { useTranslation } from '../lib/i18n';
 
 interface TimetableViewProps {
   courses: Course[];
@@ -26,6 +27,7 @@ export default function TimetableView({
   onDeletePeriod,
   onTriggerUpgrade
 }: TimetableViewProps) {
+  const { t, language, getDayLabel, formatSlot } = useTranslation();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState<TimetablePeriod | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,7 +70,7 @@ export default function TimetableView({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subject) {
-      setErrorMessage('Please enter a subject / class name.');
+      setErrorMessage(language === 'fr-FR' ? 'Veuillez saisir le nom du cours.' : 'Please enter a subject / class name.');
       return;
     }
 
@@ -87,14 +89,14 @@ export default function TimetableView({
           if (result.error === 'LIMIT_REACHED') {
             onTriggerUpgrade();
           } else {
-            setErrorMessage(result.error || 'Failed to schedule class.');
+            setErrorMessage(result.error || (language === 'fr-FR' ? 'Impossible d\'ajouter le cours.' : 'Failed to schedule class.'));
           }
         } else {
           setIsFormOpen(false);
         }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'An error occurred.');
+      setErrorMessage(err.message || (language === 'fr-FR' ? 'Une erreur est survenue.' : 'An error occurred.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -117,8 +119,8 @@ export default function TimetableView({
             <CalendarDays className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-[#1D1B20] tracking-wide uppercase">Weekly Class Schedule</h2>
-            <p className="text-[10px] font-mono text-[#49454F] mt-1 uppercase">Configure study hours & lecture slots</p>
+            <h2 className="text-sm font-bold text-[#1D1B20] tracking-wide uppercase">{t('timetable.title')}</h2>
+            <p className="text-[10px] font-mono text-[#49454F] mt-1 uppercase">{t('timetable.subtitle')}</p>
           </div>
         </div>
 
@@ -128,7 +130,7 @@ export default function TimetableView({
           id="add-class-period-button"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Lecture Slot</span>
+          <span>{t('timetable.addClass')}</span>
         </button>
       </div>
 
@@ -145,9 +147,13 @@ export default function TimetableView({
           >
             <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-2">
               <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
-                {editingPeriod ? 'Modify Lecture Slot' : 'Schedule New Lecture'}
+                {editingPeriod
+                  ? (language === 'fr-FR' ? 'Modifier le créneau de cours' : 'Modify Lecture Slot')
+                  : (language === 'fr-FR' ? 'Planifier un nouveau cours' : 'Schedule New Lecture')}
               </h3>
-              <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium btn-press cursor-pointer">Cancel</button>
+              <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium btn-press cursor-pointer">
+                {t('action.cancel')}
+              </button>
             </div>
 
             {errorMessage && (
@@ -160,12 +166,14 @@ export default function TimetableView({
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
               {/* Subject */}
               <div className="space-y-1 md:col-span-1">
-                <label className="text-[10px] font-bold text-[#49454F] uppercase">Class Name</label>
+                <label className="text-[10px] font-bold text-[#49454F] uppercase">
+                  {language === 'fr-FR' ? 'Nom du cours' : 'Class Name'}
+                </label>
                 <input
                   type="text"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  placeholder="e.g. Adv Algebra"
+                  placeholder={language === 'fr-FR' ? 'ex. : Algèbre linéaire' : 'e.g. Adv Algebra'}
                   className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3 py-2 focus:ring-1 focus:ring-[#6750A4] outline-none"
                 />
               </div>
@@ -176,21 +184,23 @@ export default function TimetableView({
                 value={courseId}
                 onChange={setCourseId}
                 onAddCourse={onAddCourse}
-                label="Related Course"
+                label={language === 'fr-FR' ? 'Matière associée' : 'Related Course'}
                 className="md:col-span-1"
                 id="timetable-course-select"
               />
 
               {/* Day */}
               <div className="space-y-1 md:col-span-1">
-                <label className="text-[10px] font-bold text-[#49454F] uppercase">Day</label>
+                <label className="text-[10px] font-bold text-[#49454F] uppercase">
+                  {language === 'fr-FR' ? 'Jour de la semaine' : 'Day'}
+                </label>
                 <select
                   value={day}
                   onChange={(e) => setDay(e.target.value as DayOfWeek)}
                   className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-2 py-2 focus:ring-1 focus:ring-[#6750A4] outline-none"
                 >
                   {daysOfWeek.map(d => (
-                    <option key={d} value={d} className="text-slate-900 bg-white">{d}</option>
+                    <option key={d} value={d} className="text-slate-900 bg-white">{getDayLabel(d)}</option>
                   ))}
                 </select>
               </div>
@@ -198,7 +208,9 @@ export default function TimetableView({
               {/* Times */}
               <div className="grid grid-cols-2 gap-2 md:col-span-1">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#49454F] uppercase">Start</label>
+                  <label className="text-[10px] font-bold text-[#49454F] uppercase">
+                    {language === 'fr-FR' ? 'Début' : 'Start'}
+                  </label>
                   <input
                     type="time"
                     value={startTime}
@@ -207,7 +219,9 @@ export default function TimetableView({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#49454F] uppercase">End</label>
+                  <label className="text-[10px] font-bold text-[#49454F] uppercase">
+                    {language === 'fr-FR' ? 'Fin' : 'End'}
+                  </label>
                   <input
                     type="time"
                     value={endTime}
@@ -227,7 +241,11 @@ export default function TimetableView({
                   {isSubmitting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <span>{editingPeriod ? 'Save Changes' : 'Schedule Class'}</span>
+                    <span>
+                      {editingPeriod
+                        ? (language === 'fr-FR' ? 'Enregistrer' : 'Save Changes')
+                        : (language === 'fr-FR' ? 'Ajouter' : 'Schedule Class')}
+                    </span>
                   )}
                 </button>
               </div>
@@ -269,23 +287,29 @@ export default function TimetableView({
                   <div className="p-2 bg-[#EADDFF] text-[#21005D] rounded-full mb-1 border border-[#D0BCFF]">
                     <Lock className="w-3.5 h-3.5" />
                   </div>
-                  <h4 className="text-[11px] font-black text-[#1D1B20] uppercase tracking-wide">Locked on Free Plan</h4>
+                  <h4 className="text-[11px] font-black text-[#1D1B20] uppercase tracking-wide">
+                    {language === 'fr-FR' ? 'Verrouillé sur la version gratuite' : 'Locked on Free Plan'}
+                  </h4>
                   <p className="text-[9px] text-[#49454F] max-w-[280px] mt-1 font-medium leading-relaxed">
-                    View only Today, Tomorrow, and Day After Tomorrow. Upgrade to Study Planner Premium to unlock the full weekly timetable schedule.
+                    {language === 'fr-FR'
+                      ? 'Accès limité à Aujourd\'hui, Demain et Après-demain. Passez à Study Planner Premium pour débloquer l\'ensemble de votre emploi du temps hebdomadaire.'
+                      : 'View only Today, Tomorrow, and Day After Tomorrow. Upgrade to Study Planner Premium to unlock the full weekly timetable schedule.'}
                   </p>
                   <button
                     onClick={onTriggerUpgrade}
                     className="mt-2.5 px-3 py-1 bg-[#6750A4] hover:bg-[#503E84] text-[9px] font-bold text-white rounded-full transition-all uppercase tracking-wider btn-press cursor-pointer"
                   >
-                    Upgrade to Premium
+                    {t('settings.upgradeToPremium')}
                   </button>
                 </div>
               )}
 
               <div className={isDayLocked ? "filter blur-[3px] select-none pointer-events-none opacity-30" : ""}>
                 <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-2">
-                  <h3 className="text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider">{dayName}</h3>
-                  <span className="text-[10px] text-[#49454F] font-mono font-bold uppercase">{periods.length} Lecture slots</span>
+                  <h3 className="text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider">{getDayLabel(dayName)}</h3>
+                  <span className="text-[10px] text-[#49454F] font-mono font-bold uppercase">
+                    {language === 'fr-FR' ? `${periods.length} créneau(x) de cours` : `${periods.length} Lecture slots`}
+                  </span>
                 </div>
 
                 {periods.length > 0 ? (
@@ -307,7 +331,7 @@ export default function TimetableView({
                             </h4>
                             <div className="flex items-center gap-1.5 text-[10px] text-[#49454F] font-medium mt-1">
                               <Clock className="w-3.5 h-3.5 text-[#49454F]" />
-                              <span>{period.startTime} - {period.endTime}</span>
+                              <span>{formatSlot(period.startTime, period.endTime)}</span>
                             </div>
                           </div>
 
@@ -315,12 +339,14 @@ export default function TimetableView({
                             <button
                               onClick={() => handleOpenEdit(period)}
                               className="p-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-lg border border-[#E1E3E1] transition-colors btn-press cursor-pointer"
+                              title={language === 'fr-FR' ? 'Modifier le créneau' : 'Edit Slot'}
                             >
                               <Edit2 className="w-3 h-3" />
                             </button>
                             <button
                               onClick={() => onDeletePeriod(period.id)}
                               className="p-1.5 bg-[#FDECEB] hover:bg-[#F9DEDC] text-[#B3261E] border border-[#F9DEDC] rounded-lg transition-colors btn-press cursor-pointer"
+                              title={language === 'fr-FR' ? 'Supprimer le créneau' : 'Delete Slot'}
                             >
                               <Trash2 className="w-3 h-3" />
                             </button>
@@ -330,7 +356,11 @@ export default function TimetableView({
                     })}
                   </div>
                 ) : (
-                  <p className="text-[10px] text-slate-400 italic py-1 font-medium mt-3">No classes scheduled for {dayName}</p>
+                  <p className="text-[10px] text-slate-400 italic py-1 font-medium mt-3">
+                    {language === 'fr-FR'
+                      ? `Aucun cours planifié le ${getDayLabel(dayName).toLowerCase()}`
+                      : `No classes scheduled for ${dayName}`}
+                  </p>
                 )}
               </div>
             </motion.div>

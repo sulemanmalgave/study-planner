@@ -21,6 +21,7 @@ import {
   handlePasswordReset,
   handleSignOut
 } from '../lib/emailAuth';
+import { useTranslation } from '../lib/i18n';
 
 interface EmailAuthCardProps {
   authUser?: AuthUserProfile | null;
@@ -39,6 +40,7 @@ export default function EmailAuthCard({
   title,
   compact = false,
 }: EmailAuthCardProps) {
+  const { language } = useTranslation();
   const [mode, setMode] = useState<AuthMode>('signup');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -71,30 +73,30 @@ export default function EmailAuthCard({
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanName) {
-      setError('Please enter your name.');
+      setError(language === 'fr-FR' ? 'Veuillez saisir votre nom.' : 'Please enter your name.');
       return;
     }
     if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setError('Please enter a valid email address.');
+      setError(language === 'fr-FR' ? 'Veuillez saisir une adresse e-mail valide.' : 'Please enter a valid email address.');
       return;
     }
     if (!password || password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      setError(language === 'fr-FR' ? 'Le mot de passe doit comporter au moins 6 caractères.' : 'Password must be at least 6 characters.');
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match. Please verify your password.');
+      setError(language === 'fr-FR' ? 'Les mots de passe ne correspondent pas.' : 'Passwords do not match. Please verify your password.');
       return;
     }
 
     setIsLoading(true);
     try {
       const result = await handleSignUp(cleanName, cleanEmail, password, confirmPassword);
-      setSuccessMessage('Account created successfully.');
+      setSuccessMessage(language === 'fr-FR' ? 'Compte créé avec succès.' : 'Account created successfully.');
       onAuthSuccess(result.user, result.hasActiveSubscription, result.subscription);
     } catch (err: any) {
       console.warn('[EmailAuthCard] Signup notice:', err?.message || err);
-      setError(err?.message || 'Failed to create account. Please try again.');
+      setError(err?.message || (language === 'fr-FR' ? 'Échec de la création du compte. Veuillez réessayer.' : 'Failed to create account. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -110,22 +112,22 @@ export default function EmailAuthCard({
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setError('Please enter a valid email address.');
+      setError(language === 'fr-FR' ? 'Veuillez saisir une adresse e-mail valide.' : 'Please enter a valid email address.');
       return;
     }
     if (!password) {
-      setError('Please enter your password.');
+      setError(language === 'fr-FR' ? 'Veuillez saisir votre mot de passe.' : 'Please enter your password.');
       return;
     }
 
     setIsLoading(true);
     try {
       const result = await handleSignIn(cleanEmail, password);
-      setSuccessMessage('Logged in successfully.');
+      setSuccessMessage(language === 'fr-FR' ? 'Connexion réussie.' : 'Logged in successfully.');
       onAuthSuccess(result.user, result.hasActiveSubscription, result.subscription);
     } catch (err: any) {
       console.warn('[EmailAuthCard] Login notice:', err?.message || err);
-      setError(err?.message || 'Failed to log in. Please check your credentials.');
+      setError(err?.message || (language === 'fr-FR' ? 'Échec de la connexion. Veuillez vérifier vos identifiants.' : 'Failed to log in. Please check your credentials.'));
     } finally {
       setIsLoading(false);
     }
@@ -140,17 +142,17 @@ export default function EmailAuthCard({
 
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setError('Please enter a valid email address.');
+      setError(language === 'fr-FR' ? 'Veuillez saisir une adresse e-mail valide.' : 'Please enter a valid email address.');
       return;
     }
 
     setIsLoading(true);
     try {
       await handlePasswordReset(cleanEmail);
-      setSuccessMessage('If an account exists for this email, a password reset link has been sent.');
+      setSuccessMessage(language === 'fr-FR' ? 'Si un compte existe pour cet e-mail, un lien de réinitialisation a été envoyé.' : 'If an account exists for this email, a password reset link has been sent.');
     } catch (err: any) {
       console.warn('[EmailAuthCard] Reset password notice:', err?.message || err);
-      setError(err?.message || 'Failed to send password reset email.');
+      setError(err?.message || (language === 'fr-FR' ? 'Impossible d\'envoyer l\'e-mail de réinitialisation.' : 'Failed to send password reset email.'));
     } finally {
       setIsLoading(false);
     }
@@ -187,10 +189,10 @@ export default function EmailAuthCard({
           )}
           <div className="min-w-0">
             <div className="font-bold text-slate-900 truncate flex items-center gap-1.5">
-              <span>{authUser.displayName || 'Study Planner User'}</span>
+              <span>{authUser.displayName || (language === 'fr-FR' ? 'Utilisateur Study Planner' : 'Study Planner User')}</span>
               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
                 <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-                Active Account
+                {language === 'fr-FR' ? 'Compte actif' : 'Active Account'}
               </span>
             </div>
             <div className="text-[11px] text-slate-600 truncate mt-0.5">{authUser.email}</div>
@@ -205,7 +207,7 @@ export default function EmailAuthCard({
           id="signout-email-account-btn"
         >
           <LogOut className="w-3.5 h-3.5" />
-          <span>Sign Out</span>
+          <span>{language === 'fr-FR' ? 'Déconnexion' : 'Sign Out'}</span>
         </button>
       </div>
     );
@@ -219,15 +221,15 @@ export default function EmailAuthCard({
           <h4 className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-[#6750A4] shrink-0" />
             <span>
-              {mode === 'signup' && (title || 'Create your Study Planner account')}
-              {mode === 'login' && 'Log in to your Study Planner account'}
-              {mode === 'forgot_password' && 'Reset your password'}
+              {mode === 'signup' && (title || (language === 'fr-FR' ? 'Créer votre compte Study Planner' : 'Create your Study Planner account'))}
+              {mode === 'login' && (language === 'fr-FR' ? 'Connexion à votre compte' : 'Log in to your Study Planner account')}
+              {mode === 'forgot_password' && (language === 'fr-FR' ? 'Réinitialiser votre mot de passe' : 'Reset your password')}
             </span>
           </h4>
           <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
-            {mode === 'signup' && 'Enter your details below to create your account immediately.'}
-            {mode === 'login' && 'Sign in with your email and password to access your workspace.'}
-            {mode === 'forgot_password' && 'Enter your account email to receive a password reset link.'}
+            {mode === 'signup' && (language === 'fr-FR' ? 'Saisissez vos informations ci-dessous pour créer votre compte.' : 'Enter your details below to create your account immediately.')}
+            {mode === 'login' && (language === 'fr-FR' ? 'Connectez-vous avec votre e-mail et mot de passe.' : 'Sign in with your email and password to access your workspace.')}
+            {mode === 'forgot_password' && (language === 'fr-FR' ? 'Saisissez votre e-mail pour recevoir un lien de réinitialisation.' : 'Enter your account email to receive a password reset link.')}
           </p>
         </div>
 
@@ -244,7 +246,7 @@ export default function EmailAuthCard({
               }`}
               id="tab-create-account-btn"
             >
-              Sign Up
+              {language === 'fr-FR' ? 'Inscription' : 'Sign Up'}
             </button>
             <button
               type="button"
@@ -256,7 +258,7 @@ export default function EmailAuthCard({
               }`}
               id="tab-login-btn"
             >
-              Log In
+              {language === 'fr-FR' ? 'Connexion' : 'Log In'}
             </button>
           </div>
         )}
@@ -284,14 +286,14 @@ export default function EmailAuthCard({
       {mode === 'signup' && (
         <form onSubmit={onSubmitSignUp} className="space-y-3" id="email-signup-form">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">Name</label>
+            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'Nom' : 'Name'}</label>
             <div className="relative">
               <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Your full name"
+                placeholder={language === 'fr-FR' ? 'Votre nom complet' : 'Your full name'}
                 required
                 className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
                 id="email-auth-name-input"
@@ -300,7 +302,7 @@ export default function EmailAuthCard({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">Email</label>
+            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'E-mail' : 'Email'}</label>
             <div className="relative">
               <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -316,14 +318,14 @@ export default function EmailAuthCard({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">Password</label>
+            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'Mot de passe' : 'Password'}</label>
             <div className="relative">
               <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
+                placeholder={language === 'fr-FR' ? 'Minimum 6 caractères' : 'Minimum 6 characters'}
                 minLength={6}
                 required
                 className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
@@ -334,7 +336,7 @@ export default function EmailAuthCard({
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
                 tabIndex={-1}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? (language === 'fr-FR' ? 'Masquer le mot de passe' : 'Hide password') : (language === 'fr-FR' ? 'Afficher le mot de passe' : 'Show password')}
               >
                 {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
@@ -342,14 +344,14 @@ export default function EmailAuthCard({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">Confirm Password</label>
+            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'Confirmer le mot de passe' : 'Confirm Password'}</label>
             <div className="relative">
               <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type={showConfirmPassword ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter password"
+                placeholder={language === 'fr-FR' ? 'Retapez le mot de passe' : 'Re-enter password'}
                 minLength={6}
                 required
                 className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
@@ -360,7 +362,7 @@ export default function EmailAuthCard({
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
                 tabIndex={-1}
-                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                aria-label={showConfirmPassword ? (language === 'fr-FR' ? 'Masquer le mot de passe' : 'Hide password') : (language === 'fr-FR' ? 'Afficher le mot de passe' : 'Show password')}
               >
                 {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
@@ -377,11 +379,11 @@ export default function EmailAuthCard({
               {isLoading ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Creating account...</span>
+                  <span>{language === 'fr-FR' ? 'Création du compte...' : 'Creating account...'}</span>
                 </>
               ) : (
                 <>
-                  <span>Create Account</span>
+                  <span>{language === 'fr-FR' ? 'Créer un compte' : 'Create Account'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}
@@ -395,7 +397,8 @@ export default function EmailAuthCard({
               className="text-[11px] text-slate-600 hover:text-[#6750A4] font-medium cursor-pointer"
               id="switch-to-login-btn"
             >
-              Already have an account? <span className="font-bold text-[#6750A4] underline">Log In</span>
+              {language === 'fr-FR' ? 'Vous avez déjà un compte ? ' : 'Already have an account? '}
+              <span className="font-bold text-[#6750A4] underline">{language === 'fr-FR' ? 'Se connecter' : 'Log In'}</span>
             </button>
           </div>
         </form>
@@ -407,7 +410,7 @@ export default function EmailAuthCard({
       {mode === 'login' && (
         <form onSubmit={onSubmitLogin} className="space-y-3" id="email-login-form">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">Email</label>
+            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'E-mail' : 'Email'}</label>
             <div className="relative">
               <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -424,14 +427,14 @@ export default function EmailAuthCard({
 
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-slate-700 block">Password</label>
+              <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'Mot de passe' : 'Password'}</label>
               <button
                 type="button"
                 onClick={() => switchMode('forgot_password')}
                 className="text-[11px] font-medium text-[#6750A4] hover:underline cursor-pointer"
                 id="forgot-password-link"
               >
-                Forgot Password?
+                {language === 'fr-FR' ? 'Mot de passe oublié ?' : 'Forgot Password?'}
               </button>
             </div>
             <div className="relative">
@@ -440,7 +443,7 @@ export default function EmailAuthCard({
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Your account password"
+                placeholder={language === 'fr-FR' ? 'Votre mot de passe' : 'Your account password'}
                 required
                 className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
                 id="email-login-password-input"
@@ -450,7 +453,7 @@ export default function EmailAuthCard({
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
                 tabIndex={-1}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? (language === 'fr-FR' ? 'Masquer le mot de passe' : 'Hide password') : (language === 'fr-FR' ? 'Afficher le mot de passe' : 'Show password')}
               >
                 {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
@@ -467,11 +470,11 @@ export default function EmailAuthCard({
               {isLoading ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Logging in...</span>
+                  <span>{language === 'fr-FR' ? 'Connexion en cours...' : 'Logging in...'}</span>
                 </>
               ) : (
                 <>
-                  <span>Log In</span>
+                  <span>{language === 'fr-FR' ? 'Se connecter' : 'Log In'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}
@@ -485,7 +488,8 @@ export default function EmailAuthCard({
               className="text-[11px] text-slate-600 hover:text-[#6750A4] font-medium cursor-pointer"
               id="switch-to-signup-btn"
             >
-              Don't have an account? <span className="font-bold text-[#6750A4] underline">Create Account</span>
+              {language === 'fr-FR' ? 'Pas encore de compte ? ' : "Don't have an account? "}
+              <span className="font-bold text-[#6750A4] underline">{language === 'fr-FR' ? 'Créer un compte' : 'Create Account'}</span>
             </button>
           </div>
         </form>
@@ -497,7 +501,7 @@ export default function EmailAuthCard({
       {mode === 'forgot_password' && (
         <form onSubmit={onSubmitForgotPassword} className="space-y-3" id="email-forgot-password-form">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">Email</label>
+            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'E-mail' : 'Email'}</label>
             <div className="relative">
               <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -522,12 +526,12 @@ export default function EmailAuthCard({
               {isLoading ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Sending reset email...</span>
+                  <span>{language === 'fr-FR' ? 'Envoi en cours...' : 'Sending reset email...'}</span>
                 </>
               ) : (
                 <>
                   <KeyRound className="w-3.5 h-3.5" />
-                  <span>Send Reset Email</span>
+                  <span>{language === 'fr-FR' ? 'Envoyer le lien de réinitialisation' : 'Send Reset Email'}</span>
                 </>
               )}
             </button>
@@ -541,7 +545,7 @@ export default function EmailAuthCard({
               id="return-to-login-btn"
             >
               <ArrowLeft className="w-3 h-3" />
-              <span>Return to Log In</span>
+              <span>{language === 'fr-FR' ? 'Retourner à la connexion' : 'Return to Log In'}</span>
             </button>
           </div>
         </form>

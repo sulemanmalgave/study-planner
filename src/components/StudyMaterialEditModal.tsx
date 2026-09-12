@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Edit2, Loader2, AlertCircle, Save } from 'lucide-react';
 import { Course, StudyMaterial } from '../types';
 import SubjectSelect from './SubjectSelect';
+import { useTranslation } from '../lib/i18n';
 
 interface StudyMaterialEditModalProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export default function StudyMaterialEditModal({
   onAddCourse,
   onSave,
 }: StudyMaterialEditModalProps) {
+  const { t, language } = useTranslation();
   const [name, setName] = useState(material?.name || '');
   const [subjectId, setSubjectId] = useState(material?.subjectId || '');
   const [topic, setTopic] = useState(material?.topic || '');
@@ -41,7 +43,9 @@ export default function StudyMaterialEditModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setErrorMessage('Please enter a document title.');
+      setErrorMessage(
+        language === 'fr-FR' ? 'Veuillez saisir un titre pour le document.' : 'Please enter a document title.'
+      );
       return;
     }
 
@@ -49,7 +53,7 @@ export default function StudyMaterialEditModal({
     setErrorMessage(null);
 
     const selectedCourse = courses.find((c) => c.id === subjectId);
-    const subjectName = selectedCourse?.name || 'General';
+    const subjectName = selectedCourse?.name || (language === 'fr-FR' ? 'Général' : 'General');
 
     try {
       await onSave(material.id, {
@@ -60,7 +64,12 @@ export default function StudyMaterialEditModal({
       });
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to update study material details.');
+      setErrorMessage(
+        err.message ||
+          (language === 'fr-FR'
+            ? 'Échec de la mise à jour des détails du document.'
+            : 'Failed to update study material details.')
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -77,7 +86,9 @@ export default function StudyMaterialEditModal({
               <Edit2 className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-black text-[#1D1B20]">Edit Study Material</h3>
+              <h3 className="text-sm font-black text-[#1D1B20]">
+                {language === 'fr-FR' ? 'Modifier le document' : 'Edit Study Material'}
+              </h3>
               <p className="text-[10px] text-[#49454F] font-mono truncate max-w-xs">{material.originalFileName}</p>
             </div>
           </div>
@@ -100,7 +111,7 @@ export default function StudyMaterialEditModal({
 
           <div>
             <label className="text-[10px] font-bold text-[#49454F] uppercase tracking-wider block mb-1">
-              Document Title
+              {language === 'fr-FR' ? 'Titre du document' : 'Document Title'}
             </label>
             <input
               type="text"
@@ -117,20 +128,20 @@ export default function StudyMaterialEditModal({
               value={subjectId}
               onChange={setSubjectId}
               onAddCourse={onAddCourse}
-              label="Subject / Class"
+              label={language === 'fr-FR' ? 'Matière / Cours' : 'Subject / Class'}
               id="edit-material-subject-select"
             />
           </div>
 
           <div>
             <label className="text-[10px] font-bold text-[#49454F] uppercase tracking-wider block mb-1">
-              Topic / Chapter
+              {language === 'fr-FR' ? 'Chapitre / Thème' : 'Topic / Chapter'}
             </label>
             <input
               type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g. Unit 3, Final Review"
+              placeholder={language === 'fr-FR' ? 'ex. Module 3, Révision finale' : 'e.g. Unit 3, Final Review'}
               className="w-full bg-white border border-[#E1E3E1] text-xs font-medium text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-[#6750A4]/30 focus:border-[#6750A4] outline-none"
             />
           </div>
@@ -141,7 +152,7 @@ export default function StudyMaterialEditModal({
               onClick={onClose}
               className="px-4 py-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-bold text-[#1D1B20] rounded-xl border border-[#E1E3E1] cursor-pointer"
             >
-              Cancel
+              {language === 'fr-FR' ? 'Annuler' : 'Cancel'}
             </button>
             <button
               type="submit"
@@ -154,7 +165,7 @@ export default function StudyMaterialEditModal({
               ) : (
                 <Save className="w-3.5 h-3.5" />
               )}
-              <span>Save Changes</span>
+              <span>{language === 'fr-FR' ? 'Enregistrer les modifications' : 'Save Changes'}</span>
             </button>
           </div>
         </form>

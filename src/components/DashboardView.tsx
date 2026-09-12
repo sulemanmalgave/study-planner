@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Course, TimetablePeriod, Assignment, Exam, StudySession } from '../types';
 import { staggerContainer, cardEntranceVariants } from '../lib/animations';
+import { useTranslation } from '../lib/i18n';
 
 interface DashboardViewProps {
   courses: Course[];
@@ -36,6 +37,7 @@ export default function DashboardView({
   onFocusNowClick,
   onNavigateToTab
 }: DashboardViewProps) {
+  const { t, language, formatTime, formatDateTime } = useTranslation();
 
   // 1. Calculate Stats
   const pendingTasks = assignments.filter(a => a.status === 'pending').length;
@@ -60,14 +62,14 @@ export default function DashboardView({
 
   // 3. Weekly Overview Days mapping (MON to SUN)
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const dayAbbreviations: Record<string, { label: string; offset: number }> = {
-    'Monday': { label: 'MON 13', offset: 0 },
-    'Tuesday': { label: 'TUE 14', offset: 1 },
-    'Wednesday': { label: 'WED 15', offset: 2 },
-    'Thursday': { label: 'THU 16', offset: 3 },
-    'Friday': { label: 'FRI 17', offset: 4 },
-    'Saturday': { label: 'SAT 18', offset: 5 },
-    'Sunday': { label: 'SUN 19', offset: 6 },
+  const dayDisplayNames: Record<string, { en: string; fr: string }> = {
+    'Monday': { en: 'MON', fr: 'LUN' },
+    'Tuesday': { en: 'TUE', fr: 'MAR' },
+    'Wednesday': { en: 'WED', fr: 'MER' },
+    'Thursday': { en: 'THU', fr: 'JEU' },
+    'Friday': { en: 'FRI', fr: 'VEN' },
+    'Saturday': { en: 'SAT', fr: 'SAM' },
+    'Sunday': { en: 'SUN', fr: 'DIM' },
   };
 
   // Helper to find course color
@@ -97,8 +99,8 @@ export default function DashboardView({
             <CheckSquare className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
           <div className="min-w-0">
-            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Pending Tasks</span>
-            <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{pendingTasks} Tasks</span>
+            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">{t('dashboard.pendingTasks')}</span>
+            <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{t('dashboard.tasksCount', { count: pendingTasks })}</span>
           </div>
         </motion.div>
 
@@ -112,8 +114,8 @@ export default function DashboardView({
             <GraduationCap className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
           <div className="min-w-0">
-            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Upcoming Exams</span>
-            <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{upcomingExamsCount} Exams</span>
+            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">{t('dashboard.upcomingExams')}</span>
+            <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{t('dashboard.examsCount', { count: upcomingExamsCount })}</span>
           </div>
         </motion.div>
 
@@ -127,8 +129,8 @@ export default function DashboardView({
             <Clock className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
           <div className="min-w-0">
-            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Study Hours</span>
-            <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{studyHours} hrs</span>
+            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">{t('dashboard.studyHours')}</span>
+            <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{studyHours} {t('dashboard.hoursUnit')}</span>
           </div>
         </motion.div>
 
@@ -142,20 +144,20 @@ export default function DashboardView({
             <Star className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </div>
           <div className="min-w-0">
-            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">Completion Rate</span>
+            <span className="text-[9px] sm:text-[10px] font-bold text-[#49454F] tracking-wider uppercase block truncate">{t('dashboard.completionRate')}</span>
             <span className="text-sm sm:text-base font-black text-[#1D1B20] leading-tight block truncate">{completionRate}%</span>
           </div>
         </motion.div>
       </div>
 
-      {/* Quick Controls Section (Exactly matches layout & color) */}
+      {/* Quick Controls Section */}
       <motion.div 
         variants={cardEntranceVariants}
         className="p-2.5 sm:p-3.5 bg-white border border-[#E1E3E1] rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-4 shadow-2xs" 
         id="dashboard-quick-controls"
       >
         <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2 w-full sm:w-auto">
-          <span className="text-amber-500">⚡</span> Quick Student Workspace Controls
+          <span className="text-amber-500">⚡</span> {t('dashboard.quickControls')}
         </h3>
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
           <button
@@ -163,28 +165,28 @@ export default function DashboardView({
             className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer btn-press"
           >
             <Plus className="w-3.5 h-3.5 text-[#6750A4] shrink-0" />
-            <span className="truncate">Add Task</span>
+            <span className="truncate">{t('dashboard.addTask')}</span>
           </button>
           <button
             onClick={() => onQuickAddClick('class')}
             className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer btn-press"
           >
             <Plus className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-            <span className="truncate">Schedule Class</span>
+            <span className="truncate">{t('dashboard.scheduleClass')}</span>
           </button>
           <button
             onClick={() => onQuickAddClick('note')}
             className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-xs font-semibold text-[#49454F] hover:text-[#21005D] rounded-full transition-colors border border-[#E1E3E1] cursor-pointer btn-press"
           >
             <FileText className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-            <span className="truncate">Write Note</span>
+            <span className="truncate">{t('dashboard.writeNote')}</span>
           </button>
           <button
             onClick={onFocusNowClick}
             className="flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-xs font-bold text-white rounded-full transition-colors shadow-sm cursor-pointer btn-press"
           >
             <Timer className="w-3.5 h-3.5 text-white shrink-0" />
-            <span className="truncate">Focus Now</span>
+            <span className="truncate">{t('dashboard.focusNow')}</span>
           </button>
         </div>
       </motion.div>
@@ -200,10 +202,10 @@ export default function DashboardView({
         >
           <div className="flex items-center justify-between mb-3 border-b border-[#E1E3E1] pb-2">
             <h4 className="text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
-              <CheckSquare className="w-4 h-4 text-[#6750A4]" /> TODAY'S TASKS
+              <CheckSquare className="w-4 h-4 text-[#6750A4]" /> {t('dashboard.todaysTasks')}
             </h4>
             <span className="text-[10px] font-bold bg-[#EADDFF] text-[#21005D] px-2 py-0.5 rounded-full" id="today-tasks-count">
-              {todayTasks.length} left
+              {t('dashboard.leftCount', { count: todayTasks.length })}
             </span>
           </div>
 
@@ -215,14 +217,14 @@ export default function DashboardView({
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-[#1D1B20] truncate">{task.title}</p>
                       <span className="text-[9px] font-mono mt-0.5 inline-block" style={{ color: getCourseColor(task.courseId) }}>
-                        {courses.find(c => c.id === task.courseId)?.name || 'Course'}
+                        {courses.find(c => c.id === task.courseId)?.name || (language === 'fr-FR' ? 'Matière' : 'Course')}
                       </span>
                     </div>
                     <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${
                       task.priority === 'high' ? 'bg-rose-100 text-rose-800' :
                       task.priority === 'medium' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
                     }`}>
-                      {task.priority}
+                      {t(`priority.${task.priority}`)}
                     </span>
                   </div>
                 ))}
@@ -233,8 +235,8 @@ export default function DashboardView({
                   <CheckCircle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h5 className="text-xs font-bold text-[#1D1B20]">All clear for today!</h5>
-                  <p className="text-[10px] text-[#49454F] mt-0.5">No pending assignments or due items today.</p>
+                  <h5 className="text-xs font-bold text-[#1D1B20]">{t('dashboard.allClearTitle')}</h5>
+                  <p className="text-[10px] text-[#49454F] mt-0.5">{t('dashboard.allClearDesc')}</p>
                 </div>
               </div>
             )}
@@ -249,26 +251,26 @@ export default function DashboardView({
         >
           <div className="flex items-center justify-between mb-3 border-b border-[#E1E3E1] pb-2">
             <h4 className="text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
-              <CalendarDays className="w-4 h-4 text-emerald-600" /> WEEKLY OVERVIEW
+              <CalendarDays className="w-4 h-4 text-emerald-600" /> {t('dashboard.weeklyOverview')}
             </h4>
             <button
               onClick={() => onNavigateToTab('calendar')}
               className="text-[10px] font-bold text-[#6750A4] hover:text-[#503E84] uppercase tracking-widest transition-colors cursor-pointer btn-press"
             >
-              Month View
+              {t('dashboard.monthView')}
             </button>
           </div>
 
           <div className="space-y-1.5" id="weekly-overview-list">
             {daysOfWeek.map((day) => {
-              const dateInfo = dayAbbreviations[day] || { label: day.substring(0, 3).toUpperCase(), offset: 0 };
+              const dayShort = language === 'fr-FR' ? dayDisplayNames[day]?.fr : dayDisplayNames[day]?.en;
               const periods = timetable.filter(t => t.day === day);
 
               return (
                 <div key={day} className="flex items-center gap-3 p-2 bg-[#F7F9FC] rounded-xl hover:bg-[#EADDFF]/20 border border-[#E1E3E1] transition-all">
                   <div className="w-12 shrink-0 text-center border-r border-[#E1E3E1] pr-2">
-                    <span className="text-[10px] font-black text-[#1D1B20] tracking-wide uppercase leading-tight block">{dateInfo.label.split(' ')[0]}</span>
-                    <span className="text-[11px] font-bold text-[#49454F] mt-0.5 block">{dateInfo.label.split(' ')[1] || ''}</span>
+                    <span className="text-[10px] font-black text-[#1D1B20] tracking-wide uppercase leading-tight block">{dayShort}</span>
+                    <span className="text-[11px] font-bold text-[#49454F] mt-0.5 block">{t(`day.${day.toLowerCase()}`).slice(0, 3)}</span>
                   </div>
                   <div className="flex-1 flex flex-wrap gap-1.5 items-center">
                     {periods.length > 0 ? (
@@ -284,11 +286,11 @@ export default function DashboardView({
                         >
                           <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getCourseColor(period.courseId) }} />
                           <span>{period.subject}</span>
-                          <span className="text-[8px] opacity-75 font-mono">({period.startTime})</span>
+                          <span className="text-[8px] opacity-75 font-mono">({formatTime(period.startTime)})</span>
                         </div>
                       ))
                     ) : (
-                      <span className="text-[10px] text-slate-400 italic font-medium">No classes scheduled</span>
+                      <span className="text-[10px] text-slate-400 italic font-medium">{t('dashboard.noClassesScheduled')}</span>
                     )}
                   </div>
                 </div>
@@ -305,9 +307,9 @@ export default function DashboardView({
         >
           <div className="flex items-center justify-between mb-3 border-b border-[#E1E3E1] pb-2">
             <h4 className="text-xs font-extrabold text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-600" /> EXAMS COUNTDOWN
+              <Trophy className="w-4 h-4 text-amber-600" /> {t('dashboard.examsCountdown')}
             </h4>
-            <span className="text-[10px] font-bold text-[#49454F]">🚨 Alert</span>
+            <span className="text-[10px] font-bold text-[#49454F]">🚨 {t('dashboard.alert')}</span>
           </div>
 
           <div className="flex-1 overflow-y-auto max-h-[340px] pr-1 py-1" id="exams-countdown-inner">
@@ -325,13 +327,13 @@ export default function DashboardView({
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-xs font-bold text-[#1D1B20] truncate">{exam.name}</span>
                         <span className="text-[9px] font-mono" style={{ color: getCourseColor(exam.courseId) }}>
-                          {courses.find(c => c.id === exam.courseId)?.name || 'Course'}
+                          {courses.find(c => c.id === exam.courseId)?.name || (language === 'fr-FR' ? 'Matière' : 'Course')}
                         </span>
                       </div>
                       <div className="flex items-center justify-between border-t border-[#E1E3E1] pt-1.5">
-                        <span className="text-[10px] text-[#49454F] font-medium">{exam.date}</span>
+                        <span className="text-[10px] text-[#49454F] font-medium">{formatDateTime(exam.date)}</span>
                         <span className={`text-[10px] font-black ${isOverdue ? 'text-rose-600' : 'text-amber-600'}`}>
-                          {isOverdue ? 'Passed' : `${diffDays} days left`}
+                          {isOverdue ? t('dashboard.overdue') : diffDays === 1 ? t('dashboard.dayLeft', { count: diffDays }) : t('dashboard.daysLeft', { count: diffDays })}
                         </span>
                       </div>
                     </div>
@@ -344,8 +346,8 @@ export default function DashboardView({
                   <Trophy className="w-5 h-5" />
                 </div>
                 <div>
-                  <h5 className="text-xs font-bold text-[#1D1B20]">No upcoming exams!</h5>
-                  <p className="text-[10px] text-[#49454F] mt-0.5">Relax or create study sessions in Focus tab.</p>
+                  <h5 className="text-xs font-bold text-[#1D1B20]">{t('dashboard.noExamsTitle')}</h5>
+                  <p className="text-[10px] text-[#49454F] mt-0.5">{t('dashboard.noExamsDesc')}</p>
                 </div>
               </div>
             )}

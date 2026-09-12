@@ -1,6 +1,7 @@
 import React from 'react';
 import { BookOpen, Star, Clock, CheckSquare, GraduationCap, Flame, Target, Award, Sparkles } from 'lucide-react';
 import { Course, TimetablePeriod, Assignment, Exam, StudySession } from '../types';
+import { useTranslation } from '../lib/i18n';
 
 interface ProgressViewProps {
   courses: Course[];
@@ -21,6 +22,8 @@ export default function ProgressView({
   isPremium,
   onTriggerUpgrade
 }: ProgressViewProps) {
+  const { t, language } = useTranslation();
+
   // Cutoff calculation for last 7 days
   const getCutoffDateStr = () => {
     const d = new Date();
@@ -184,10 +187,10 @@ export default function ProgressView({
           </div>
           <div>
             <h2 className="text-sm font-bold text-white tracking-wide uppercase">
-              Performance &amp; Focus Progress
+              {t('progress.headerTitle')}
             </h2>
             <p className="text-[10px] font-mono text-slate-400 mt-1 uppercase">
-              Analyze study milestones, focus sessions &amp; academic pacing
+              {t('progress.headerSubtitle')}
             </p>
           </div>
         </div>
@@ -202,9 +205,9 @@ export default function ProgressView({
           <div className="flex items-center gap-2.5">
             <Star className="w-4 h-4 text-amber-400 shrink-0" />
             <div className="text-left">
-              <p className="text-xs font-bold text-amber-200">Free Plan History Limit</p>
+              <p className="text-xs font-bold text-amber-200">{t('progress.freePlanLimitTitle')}</p>
               <p className="text-[10px] text-amber-300/80 mt-0.5">
-                Viewing statistics from the last 7 days. Upgrade to Premium for lifetime history analytics.
+                {t('progress.freePlanLimitDesc')}
               </p>
             </div>
           </div>
@@ -212,7 +215,7 @@ export default function ProgressView({
             onClick={onTriggerUpgrade}
             className="px-3.5 py-1.5 bg-[#6750A4] hover:bg-[#503E84] text-[9px] font-black text-white rounded-full transition-all uppercase tracking-wider shrink-0 cursor-pointer"
           >
-            Upgrade
+            {t('progress.upgrade')}
           </button>
         </div>
       )}
@@ -224,21 +227,21 @@ export default function ProgressView({
           <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
             <span className="text-xs font-black text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
               <Flame className="w-4 h-4 text-[#6750A4]" />
-              <span>Today's Study</span>
+              <span>{t('progress.todaysStudy')}</span>
             </span>
             <span className="text-xs font-extrabold text-[#6750A4]">
-              {todaySessions.length} {todaySessions.length === 1 ? 'Session' : 'Sessions'}
+              {todaySessions.length} {todaySessions.length === 1 ? t('progress.session') : t('progress.sessions')}
             </span>
           </div>
 
           <div className="flex items-baseline justify-between">
             <div>
-              <div className="text-xs font-bold text-[#79747E] uppercase">Total Focused Time</div>
+              <div className="text-xs font-bold text-[#79747E] uppercase">{t('progress.totalFocusedTime')}</div>
               <div className="text-3xl font-black text-[#1D1B20] tracking-tight">{todayHoursStr}</div>
             </div>
 
             <div className="text-right">
-              <div className="text-xs font-bold text-[#79747E] uppercase">Daily Goal</div>
+              <div className="text-xs font-bold text-[#79747E] uppercase">{t('progress.dailyGoal')}</div>
               <div className="text-base font-extrabold text-[#6750A4]">
                 {Math.floor(todayFocusedMins / 60)}h / 3h ({dailyGoalPercent}%)
               </div>
@@ -258,7 +261,7 @@ export default function ProgressView({
           <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
             <span className="text-xs font-black text-[#1D1B20] uppercase tracking-wider flex items-center gap-2">
               <Target className="w-4 h-4 text-emerald-600" />
-              <span>Weekly Goal Progress</span>
+              <span>{t('progress.weeklyGoalProgress')}</span>
             </span>
             <span className="text-xs font-extrabold text-emerald-700">
               {weeklyGoalPercent}%
@@ -267,15 +270,15 @@ export default function ProgressView({
 
           <div className="flex items-baseline justify-between">
             <div>
-              <div className="text-xs font-bold text-[#79747E] uppercase">This Week Focused</div>
+              <div className="text-xs font-bold text-[#79747E] uppercase">{t('progress.thisWeekFocused')}</div>
               <div className="text-3xl font-black text-[#1D1B20] tracking-tight">
                 {Math.floor(weekFocusedMins / 60)}h {weekFocusedMins % 60}m
               </div>
             </div>
 
             <div className="text-right">
-              <div className="text-xs font-bold text-[#79747E] uppercase">Weekly Target</div>
-              <div className="text-base font-extrabold text-emerald-700">15 Hours</div>
+              <div className="text-xs font-bold text-[#79747E] uppercase">{t('progress.weeklyTarget')}</div>
+              <div className="text-base font-extrabold text-emerald-700">15 {t('progress.hoursUnit')}</div>
             </div>
           </div>
 
@@ -293,10 +296,10 @@ export default function ProgressView({
         <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-3">
           <h3 className="text-base font-black text-[#1D1B20] flex items-center gap-2">
             <Award className="w-5 h-5 text-[#6750A4]" />
-            <span>Subject Progress &amp; Statistics</span>
+            <span>{t('progress.subjectProgressTitle')}</span>
           </h3>
           <span className="text-xs font-extrabold text-[#79747E]">
-            {courses.length} Subjects
+            {t('progress.subjectsCount', { count: courses.length })}
           </span>
         </div>
 
@@ -324,19 +327,21 @@ export default function ProgressView({
 
                 <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-[#E1E3E1]/60">
                   <div>
-                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">Sessions</span>
-                    <span className="font-extrabold text-[#1D1B20]">{subj.sessionCount} sessions</span>
+                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">{t('progress.sessionsLabel')}</span>
+                    <span className="font-extrabold text-[#1D1B20]">
+                      {subj.sessionCount} {subj.sessionCount === 1 ? t('progress.session') : t('progress.sessions')}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">Avg Duration</span>
-                    <span className="font-extrabold text-[#1D1B20]">{subj.avgMins} mins</span>
+                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">{t('progress.avgDuration')}</span>
+                    <span className="font-extrabold text-[#1D1B20]">{subj.avgMins} {t('progress.minsUnit')}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">Today</span>
-                    <span className="font-extrabold text-[#1D1B20]">{subj.todayMins} mins</span>
+                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">{t('progress.todayLabel')}</span>
+                    <span className="font-extrabold text-[#1D1B20]">{subj.todayMins} {t('progress.minsUnit')}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">This Week</span>
+                    <span className="text-[10px] font-bold text-[#79747E] uppercase block">{t('progress.thisWeekLabel')}</span>
                     <span className="font-extrabold text-[#1D1B20]">
                       {subj.weekMins >= 60 ? `${(subj.weekMins / 60).toFixed(1)}h` : `${subj.weekMins}m`}
                     </span>
@@ -347,7 +352,7 @@ export default function ProgressView({
           </div>
         ) : (
           <div className="text-center py-8 text-xs text-[#79747E] font-medium">
-            No subjects added yet. Add subjects in the Study Timer or Settings to track focus statistics!
+            {t('progress.noSubjectsTracked')}
           </div>
         )}
       </div>
@@ -358,14 +363,14 @@ export default function ProgressView({
         <div className="p-5 bg-[#131d31] border border-slate-800/80 rounded-3xl space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Assignment Completion
+              {t('progress.assignmentCompletion')}
             </span>
             <CheckSquare className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-black text-white">{taskCompletionRate}%</span>
             <span className="text-[10px] font-semibold text-slate-400">
-              {completedTasks}/{totalTasks} Completed
+              {t('progress.completedOutOf', { completed: completedTasks, total: totalTasks })}
             </span>
           </div>
           <div className="w-full bg-slate-850 h-2 rounded-full overflow-hidden">
@@ -380,18 +385,18 @@ export default function ProgressView({
         <div className="p-5 bg-[#131d31] border border-slate-800/80 rounded-3xl space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Total Revision Focus
+              {t('progress.totalRevisionFocus')}
             </span>
             <Clock className="w-4 h-4 text-blue-400" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-white">{studyHrs} hrs</span>
+            <span className="text-2xl font-black text-white">{studyHrs} {language === 'fr-FR' ? 'h' : 'hrs'}</span>
             <span className="text-[10px] font-semibold text-slate-400">
-              {displaySessions.length} Focus Sessions
+              {t('progress.focusSessionsCount', { count: displaySessions.length })}
             </span>
           </div>
           <div className="text-[10px] text-slate-400 leading-relaxed font-medium">
-            Accumulated revision blocks tracked server-side inside your Pomodoro database.
+            {t('progress.revisionHelpText')}
           </div>
         </div>
 
@@ -399,20 +404,20 @@ export default function ProgressView({
         <div className="p-5 bg-[#131d31] border border-slate-800/80 rounded-3xl space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Exams Status Pacing
+              {t('progress.examsStatusPacing')}
             </span>
             <GraduationCap className="w-4 h-4 text-purple-400" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-black text-white">
-              {completedExams + upcomingExams} total
+              {t('progress.totalExams', { count: completedExams + upcomingExams })}
             </span>
             <span className="text-[10px] font-semibold text-slate-400">
-              {upcomingExams} Upcoming Alerts
+              {t('progress.upcomingAlerts', { count: upcomingExams })}
             </span>
           </div>
           <div className="text-[10px] text-slate-400 leading-relaxed font-medium">
-            Schedule exam dates in the Calendar to trigger automatic alarms.
+            {t('progress.calendarHelpText')}
           </div>
         </div>
       </div>

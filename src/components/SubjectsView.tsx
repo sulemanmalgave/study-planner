@@ -17,6 +17,7 @@ import {
   X
 } from 'lucide-react';
 import { Course, Assignment, TimetablePeriod, Exam, Note } from '../types';
+import { useTranslation } from '../lib/i18n';
 
 interface SubjectsViewProps {
   courses: Course[];
@@ -50,6 +51,8 @@ export default function SubjectsView({
   onUpdateCourse,
   onDeleteCourse,
 }: SubjectsViewProps) {
+  const { t, language } = useTranslation();
+
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
@@ -163,10 +166,10 @@ export default function SubjectsView({
         <div>
           <div className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-[#6750A4]" />
-            <h2 className="text-xl font-extrabold text-[#1D1B20] tracking-tight">Subjects</h2>
+            <h2 className="text-xl font-extrabold text-[#1D1B20] tracking-tight">{t('subjects.title')}</h2>
           </div>
           <p className="text-xs text-[#49454F] font-medium mt-1">
-            Manage your academic subjects, courses, and study tracks
+            {t('subjects.subtitle')}
           </p>
         </div>
 
@@ -176,7 +179,7 @@ export default function SubjectsView({
           id="add-subject-top-btn"
         >
           <Plus className="w-4 h-4" />
-          <span>Add Subject</span>
+          <span>{t('subjects.addSubject')}</span>
         </button>
       </div>
 
@@ -188,9 +191,9 @@ export default function SubjectsView({
             <BookOpen className="w-8 h-8" />
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-extrabold text-[#1D1B20]">No subjects added yet</h3>
+            <h3 className="text-base font-extrabold text-[#1D1B20]">{t('subjects.noSubjectsTitle')}</h3>
             <p className="text-xs text-[#49454F] leading-relaxed max-w-sm mx-auto font-medium">
-              Create your subjects to link them with assignments, classes, notes, timetables, and exams.
+              {t('subjects.noSubjectsDesc')}
             </p>
           </div>
           <button
@@ -199,7 +202,7 @@ export default function SubjectsView({
             id="empty-add-subject-btn"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Add Subject</span>
+            <span>+ {t('subjects.addSubject')}</span>
           </button>
         </div>
       ) : (
@@ -248,7 +251,7 @@ export default function SubjectsView({
                       <button
                         onClick={() => handleOpenEdit(course)}
                         className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors btn-press cursor-pointer"
-                        title="Edit Subject"
+                        title={t('subjects.editSubject')}
                         id={`edit-subject-btn-${course.id}`}
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -256,7 +259,7 @@ export default function SubjectsView({
                       <button
                         onClick={() => setDeletingCourse(course)}
                         className="p-1.5 rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors btn-press cursor-pointer"
-                        title="Delete Subject"
+                        title={t('action.delete')}
                         id={`delete-subject-btn-${course.id}`}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -268,27 +271,27 @@ export default function SubjectsView({
                   <div className="grid grid-cols-2 gap-2 bg-slate-50/80 p-2.5 rounded-2xl border border-slate-100 text-[11px] font-semibold text-slate-600">
                     <div className="flex items-center gap-1.5">
                       <CheckSquare className="w-3 h-3 text-[#6750A4]" />
-                      <span>{linkedAssignments} Tasks</span>
+                      <span>{linkedAssignments} {t('subjects.linkedTasks')}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <CalendarDays className="w-3 h-3 text-blue-500" />
-                      <span>{linkedTimetable} Classes</span>
+                      <span>{linkedTimetable} {t('subjects.linkedClasses')}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <GraduationCap className="w-3 h-3 text-amber-500" />
-                      <span>{linkedExams} Exams</span>
+                      <span>{linkedExams} {t('subjects.linkedExams')}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <FileText className="w-3 h-3 text-emerald-500" />
-                      <span>{linkedNotes} Notes</span>
+                      <span>{linkedNotes} {t('subjects.linkedNotes')}</span>
                     </div>
                   </div>
 
                   {/* Footer status */}
                   <div className="text-[10px] text-slate-400 font-medium flex items-center justify-between pt-1 border-t border-slate-100">
-                    <span>{totalUsage === 0 ? 'No linked records' : `${totalUsage} total items linked`}</span>
+                    <span>{totalUsage === 0 ? (language === 'fr-FR' ? 'Aucun élément associé' : 'No linked records') : (language === 'fr-FR' ? `${totalUsage} éléments associés` : `${totalUsage} total items linked`)}</span>
                     <span className="font-mono text-[9px] uppercase tracking-wider text-[#6750A4] font-bold">
-                      Active
+                      {language === 'fr-FR' ? 'Actif' : 'Active'}
                     </span>
                   </div>
                 </motion.div>
@@ -325,10 +328,10 @@ export default function SubjectsView({
                   </div>
                   <div>
                     <h3 className="text-sm font-extrabold text-[#1D1B20]">
-                      {editingCourse ? 'Edit Subject' : 'Add New Subject'}
+                      {editingCourse ? t('subjects.editSubject') : t('subjects.addSubject')}
                     </h3>
                     <p className="text-[10px] text-slate-500 font-medium">
-                      {editingCourse ? 'Update subject details across all items' : 'Create a subject track'}
+                      {editingCourse ? (language === 'fr-FR' ? 'Mettre à jour les informations de la matière' : 'Update subject details across all items') : (language === 'fr-FR' ? 'Créer une matière académique' : 'Create a subject track')}
                     </p>
                   </div>
                 </div>
@@ -352,7 +355,7 @@ export default function SubjectsView({
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Subject Name <span className="text-red-500">*</span>
+                    {t('subjects.subjectName')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -362,7 +365,7 @@ export default function SubjectsView({
                       setName(e.target.value);
                       if (errorMessage) setErrorMessage('');
                     }}
-                    placeholder="e.g. Mathematics, Physics, Organic Chemistry"
+                    placeholder={t('subjects.subjectNamePlaceholder')}
                     className="w-full bg-slate-50 border border-slate-200 text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 outline-none focus:ring-1 focus:ring-[#6750A4]"
                     id="subject-form-name-input"
                   />
@@ -370,13 +373,13 @@ export default function SubjectsView({
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Subject Code / Abbreviation <span className="text-slate-400 font-normal">(Optional)</span>
+                    {t('subjects.courseCode')} <span className="text-slate-400 font-normal">({language === 'fr-FR' ? 'Facultatif' : 'Optional'})</span>
                   </label>
                   <input
                     type="text"
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
-                    placeholder="e.g. MATH101, PHY202"
+                    placeholder={t('subjects.courseCodePlaceholder')}
                     className="w-full bg-slate-50 border border-slate-200 text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 outline-none focus:ring-1 focus:ring-[#6750A4]"
                     id="subject-form-code-input"
                   />
@@ -384,7 +387,7 @@ export default function SubjectsView({
 
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                    Color Tag
+                    {t('subjects.accentColor')}
                   </label>
                   <div className="flex flex-wrap items-center gap-2">
                     {PRESET_COLORS.map((c) => (
@@ -412,7 +415,7 @@ export default function SubjectsView({
                     className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition-colors btn-press cursor-pointer"
                     id="cancel-subject-form-btn"
                   >
-                    Cancel
+                    {t('action.cancel')}
                   </button>
                   <button
                     type="submit"
@@ -423,10 +426,10 @@ export default function SubjectsView({
                     {isSubmitting ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Saving...</span>
+                        <span>{t('action.saving')}</span>
                       </>
                     ) : (
-                      <span>{editingCourse ? 'Update Subject' : 'Save Subject'}</span>
+                      <span>{editingCourse ? t('action.save') : t('subjects.addSubject')}</span>
                     )}
                   </button>
                 </div>
@@ -462,7 +465,7 @@ export default function SubjectsView({
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-base font-extrabold text-[#1D1B20]">
-                    Delete "{deletingCourse.name}"?
+                    {language === 'fr-FR' ? `Supprimer « ${deletingCourse.name} » ?` : `Delete "${deletingCourse.name}"?`}
                   </h3>
                   <p className="text-xs text-slate-600 leading-relaxed font-medium">
                     {assignments.filter((a) => a.courseId === deletingCourse.id).length +
@@ -471,10 +474,10 @@ export default function SubjectsView({
                       notes.filter((n) => n.courseId === deletingCourse.id).length >
                     0 ? (
                       <span className="text-amber-800 font-semibold block mb-1">
-                        ⚠️ This subject is currently linked to existing tasks, classes, notes or exams.
+                        {language === 'fr-FR' ? '⚠️ Cette matière est actuellement liée à des devoirs, cours, notes ou examens.' : '⚠️ This subject is currently linked to existing tasks, classes, notes or exams.'}
                       </span>
                     ) : null}
-                    Deleting this subject will remove it from your subjects list. Your existing tasks, notes, classes, and exams will remain completely intact.
+                    {language === 'fr-FR' ? 'La suppression retirera la matière de votre liste. Vos devoirs, fiches de notes, cours et examens existants resteront préservés.' : 'Deleting this subject will remove it from your subjects list. Your existing tasks, notes, classes, and exams will remain completely intact.'}
                   </p>
                 </div>
               </div>
@@ -486,7 +489,7 @@ export default function SubjectsView({
                   className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition-colors btn-press cursor-pointer"
                   id="cancel-delete-subject-btn"
                 >
-                  Cancel
+                  {t('action.cancel')}
                 </button>
                 <button
                   type="button"
@@ -495,7 +498,7 @@ export default function SubjectsView({
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm btn-press cursor-pointer disabled:opacity-50"
                   id="confirm-delete-subject-btn"
                 >
-                  {isSubmitting ? 'Deleting...' : 'Delete Subject (Keep Records Intact)'}
+                  {isSubmitting ? (language === 'fr-FR' ? 'Suppression...' : 'Deleting...') : (language === 'fr-FR' ? 'Supprimer la matière (Conserver les données)' : 'Delete Subject (Keep Records Intact)')}
                 </button>
               </div>
             </motion.div>

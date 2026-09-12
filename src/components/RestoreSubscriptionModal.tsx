@@ -6,6 +6,7 @@ import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
 import { getStoredEntitlement, isEntitlementActive, saveStoredEntitlement } from '../lib/entitlement';
 import { AuthUserProfile } from '../lib/emailAuth';
 import EmailAuthCard from './EmailAuthCard';
+import { useTranslation } from '../lib/i18n';
 
 interface RestoreSubscriptionModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export default function RestoreSubscriptionModal({
   onAuthSuccess,
   onSignOut,
 }: RestoreSubscriptionModalProps) {
+  const { t, language } = useTranslation();
   const [identifier, setIdentifier] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +52,11 @@ export default function RestoreSubscriptionModal({
           userId: authUser.uid,
           userEmail: authUser.email || undefined,
         });
-        setSuccessMessage(`Restored active ${data.subscription.plan || 'Premium'} subscription linked to ${authUser.email}!`);
+        setSuccessMessage(
+          language === 'fr-FR'
+            ? `Abonnement ${data.subscription.plan || 'Premium'} restauré pour ${authUser.email} !`
+            : `Restored active ${data.subscription.plan || 'Premium'} subscription linked to ${authUser.email}!`
+        );
         onSuccess(data.subscription);
         setTimeout(() => {
           setIsLoading(false);
@@ -78,7 +84,11 @@ export default function RestoreSubscriptionModal({
           userId: authUser.uid,
           userEmail: authUser.email || undefined,
         });
-        setSuccessMessage(`Restored subscription linked to ${authUser.email}!`);
+        setSuccessMessage(
+          language === 'fr-FR'
+            ? `Abonnement restauré pour ${authUser.email} !`
+            : `Restored subscription linked to ${authUser.email}!`
+        );
         onSuccess(restoreData.subscription);
         setTimeout(() => {
           setIsLoading(false);
@@ -87,10 +97,19 @@ export default function RestoreSubscriptionModal({
         return;
       }
 
-      setError(`No active Premium subscription found for ${authUser.email}. If you have your Razorpay/PayPal Payment ID, enter it below.`);
+      setError(
+        language === 'fr-FR'
+          ? `Aucun abonnement actif trouvé pour ${authUser.email}. Si vous disposez de votre référence de paiement, saisissez-la ci-dessous.`
+          : `No active Premium subscription found for ${authUser.email}. If you have your Razorpay/PayPal Payment ID, enter it below.`
+      );
     } catch (err: any) {
       console.error('[Account Restore Error]', err);
-      setError(err?.message || 'Unable to restore with account. Please try entering your Payment ID.');
+      setError(
+        err?.message ||
+          (language === 'fr-FR'
+            ? 'Impossible de restaurer avec ce compte. Veuillez essayer avec votre référence de paiement.'
+            : 'Unable to restore with account. Please try entering your Payment ID.')
+      );
     } finally {
       setIsLoading(false);
     }
@@ -105,14 +124,22 @@ export default function RestoreSubscriptionModal({
     setTimeout(() => {
       const stored = getStoredEntitlement();
       if (stored && isEntitlementActive(stored)) {
-        setSuccessMessage(`Recovered active ${stored.plan || 'Premium'} subscription from device memory!`);
+        setSuccessMessage(
+          language === 'fr-FR'
+            ? `Abonnement ${stored.plan || 'Premium'} actif récupéré depuis la mémoire de l'appareil !`
+            : `Recovered active ${stored.plan || 'Premium'} subscription from device memory!`
+        );
         onSuccess(stored);
         setTimeout(() => {
           setIsLoading(false);
           onClose();
         }, 1000);
       } else {
-        setError('No active Premium entitlement found in this browser. Please sign in or enter your Payment ID.');
+        setError(
+          language === 'fr-FR'
+            ? 'Aucun droit Premium actif trouvé sur ce navigateur. Veuillez vous connecter ou saisir votre référence de paiement.'
+            : 'No active Premium entitlement found in this browser. Please sign in or enter your Payment ID.'
+        );
         setIsLoading(false);
       }
     }, 400);
@@ -122,7 +149,11 @@ export default function RestoreSubscriptionModal({
   const handleRestoreWithId = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identifier.trim()) {
-      setError('Please enter your Payment ID, Order ID, or Transaction ID.');
+      setError(
+        language === 'fr-FR'
+          ? 'Veuillez saisir votre référence de paiement ou numéro de commande.'
+          : 'Please enter your Payment ID, Order ID, or Transaction ID.'
+      );
       return;
     }
 
@@ -145,7 +176,13 @@ export default function RestoreSubscriptionModal({
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || data.error || 'Unable to restore subscription with this identifier.');
+        throw new Error(
+          data.message ||
+            data.error ||
+            (language === 'fr-FR'
+              ? 'Impossible de restaurer l\'abonnement avec cet identifiant.'
+              : 'Unable to restore subscription with this identifier.')
+        );
       }
 
       if (data.subscription) {
@@ -153,7 +190,12 @@ export default function RestoreSubscriptionModal({
           userId: authUser?.uid,
           userEmail: authUser?.email || undefined,
         });
-        setSuccessMessage(data.message || 'Subscription successfully verified and restored!');
+        setSuccessMessage(
+          data.message ||
+            (language === 'fr-FR'
+              ? 'Abonnement vérifié et restauré avec succès !'
+              : 'Subscription successfully verified and restored!')
+        );
         onSuccess(data.subscription);
       }
 
@@ -162,7 +204,12 @@ export default function RestoreSubscriptionModal({
         onClose();
       }, 1500);
     } catch (err: any) {
-      setError(err.message || 'Failed to restore subscription. Please verify your ID.');
+      setError(
+        err.message ||
+          (language === 'fr-FR'
+            ? 'Échec de la restauration de l\'abonnement. Veuillez vérifier votre identifiant.'
+            : 'Failed to restore subscription. Please verify your ID.')
+      );
       setIsLoading(false);
     }
   };
@@ -194,8 +241,14 @@ export default function RestoreSubscriptionModal({
                   <RotateCcw className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-extrabold text-[#1D1B20] tracking-tight">Restore Premium Subscription</h3>
-                  <p className="text-[11px] text-[#49454F]">Verify past purchase securely via email or receipt</p>
+                  <h3 className="text-sm font-extrabold text-[#1D1B20] tracking-tight">
+                    {language === 'fr-FR' ? 'Restaurer l\'abonnement Premium' : 'Restore Premium Subscription'}
+                  </h3>
+                  <p className="text-[11px] text-[#49454F]">
+                    {language === 'fr-FR'
+                      ? 'Vérifiez vos achats antérieurs en toute sécurité par email ou reçu'
+                      : 'Verify past purchase securely via email or receipt'}
+                  </p>
                 </div>
               </div>
               <button
@@ -226,10 +279,12 @@ export default function RestoreSubscriptionModal({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-bold text-emerald-950">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Signed in as {authUser.email}</span>
+                    <span>
+                      {language === 'fr-FR' ? `Connecté en tant que ${authUser.email}` : `Signed in as ${authUser.email}`}
+                    </span>
                   </div>
                   <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
-                    Verified
+                    {language === 'fr-FR' ? 'Vérifié' : 'Verified'}
                   </span>
                 </div>
                 <button
@@ -240,13 +295,15 @@ export default function RestoreSubscriptionModal({
                   id="restore-with-account-btn"
                 >
                   {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-                  <span>Check Purchases for {authUser.email}</span>
+                  <span>
+                    {language === 'fr-FR' ? `Vérifier les achats pour ${authUser.email}` : `Check Purchases for ${authUser.email}`}
+                  </span>
                 </button>
               </div>
             ) : (
               <EmailAuthCard
                 authUser={authUser}
-                title="Verify Email to Restore Purchases"
+                title={language === 'fr-FR' ? 'Vérifier l\'email pour restaurer les achats' : 'Verify Email to Restore Purchases'}
                 onAuthSuccess={(user, hasActiveSubscription, sub) => {
                   if (onAuthSuccess) {
                     onAuthSuccess(user, hasActiveSubscription, sub);
@@ -256,7 +313,11 @@ export default function RestoreSubscriptionModal({
                       userId: user.uid,
                       userEmail: user.email || undefined,
                     });
-                    setSuccessMessage(`Restored active ${sub.plan || 'Premium'} subscription linked to ${user.email}!`);
+                    setSuccessMessage(
+                      language === 'fr-FR'
+                        ? `Abonnement ${sub.plan || 'Premium'} actif restauré pour ${user.email} !`
+                        : `Restored active ${sub.plan || 'Premium'} subscription linked to ${user.email}!`
+                    );
                     onSuccess(sub);
                     setTimeout(() => {
                       onClose();
@@ -273,10 +334,12 @@ export default function RestoreSubscriptionModal({
             <div className="p-4 bg-[#F7F9FC] border border-[#E1E3E1] rounded-2xl space-y-2">
               <div className="flex items-center gap-2 text-xs font-bold text-[#1D1B20]">
                 <ShieldCheck className="w-4 h-4 text-[#6750A4]" />
-                <span>Quick Device Check</span>
+                <span>{language === 'fr-FR' ? 'Vérification rapide de l\'appareil' : 'Quick Device Check'}</span>
               </div>
               <p className="text-[11px] text-[#49454F] leading-relaxed">
-                If you previously purchased Premium on this browser or device, click below to automatically recover your entitlement.
+                {language === 'fr-FR'
+                  ? 'Si vous avez précédemment acheté Premium sur ce navigateur ou cet appareil, cliquez ci-dessous pour récupérer automatiquement votre abonnement.'
+                  : 'If you previously purchased Premium on this browser or device, click below to automatically recover your entitlement.'}
               </p>
               <button
                 onClick={handleDeviceCheck}
@@ -285,14 +348,14 @@ export default function RestoreSubscriptionModal({
                 className="w-full py-2 bg-white hover:bg-slate-50 border border-[#E1E3E1] text-[#1D1B20] text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs disabled:opacity-50"
               >
                 {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5 text-[#6750A4]" />}
-                <span>Check Device Entitlement</span>
+                <span>{language === 'fr-FR' ? 'Vérifier l\'abonnement sur l\'appareil' : 'Check Device Entitlement'}</span>
               </button>
             </div>
 
             <div className="relative flex items-center justify-center my-2">
               <div className="border-t border-[#E1E3E1] w-full" />
               <span className="bg-white px-3 text-[10px] text-[#79747E] uppercase font-bold tracking-wider absolute">
-                OR
+                {language === 'fr-FR' ? 'OU' : 'OR'}
               </span>
             </div>
 
@@ -301,11 +364,15 @@ export default function RestoreSubscriptionModal({
               <div className="space-y-1">
                 <label className="text-xs font-bold text-[#1D1B20] flex items-center gap-1.5">
                   <Receipt className="w-3.5 h-3.5 text-[#6750A4]" />
-                  <span>Restore via Payment ID or Order ID</span>
+                  <span>
+                    {language === 'fr-FR'
+                      ? 'Restaurer via référence de paiement ou numéro de commande'
+                      : 'Restore via Payment ID or Order ID'}
+                  </span>
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. pay_Nabc12345 or sim_..."
+                  placeholder={language === 'fr-FR' ? 'ex. pay_Nabc12345 ou sim_...' : 'e.g. pay_Nabc12345 or sim_...'}
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full px-3 py-2 border border-[#E1E3E1] rounded-xl text-xs text-[#1D1B20] focus:outline-none focus:border-[#6750A4]"
@@ -318,7 +385,9 @@ export default function RestoreSubscriptionModal({
                 className="w-full py-2.5 bg-[#6750A4] hover:bg-[#523d8c] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
               >
                 {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                <span>Restore with Payment ID</span>
+                <span>
+                  {language === 'fr-FR' ? 'Restaurer avec la référence' : 'Restore with Payment ID'}
+                </span>
               </button>
             </form>
           </motion.div>

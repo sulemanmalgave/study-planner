@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Plus, Search, BookOpen, Check } from 'lucide-react';
 import { Course } from '../types';
 import AddSubjectModal from './AddSubjectModal';
+import { useTranslation } from '../lib/i18n';
 
 interface SubjectSelectProps {
   courses: Course[];
@@ -22,12 +23,15 @@ export default function SubjectSelect({
   onChange,
   onAddCourse,
   label,
-  placeholder = 'Select subject...',
+  placeholder,
   dark = false,
   required = false,
   className = '',
   id = 'subject-select-field',
 }: SubjectSelectProps) {
+  const { t, language } = useTranslation();
+  const defaultPlaceholder = language === 'fr-FR' ? 'Sélectionner une matière...' : 'Select subject...';
+  const displayPlaceholder = placeholder || defaultPlaceholder;
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -101,7 +105,7 @@ export default function SubjectSelect({
             </>
           ) : (
             <span className={dark ? 'text-slate-400 font-medium' : 'text-slate-500 font-medium'}>
-              {placeholder}
+              {displayPlaceholder}
             </span>
           )}
         </div>
@@ -125,7 +129,7 @@ export default function SubjectSelect({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search subjects..."
+                  placeholder={language === 'fr-FR' ? 'Rechercher des matières...' : 'Search subjects...'}
                   className={`w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border outline-none ${
                     dark
                       ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500'
@@ -142,12 +146,12 @@ export default function SubjectSelect({
           <div className="max-h-48 overflow-y-auto p-1 space-y-0.5">
             {courses.length === 0 ? (
               <div className="p-3 text-center space-y-1">
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">No subjects added yet</p>
-                <p className="text-[10px] text-slate-400">Add a subject to organize your study planner.</p>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{language === 'fr-FR' ? 'Aucune matière ajoutée pour l\'instant' : 'No subjects added yet'}</p>
+                <p className="text-[10px] text-slate-400">{language === 'fr-FR' ? 'Ajoutez une matière pour organiser votre planning d\'études.' : 'Add a subject to organize your study planner.'}</p>
               </div>
             ) : filteredCourses.length === 0 ? (
               <div className="p-3 text-center text-xs text-slate-500">
-                No matching subjects found
+                {language === 'fr-FR' ? 'Aucune matière correspondante trouvée' : 'No matching subjects found'}
               </div>
             ) : (
               filteredCourses.map((course) => {
@@ -194,7 +198,7 @@ export default function SubjectSelect({
               id={`${id}-add-new-btn`}
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ Add New Subject</span>
+              <span>{language === 'fr-FR' ? '+ Ajouter une matière' : '+ Add New Subject'}</span>
             </button>
           </div>
         </div>

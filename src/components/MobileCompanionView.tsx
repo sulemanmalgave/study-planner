@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { UserProfile, DatabaseSchema } from '../types';
+import { formatFrDate, formatFrTime } from '../lib/i18n';
 
 interface MobileCompanionViewProps {
   profile: UserProfile;
@@ -204,7 +205,7 @@ export default function MobileCompanionView({
   };
 
   // Helper formatting for seconds to MM:SS
-  const formatTime = (seconds: number) => {
+  const formatCountdown = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
@@ -455,8 +456,8 @@ export default function MobileCompanionView({
                   </span>
                 </div>
                 <div className="text-[11px] text-[#49454F] space-y-0.5">
-                  <p>Paired: {new Date(mobileDevice.pairedAt).toLocaleDateString()} at {new Date(mobileDevice.pairedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                  <p className="font-medium text-slate-600">Last Synced: {new Date(mobileDevice.lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
+                  <p>Paired: {formatFrDate(mobileDevice.pairedAt)} at {formatFrTime(mobileDevice.pairedAt)}</p>
+                  <p className="font-medium text-slate-600">Last Synced: {formatFrTime(mobileDevice.lastSyncedAt, { withSeconds: true })}</p>
                 </div>
               </div>
             </div>
@@ -595,7 +596,7 @@ export default function MobileCompanionView({
                   {/* Countdown timer */}
                   <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600 font-bold bg-slate-50 py-1.5 px-3 rounded-full w-max mx-auto border border-slate-200/80">
                     <Clock className="w-3.5 h-3.5 text-[#6750A4]" />
-                    <span>QR code expires in {formatTime(countdownSeconds)}</span>
+                    <span>QR code expires in {formatCountdown(countdownSeconds)}</span>
                   </div>
 
                   {/* Steps */}

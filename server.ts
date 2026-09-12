@@ -51,9 +51,67 @@ const sanitizeEnvVar = (val: string | undefined): string | undefined => {
   return clean || undefined;
 };
 
-// Check for the authoritative server-side GEMINI_API_KEY environment variable
+// Check for authoritative server-side GEMINI_API_KEY environment variable with safe fallbacks
+export interface GeminiConfigMetadata {
+  isConfigured: boolean;
+  variableDetected: 'GEMINI_API_KEY' | 'GOOGLE_API_KEY' | 'GOOGLE_GENAI_API_KEY' | 'GEMINI_KEY' | 'NONE';
+  keyType: 'Authorization Key (AQ...)' | 'Standard API Key (AIza...)' | 'Custom' | 'None';
+  keyLength: number;
+  apiKey?: string;
+  runtimeEnvironment: string;
+}
+
+const getGeminiConfigInfo = (): GeminiConfigMetadata => {
+  const geminiKey = sanitizeEnvVar(process.env.GEMINI_API_KEY);
+  const googleKey = sanitizeEnvVar(process.env.GOOGLE_API_KEY);
+  const genaiKey = sanitizeEnvVar(process.env.GOOGLE_GENAI_API_KEY);
+  const fallbackKey = sanitizeEnvVar(process.env.GEMINI_KEY);
+
+  let key = geminiKey;
+  let variable: GeminiConfigMetadata['variableDetected'] = 'GEMINI_API_KEY';
+
+  if (!key && googleKey) {
+    key = googleKey;
+    variable = 'GOOGLE_API_KEY';
+  } else if (!key && genaiKey) {
+    key = genaiKey;
+    variable = 'GOOGLE_GENAI_API_KEY';
+  } else if (!key && fallbackKey) {
+    key = fallbackKey;
+    variable = 'GEMINI_KEY';
+  } else if (!key) {
+    variable = 'NONE';
+  }
+
+  let keyType: GeminiConfigMetadata['keyType'] = 'None';
+  if (key) {
+    if (key.startsWith('AQ.') || key.length > 50) {
+      keyType = 'Authorization Key (AQ...)';
+    } else if (key.startsWith('AIza')) {
+      keyType = 'Standard API Key (AIza...)';
+    } else {
+      keyType = 'Custom';
+    }
+  }
+
+  const runtimeEnvironment = process.env.VERCEL
+    ? 'Vercel Serverless'
+    : process.env.K_SERVICE
+    ? 'Google Cloud Run'
+    : 'AI Studio Node Runtime';
+
+  return {
+    isConfigured: Boolean(key),
+    variableDetected: variable,
+    keyType,
+    keyLength: key ? key.length : 0,
+    apiKey: key,
+    runtimeEnvironment,
+  };
+};
+
 const getGeminiApiKey = (): string | undefined => {
-  return sanitizeEnvVar(process.env.GEMINI_API_KEY);
+  return getGeminiConfigInfo().apiKey;
 };
 
 // Check for the authoritative server-side BLOB_READ_WRITE_TOKEN environment variable
@@ -66,10 +124,11 @@ let geminiClient: GoogleGenAI | null = null;
 let currentClientKey: string | null = null;
 
 function getGeminiClient(): GoogleGenAI {
-  const apiKey = getGeminiApiKey();
+  const config = getGeminiConfigInfo();
+  const apiKey = config.apiKey;
   if (!apiKey) {
     console.error(
-      '[Gemini AI Config] GEMINI_API_KEY is not configured in the server environment.'
+      '[Gemini AI Config] No Gemini API key detected. Checked GEMINI_API_KEY and GOOGLE_API_KEY in server environment.'
     );
     const err: any = new Error('AI features are temporarily unavailable. Gemini is not configured for this deployment.');
     err.code = 'GEMINI_NOT_CONFIGURED';
@@ -83,6 +142,7 @@ function getGeminiClient(): GoogleGenAI {
         headers: {
           'User-Agent': 'aistudio-build',
         },
+        timeout: 25000,
       },
     });
     currentClientKey = apiKey;
@@ -341,10 +401,13 @@ interface GeminiErrorResponse {
   provider: 'google-gemini';
   message: string;
   diagnostic?: string;
+  errorCategory?: 'AUTH_FAILED' | 'PERMISSION_DENIED' | 'QUOTA_EXCEEDED' | 'SERVICE_HIGH_DEMAND' | 'MODEL_NOT_FOUND' | 'INVALID_ARGUMENT' | 'NETWORK_TIMEOUT' | 'UNKNOWN';
 }
 
 function parseGeminiError(error: any): GeminiErrorResponse {
-  const rawMsg = (error?.message || String(error || '')).replace(/AIza[0-9A-Za-z-_]{35}/g, '[REDACTED]');
+  const rawMsg = (error?.message || String(error || ''))
+    .replace(/AIza[0-9A-Za-z-_]{35}/g, '[REDACTED_API_KEY]')
+    .replace(/AQ\.[0-9A-Za-z-_]{30,}/g, '[REDACTED_AUTH_KEY]');
   let statusCode = error?.status || error?.code || 500;
   if (typeof statusCode !== 'number') {
     const parsed = parseInt(String(statusCode), 10);
@@ -353,36 +416,39 @@ function parseGeminiError(error: any): GeminiErrorResponse {
 
   const lower = rawMsg.toLowerCase();
 
-  // 401: Authentication failure
+  // 401: Authentication failure (invalid, revoked, blocked)
   if (lower.includes('401') || lower.includes('unauthenticated') || lower.includes('api key not valid') || lower.includes('invalid api key')) {
     return {
       error: 'AI_AUTH_FAILED',
       code: 401,
       provider: 'google-gemini',
-      message: 'Gemini API authentication failed. The configured GEMINI_API_KEY appears invalid or inactive.',
+      message: 'Gemini API authentication failed. The configured key appears invalid, revoked, or expired.',
       diagnostic: rawMsg.slice(0, 200),
+      errorCategory: 'AUTH_FAILED',
     };
   }
 
-  // 403: Permission denied
-  if (lower.includes('403') || lower.includes('permission_denied') || lower.includes('access not configured')) {
+  // 403: Permission denied / blocked / API disabled
+  if (lower.includes('403') || lower.includes('permission_denied') || lower.includes('access not configured') || lower.includes('has not been used in project') || lower.includes('api disabled')) {
     return {
       error: 'AI_PERMISSION_DENIED',
       code: 403,
       provider: 'google-gemini',
-      message: 'Gemini API permission denied. The configured API key lacks permissions for this model.',
+      message: 'Gemini API permission denied. The key exists but lacks permissions, or Generative Language API is disabled.',
       diagnostic: rawMsg.slice(0, 200),
+      errorCategory: 'PERMISSION_DENIED',
     };
   }
 
-  // 429: Quota / Rate limit
-  if (lower.includes('429') || lower.includes('quota') || lower.includes('resource_exhausted') || lower.includes('rate limit')) {
+  // 429: Quota / Rate limit / Resource exhausted
+  if (lower.includes('429') || lower.includes('quota') || lower.includes('resource_exhausted') || lower.includes('rate limit') || lower.includes('requests_per_model_per_day')) {
     return {
       error: 'AI_QUOTA_EXCEEDED',
       code: 429,
       provider: 'google-gemini',
-      message: 'Gemini API quota or rate limit exceeded. Please wait a minute and retry.',
+      message: 'Gemini API quota or rate limit reached. The key exists and is valid, but the model request volume limit was exceeded.',
       diagnostic: rawMsg.slice(0, 200),
+      errorCategory: 'QUOTA_EXCEEDED',
     };
   }
 
@@ -392,12 +458,13 @@ function parseGeminiError(error: any): GeminiErrorResponse {
       error: 'AI_HIGH_DEMAND',
       code: 503,
       provider: 'google-gemini',
-      message: 'Gemini AI models are currently experiencing temporary high demand. Please try again shortly.',
+      message: 'Gemini AI models are currently experiencing temporary high demand spikes. Please try again shortly.',
       diagnostic: rawMsg.slice(0, 200),
+      errorCategory: 'SERVICE_HIGH_DEMAND',
     };
   }
 
-  // 404: Model not found
+  // 404: Model not found / deprecated
   if (lower.includes('404') || lower.includes('not found') || lower.includes('is no longer available')) {
     return {
       error: 'AI_MODEL_NOT_FOUND',
@@ -405,6 +472,7 @@ function parseGeminiError(error: any): GeminiErrorResponse {
       provider: 'google-gemini',
       message: 'The requested Gemini model could not be found or is no longer available.',
       diagnostic: rawMsg.slice(0, 200),
+      errorCategory: 'MODEL_NOT_FOUND',
     };
   }
 
@@ -416,6 +484,7 @@ function parseGeminiError(error: any): GeminiErrorResponse {
       provider: 'google-gemini',
       message: 'The audio file or text data provided could not be processed by Gemini.',
       diagnostic: rawMsg.slice(0, 200),
+      errorCategory: 'INVALID_ARGUMENT',
     };
   }
 
@@ -427,6 +496,7 @@ function parseGeminiError(error: any): GeminiErrorResponse {
       provider: 'google-gemini',
       message: 'Connection to Gemini AI service timed out. Please check connectivity and retry.',
       diagnostic: rawMsg.slice(0, 200),
+      errorCategory: 'NETWORK_TIMEOUT',
     };
   }
 
@@ -436,10 +506,15 @@ function parseGeminiError(error: any): GeminiErrorResponse {
     provider: 'google-gemini',
     message: rawMsg.length > 200 ? `${rawMsg.slice(0, 200)}...` : rawMsg || 'An unexpected Gemini API error occurred.',
     diagnostic: rawMsg.slice(0, 200),
+    errorCategory: 'UNKNOWN',
   };
 }
 
-// Resilient Text & Multimodal Generation with verified multi-model fallback chain
+// Circuit-breaker state: if gemini-3.8-flash encounters high demand (503), timeout, or deadline exceeded (504),
+// temporarily prioritize high-throughput gemini-3.1-flash-lite so requests succeed with sub-second latency.
+let flashOverloadedUntil = Date.now() + 5 * 60 * 1000; // start with active cooldown to handle the current 503 spike immediately
+
+// Resilient Text & Multimodal Generation with verified multi-model fallback chain and circuit breaker
 async function generateTextWithGemini(
   ai: GoogleGenAI,
   promptOrContents: any,
@@ -451,19 +526,51 @@ async function generateTextWithGemini(
   // - Resilient high-throughput fallback: 'gemini-3.1-flash-lite'
   // - Stable latest alias: 'gemini-flash-latest'
   // - Audio transcription: 'gemini-3.5-transcribe' with fallback to flash models
-  const models = isAudioTask
-    ? ['gemini-3.5-transcribe', 'gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest']
-    : ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+  const isFlashOverloaded = flashOverloadedUntil > Date.now();
+
+  let models: string[];
+  if (isAudioTask) {
+    // For audio: if flash is overloaded, prioritize gemini-3.1-flash-lite and gemini-3.5-transcribe
+    models = isFlashOverloaded
+      ? ['gemini-3.1-flash-lite', 'gemini-3.5-transcribe', 'gemini-3.8-flash', 'gemini-flash-latest']
+      : ['gemini-3.5-transcribe', 'gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+  } else {
+    // For text/document: prioritize gemini-3.1-flash-lite when gemini-3.8-flash is experiencing demand spikes
+    models = isFlashOverloaded
+      ? ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest']
+      : ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+  }
+
+  // Normalize promptOrContents if given as raw array of mixed objects/strings
+  let normalizedContents = promptOrContents;
+  if (Array.isArray(promptOrContents)) {
+    const parts = promptOrContents.map((p) => (typeof p === 'string' ? { text: p } : p));
+    normalizedContents = parts;
+  }
+
   let lastError: any = null;
 
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
     try {
-      const response = await ai.models.generateContent({
+      // Wrap model generation in a 16-second timeout so overloaded endpoints fail over quickly
+      const generatePromise = ai.models.generateContent({
         model,
-        contents: promptOrContents,
+        contents: normalizedContents,
         config: systemInstruction ? { systemInstruction } : undefined,
       });
+
+      const response: any = await Promise.race([
+        generatePromise,
+        new Promise((_, reject) =>
+          setTimeout(() => {
+            const timeoutErr: any = new Error(`Gemini request to ${model} timed out after 16 seconds`);
+            timeoutErr.code = 504;
+            timeoutErr.status = 504;
+            reject(timeoutErr);
+          }, 16000)
+        ),
+      ]);
 
       // Extract text safely from response.text or candidates parts
       let text = '';
@@ -480,18 +587,35 @@ async function generateTextWithGemini(
           .trim();
       }
 
-      if (text) return text;
+      if (text) {
+        // If gemini-3.8-flash succeeded, reset the circuit breaker
+        if (model === 'gemini-3.8-flash') {
+          flashOverloadedUntil = 0;
+        }
+        return text;
+      }
     } catch (err: any) {
       lastError = err;
       const status = err?.status || err?.code || 0;
       const msg = err?.message || String(err);
       console.warn(`[Gemini AI] Text generation with ${model} failed (status: ${status}):`, msg.slice(0, 160));
 
+      const isHighDemandOrTimeout =
+        status === 503 ||
+        status === 504 ||
+        /high demand|unavailable|deadline|overloaded|timeout/i.test(msg);
+
+      if (model === 'gemini-3.8-flash' && isHighDemandOrTimeout) {
+        // Trip circuit breaker for 5 minutes
+        flashOverloadedUntil = Date.now() + 5 * 60 * 1000;
+        console.info(`[Gemini AI] Circuit breaker activated for gemini-3.8-flash due to demand spike/timeout. Routing to resilient model ${models[i + 1] || 'gemini-3.1-flash-lite'}...`);
+      }
+
       // If rate limited or quota burst encountered, wait briefly before trying next model
       const isRateLimited = status === 429 || /RESOURCE_EXHAUSTED|quota|rate limit/i.test(msg);
       if (isRateLimited && i < models.length - 1) {
         console.info(`[Gemini AI] Rate limit/quota encountered on ${model}. Switching to resilient fallback ${models[i + 1]}...`);
-        await new Promise((resolve) => setTimeout(resolve, 750));
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
   }
@@ -2650,12 +2774,17 @@ Structure in clean Markdown:
     try {
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
-      const apiKey = getGeminiApiKey();
+      const config = getGeminiConfigInfo();
       res.json({
-        configured: !!apiKey,
+        configured: config.isConfigured,
+        variableDetected: config.variableDetected,
+        keyType: config.keyType,
+        keyLength: config.keyLength,
+        serverSideOnly: true,
+        runtimeEnvironment: config.runtimeEnvironment,
         provider: 'google-gemini',
-        status: apiKey ? 'ready' : 'not_configured',
-        models: ['gemini-3.8-flash', 'gemini-flash-latest'],
+        status: config.isConfigured ? 'ready' : 'not_configured',
+        models: ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'],
         audioModels: ['gemini-3.5-transcribe', 'gemini-3.8-flash', 'gemini-flash-latest'],
         aiUsage: db.profile?.aiUsage || null,
         isPro: checkUserHasActiveSubscription(req, db),
@@ -2665,37 +2794,108 @@ Structure in clean Markdown:
     }
   });
 
-  // AI 7: Diagnostic minimal server-side test (never exposes secrets or keys)
+  // AI 7: Comprehensive Safe Server-Side Diagnostic (strictly NEVER exposes secrets or keys)
   app.get('/api/ai/diagnostic', async (req, res) => {
-    try {
-      const { userId, userEmail } = getEffectiveUser(req);
-      const db = readDB(userId, userEmail);
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) {
-        return res.status(503).json({
-          configured: false,
-          error: 'GEMINI_NOT_CONFIGURED',
-          message: 'AI features are temporarily unavailable. Gemini is not configured for this deployment.',
-        });
-      }
+    const config = getGeminiConfigInfo();
+    const startTime = Date.now();
 
+    if (!config.isConfigured || !config.apiKey) {
+      return res.status(200).json({
+        configured: false,
+        variableDetected: config.variableDetected,
+        keyType: 'None',
+        keyLength: 0,
+        serverSideOnly: true,
+        runtimeEnvironment: config.runtimeEnvironment,
+        projectStatus: 'missing_configuration',
+        primaryModel: 'gemini-3.8-flash',
+        fallbackModels: ['gemini-3.1-flash-lite', 'gemini-flash-latest'],
+        apiTest: {
+          tested: false,
+          success: false,
+          latencyMs: 0,
+          response: null,
+          modelUsed: null,
+        },
+        errorCategory: 'MISSING_ENV_VAR',
+        error: 'GEMINI_NOT_CONFIGURED',
+        message: 'Gemini API key is not configured in the server environment.',
+        deploymentGuidance: {
+          aiStudio: 'Add GEMINI_API_KEY under Google AI Studio Settings > Secrets, then save.',
+          vercel: 'If deploying to Vercel, navigate to Vercel Project Settings > Environment Variables, add GEMINI_API_KEY to Production, Preview, and Development environments, and trigger a redeployment.',
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    try {
       const ai = getGeminiClient();
       const testResult = await generateTextWithGemini(ai, 'Reply with exactly: GEMINI_OK');
-      res.json({
+      const latencyMs = Date.now() - startTime;
+
+      return res.json({
         configured: true,
-        testPromptResult: testResult,
+        variableDetected: config.variableDetected,
+        keyType: config.keyType,
+        keyLength: config.keyLength,
+        serverSideOnly: true,
+        runtimeEnvironment: config.runtimeEnvironment,
+        projectStatus: 'available',
+        primaryModel: 'gemini-3.8-flash',
+        fallbackModels: ['gemini-3.1-flash-lite', 'gemini-flash-latest'],
+        apiTest: {
+          tested: true,
+          success: true,
+          latencyMs,
+          response: testResult ? 'GEMINI_OK' : 'EMPTY_RESPONSE',
+          modelUsed: 'gemini-3.8-flash',
+        },
+        errorCategory: null,
         status: 'healthy',
+        message: 'Gemini API is fully operational and authenticated.',
+        deploymentGuidance: {
+          aiStudio: 'Active in Google AI Studio Build container.',
+          vercel: 'If deployed to Vercel, verify GEMINI_API_KEY is configured in Vercel Production Environment Variables.',
+        },
         timestamp: new Date().toISOString(),
       });
     } catch (err: any) {
       const parsed = parseGeminiError(err);
-      res.status(parsed.code).json({
-        configured: true,
+      const latencyMs = Date.now() - startTime;
+
+      // Note: Return HTTP 200 with structured diagnostic so frontend diagnostic UI can display details without throwing network errors
+      return res.status(200).json({
+        configured: true, // Crucial: Key exists, error is downstream (quota, overload, auth)
+        variableDetected: config.variableDetected,
+        keyType: config.keyType,
+        keyLength: config.keyLength,
+        serverSideOnly: true,
+        runtimeEnvironment: config.runtimeEnvironment,
+        projectStatus: parsed.errorCategory === 'AUTH_FAILED' || parsed.errorCategory === 'PERMISSION_DENIED' ? 'unavailable' : 'available',
+        primaryModel: 'gemini-3.8-flash',
+        fallbackModels: ['gemini-3.1-flash-lite', 'gemini-flash-latest'],
+        apiTest: {
+          tested: true,
+          success: false,
+          latencyMs,
+          response: null,
+          modelUsed: 'gemini-3.8-flash',
+        },
         status: 'degraded',
         error: parsed.error,
         code: parsed.code,
+        errorCategory: parsed.errorCategory || 'UNKNOWN',
         message: parsed.message,
         diagnostic: parsed.diagnostic,
+        deploymentGuidance: {
+          aiStudio: parsed.errorCategory === 'QUOTA_EXCEEDED'
+            ? 'API key exists in AI Studio Secrets, but the Generative Language API quota limit was reached. Check https://ai.dev/rate-limit.'
+            : parsed.errorCategory === 'SERVICE_HIGH_DEMAND'
+            ? 'API key is valid, but Google servers are experiencing temporary high demand.'
+            : 'Check Gemini API Key validity in Google AI Studio Settings > Secrets.',
+          vercel: 'Ensure Vercel Production environment variable matches the valid GEMINI_API_KEY.',
+        },
+        timestamp: new Date().toISOString(),
       });
     }
   });

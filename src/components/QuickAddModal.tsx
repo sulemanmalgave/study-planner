@@ -4,6 +4,7 @@ import { X, CheckSquare, CalendarDays, FileText, GraduationCap, Loader2, AlertCi
 import { Course, DayOfWeek, Assignment, TimetablePeriod, Note, Exam } from '../types';
 import SubjectSelect from './SubjectSelect';
 import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
+import { useTranslation } from '../lib/i18n';
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export default function QuickAddModal({
   onAddExam,
   onTriggerUpgrade
 }: QuickAddModalProps) {
+  const { t, language } = useTranslation();
   const [activeType, setActiveType] = useState<'task' | 'class' | 'note' | 'exam'>(defaultType);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export default function QuickAddModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title) {
-      setErrorMessage('Please enter a title/subject name.');
+      setErrorMessage(t('quickAdd.titleRequired'));
       return;
     }
 
@@ -118,13 +120,13 @@ export default function QuickAddModal({
           onTriggerUpgrade();
           onClose();
         } else {
-          setErrorMessage(result.error || 'Failed to execute quick action.');
+          setErrorMessage(result.error || (language === 'fr-FR' ? 'Impossible d\'exécuter l\'action rapide.' : 'Failed to execute quick action.'));
         }
       } else {
         onClose();
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'An error occurred.');
+      setErrorMessage(err.message || (language === 'fr-FR' ? 'Une erreur est survenue.' : 'An error occurred.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -152,7 +154,7 @@ export default function QuickAddModal({
           >
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-slate-850 bg-[#0e1627]">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Quick Studio Recorder</h3>
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">{t('quickAdd.title')}</h3>
               <button onClick={onClose} className="p-1 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors btn-press">
                 <X className="w-5 h-5" />
               </button>
@@ -167,7 +169,7 @@ export default function QuickAddModal({
                 }`}
               >
                 <CheckSquare className="w-4 h-4" />
-                <span>Task</span>
+                <span>{t('quickAdd.tabTask')}</span>
               </button>
               <button
                 onClick={() => { setActiveType('class'); setTitle(''); }}
@@ -176,7 +178,7 @@ export default function QuickAddModal({
                 }`}
               >
                 <CalendarDays className="w-4 h-4" />
-                <span>Class</span>
+                <span>{t('quickAdd.tabClass')}</span>
               </button>
               <button
                 onClick={() => { setActiveType('note'); setTitle(''); }}
@@ -185,7 +187,7 @@ export default function QuickAddModal({
                 }`}
               >
                 <FileText className="w-4 h-4" />
-                <span>Note</span>
+                <span>{t('quickAdd.tabNote')}</span>
               </button>
               <button
                 onClick={() => { setActiveType('exam'); setTitle(''); }}
@@ -194,7 +196,7 @@ export default function QuickAddModal({
                 }`}
               >
                 <GraduationCap className="w-4 h-4" />
-                <span>Exam</span>
+                <span>{t('quickAdd.tabExam')}</span>
               </button>
             </div>
 
@@ -210,17 +212,19 @@ export default function QuickAddModal({
               {/* Title Text */}
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase">
-                  {activeType === 'task' && 'Assignment Topic'}
-                  {activeType === 'class' && 'Class / Lecture Topic'}
-                  {activeType === 'note' && 'Note Title'}
-                  {activeType === 'exam' && 'Exam Title'}
+                  {t('quickAdd.titleLabel')}
                 </label>
                 <input
                   type="text"
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder={`Enter title...`}
+                  placeholder={
+                    activeType === 'task' ? t('quickAdd.taskTitlePlaceholder') :
+                    activeType === 'class' ? t('quickAdd.classTitlePlaceholder') :
+                    activeType === 'note' ? t('quickAdd.noteTitlePlaceholder') :
+                    t('quickAdd.examTitlePlaceholder')
+                  }
                   className="w-full bg-[#1e293b]/50 border border-slate-800 text-xs text-white rounded-xl px-3.5 py-2.5 focus:border-blue-500 outline-none"
                 />
               </div>
@@ -232,7 +236,7 @@ export default function QuickAddModal({
                 onChange={setCourseId}
                 onAddCourse={onAddCourse}
                 dark={true}
-                label="Linked Subject"
+                label={t('quickAdd.subjectLabel')}
                 id="quick-add-subject-select"
               />
 
@@ -240,7 +244,7 @@ export default function QuickAddModal({
               {activeType === 'task' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Due Date</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">{t('quickAdd.dueDateLabel')}</label>
                     <input
                       type="date"
                       value={dueDate}
@@ -249,15 +253,15 @@ export default function QuickAddModal({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Priority</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">{t('priority.label')}</label>
                     <select
                       value={priority}
                       onChange={(e) => setPriority(e.target.value as any)}
                       className="w-full bg-[#1e293b]/50 border border-slate-800 text-xs text-white rounded-xl px-3 py-2 focus:border-blue-500 outline-none"
                     >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
+                      <option value="low">{t('priority.low')}</option>
+                      <option value="medium">{t('priority.medium')}</option>
+                      <option value="high">{t('priority.high')}</option>
                     </select>
                   </div>
                 </div>
@@ -266,20 +270,20 @@ export default function QuickAddModal({
               {activeType === 'class' && (
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Day Of Week</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">{t('quickAdd.dayLabel')}</label>
                     <select
                       value={day}
                       onChange={(e) => setDay(e.target.value as DayOfWeek)}
                       className="w-full bg-[#1e293b]/50 border border-slate-800 text-xs text-white rounded-xl px-3 py-2 focus:border-blue-500 outline-none"
                     >
                       {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => (
-                        <option key={d} value={d}>{d}</option>
+                        <option key={d} value={d}>{t(`day.${d.toLowerCase()}`)}</option>
                       ))}
                     </select>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">Start time</label>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">{t('quickAdd.timeLabel')} ({language === 'fr-FR' ? 'Début' : 'Start'})</label>
                       <input
                         type="time"
                         value={startTime}
@@ -288,7 +292,7 @@ export default function QuickAddModal({
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">End time</label>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">{t('quickAdd.timeLabel')} ({language === 'fr-FR' ? 'Fin' : 'End'})</label>
                       <input
                         type="time"
                         value={endTime}
@@ -302,7 +306,7 @@ export default function QuickAddModal({
 
               {activeType === 'exam' && (
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Exam Date & Time</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">{t('quickAdd.examDateLabel')}</label>
                   <input
                     type="datetime-local"
                     value={examDate}
@@ -315,13 +319,13 @@ export default function QuickAddModal({
               {/* Description / Note body */}
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase">
-                  {activeType === 'note' ? 'Notebook Page Content' : 'Additional Information / Notes'}
+                  {t('quickAdd.descriptionLabel')}
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
-                  placeholder={activeType === 'note' ? 'Write main content guidelines...' : 'Add descriptions...'}
+                  placeholder={t('quickAdd.descPlaceholder')}
                   className="w-full bg-[#1e293b]/50 border border-slate-800 text-xs text-white rounded-xl px-3.5 py-2.5 focus:border-blue-500 outline-none resize-none"
                 />
               </div>
@@ -334,10 +338,15 @@ export default function QuickAddModal({
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Recording...</span>
+                    <span>{t('action.saving')}</span>
                   </>
                 ) : (
-                  <span>Quick Save Record</span>
+                  <span>
+                    {activeType === 'task' ? t('quickAdd.submitTask') :
+                     activeType === 'class' ? t('quickAdd.submitClass') :
+                     activeType === 'note' ? t('quickAdd.submitNote') :
+                     t('quickAdd.submitExam')}
+                  </span>
                 )}
               </button>
             </form>

@@ -4,6 +4,7 @@ import { CheckSquare, Plus, Trash2, Edit2, Check, Clock, AlertCircle, Loader2 } 
 import { Course, Assignment } from '../types';
 import SubjectSelect from './SubjectSelect';
 import { pageVariants, listItemVariants } from '../lib/animations';
+import { useTranslation } from '../lib/i18n';
 
 interface AssignmentsViewProps {
   courses: Course[];
@@ -26,6 +27,7 @@ export default function AssignmentsView({
   onDeleteAssignment,
   onTriggerUpgrade
 }: AssignmentsViewProps) {
+  const { t, language, formatDate } = useTranslation();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,7 +74,7 @@ export default function AssignmentsView({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title) {
-      setErrorMessage('Please enter a task title.');
+      setErrorMessage(language === 'fr-FR' ? 'Veuillez saisir un intitulé de devoir.' : 'Please enter a task title.');
       return;
     }
 
@@ -103,14 +105,14 @@ export default function AssignmentsView({
           if (result.error === 'LIMIT_REACHED') {
             onTriggerUpgrade();
           } else {
-            setErrorMessage(result.error || 'Failed to create assignment.');
+            setErrorMessage(result.error || (language === 'fr-FR' ? 'Impossible de créer le devoir.' : 'Failed to create assignment.'));
           }
         } else {
           setIsFormOpen(false);
         }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'An error occurred.');
+      setErrorMessage(err.message || (language === 'fr-FR' ? 'Une erreur est survenue.' : 'An error occurred.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -146,8 +148,8 @@ export default function AssignmentsView({
             <CheckSquare className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-[#1D1B20] tracking-wide uppercase">Assignment Tracker</h2>
-            <p className="text-[10px] font-mono text-[#49454F] mt-1 uppercase">Track due dates, workloads & marks releases</p>
+            <h2 className="text-sm font-bold text-[#1D1B20] tracking-wide uppercase">{t('assignments.title')}</h2>
+            <p className="text-[10px] font-mono text-[#49454F] mt-1 uppercase">{t('assignments.subtitle')}</p>
           </div>
         </div>
 
@@ -157,7 +159,7 @@ export default function AssignmentsView({
           id="add-assignment-button"
         >
           <Plus className="w-4 h-4" />
-          <span>New Assignment</span>
+          <span>{t('assignments.addTask')}</span>
         </button>
       </div>
 
@@ -166,13 +168,15 @@ export default function AssignmentsView({
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           {/* Course filter */}
           <div className="space-y-1">
-            <span className="text-[9px] font-bold text-[#49454F] uppercase tracking-wider block">Course</span>
+            <span className="text-[9px] font-bold text-[#49454F] uppercase tracking-wider block">
+              {language === 'fr-FR' ? 'Matière' : 'Course'}
+            </span>
             <select
               value={filterCourse}
               onChange={(e) => setFilterCourse(e.target.value)}
               className="bg-[#F3EDF7] border border-[#E1E3E1] text-[11px] font-medium text-[#1D1B20] rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
             >
-              <option value="all" className="bg-white text-slate-900">All Courses</option>
+              <option value="all" className="bg-white text-slate-900">{language === 'fr-FR' ? 'Toutes les matières' : 'All Courses'}</option>
               {courses.map(c => (
                 <option key={c.id} value={c.id} className="bg-white text-slate-900">{c.name}</option>
               ))}
@@ -181,36 +185,42 @@ export default function AssignmentsView({
 
           {/* Status filter */}
           <div className="space-y-1">
-            <span className="text-[9px] font-bold text-[#49454F] uppercase tracking-wider block">Status</span>
+            <span className="text-[9px] font-bold text-[#49454F] uppercase tracking-wider block">
+              {t('status.label')}
+            </span>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
               className="bg-[#F3EDF7] border border-[#E1E3E1] text-[11px] font-medium text-[#1D1B20] rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
             >
-              <option value="all" className="bg-white text-slate-900">All States</option>
-              <option value="pending" className="bg-white text-slate-900">Pending Only</option>
-              <option value="completed" className="bg-white text-slate-900">Completed Only</option>
+              <option value="all" className="bg-white text-slate-900">{t('status.all')}</option>
+              <option value="pending" className="bg-white text-slate-900">{language === 'fr-FR' ? 'En attente uniquement' : 'Pending Only'}</option>
+              <option value="completed" className="bg-white text-slate-900">{language === 'fr-FR' ? 'Terminés uniquement' : 'Completed Only'}</option>
             </select>
           </div>
 
           {/* Priority filter */}
           <div className="space-y-1">
-            <span className="text-[9px] font-bold text-[#49454F] uppercase tracking-wider block">Priority</span>
+            <span className="text-[9px] font-bold text-[#49454F] uppercase tracking-wider block">
+              {t('priority.label')}
+            </span>
             <select
               value={filterPriority}
               onChange={(e) => setFilterPriority(e.target.value)}
               className="bg-[#F3EDF7] border border-[#E1E3E1] text-[11px] font-medium text-[#1D1B20] rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
             >
-              <option value="all" className="bg-white text-slate-900">All Priorities</option>
-              <option value="high" className="bg-white text-slate-900">High</option>
-              <option value="medium" className="bg-white text-slate-900">Medium</option>
-              <option value="low" className="bg-white text-slate-900">Low</option>
+              <option value="all" className="bg-white text-slate-900">{language === 'fr-FR' ? 'Toutes les priorités' : 'All Priorities'}</option>
+              <option value="high" className="bg-white text-slate-900">{t('priority.high')}</option>
+              <option value="medium" className="bg-white text-slate-900">{t('priority.medium')}</option>
+              <option value="low" className="bg-white text-slate-900">{t('priority.low')}</option>
             </select>
           </div>
         </div>
 
         <div className="text-[10px] font-bold text-[#49454F] font-mono">
-          Showing {filteredAssignments.length} of {assignments.length} Tasks
+          {language === 'fr-FR'
+            ? `${filteredAssignments.length} sur ${assignments.length} devoirs affichés`
+            : `Showing ${filteredAssignments.length} of ${assignments.length} Tasks`}
         </div>
       </div>
 
@@ -227,9 +237,13 @@ export default function AssignmentsView({
           >
             <div className="flex items-center justify-between border-b border-[#E1E3E1] pb-2">
               <h3 className="text-xs font-bold text-[#1D1B20] uppercase tracking-wider">
-                {editingAssignment ? 'Modify Assignment Details' : 'Create New Study Assignment'}
+                {editingAssignment
+                  ? (language === 'fr-FR' ? 'Modifier le devoir' : 'Modify Assignment Details')
+                  : (language === 'fr-FR' ? 'Créer un nouveau devoir' : 'Create New Study Assignment')}
               </h3>
-              <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium btn-press cursor-pointer">Cancel</button>
+              <button onClick={() => setIsFormOpen(false)} className="text-xs text-[#49454F] hover:text-[#1D1B20] font-medium btn-press cursor-pointer">
+                {t('action.cancel')}
+              </button>
             </div>
 
             {errorMessage && (
@@ -242,12 +256,14 @@ export default function AssignmentsView({
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Title */}
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Task Title / Assignment Topic</label>
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">
+                  {language === 'fr-FR' ? 'Titre / Intitulé du devoir' : 'Task Title / Assignment Topic'}
+                </label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Solve Integral Exercises Chapter 3"
+                  placeholder={language === 'fr-FR' ? 'ex. : Résoudre les exercices du chapitre 3' : 'e.g. Solve Integral Exercises Chapter 3'}
                   className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
                 />
               </div>
@@ -258,13 +274,15 @@ export default function AssignmentsView({
                 value={courseId}
                 onChange={setCourseId}
                 onAddCourse={onAddCourse}
-                label="Course Subject"
+                label={language === 'fr-FR' ? 'Matière / Cours' : 'Course Subject'}
                 id="assignment-course-select"
               />
 
               {/* Due Date */}
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Due Date</label>
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">
+                  {language === 'fr-FR' ? 'Date limite de rendu' : 'Due Date'}
+                </label>
                 <input
                   type="date"
                   value={dueDate}
@@ -275,26 +293,30 @@ export default function AssignmentsView({
 
               {/* Priority */}
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Priority Level</label>
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">
+                  {t('priority.label')}
+                </label>
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as any)}
                   className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none"
                 >
-                  <option value="low" className="text-slate-900 bg-white">Low Priority</option>
-                  <option value="medium" className="text-slate-900 bg-white">Medium Priority</option>
-                  <option value="high" className="text-slate-900 bg-white">High Priority</option>
+                  <option value="low" className="text-slate-900 bg-white">{t('priority.low')}</option>
+                  <option value="medium" className="text-slate-900 bg-white">{t('priority.medium')}</option>
+                  <option value="high" className="text-slate-900 bg-white">{t('priority.high')}</option>
                 </select>
               </div>
 
               {/* Description */}
               <div className="space-y-1 md:col-span-2">
-                <label className="text-[10px] font-bold text-[#49454F] uppercase block">Additional Instructions / Description</label>
+                <label className="text-[10px] font-bold text-[#49454F] uppercase block">
+                  {language === 'fr-FR' ? 'Consignes & Remarques (optionnel)' : 'Additional Instructions / Description'}
+                </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
-                  placeholder="List textbooks, submission link portals, or custom tasks..."
+                  placeholder={language === 'fr-FR' ? 'Manuels de référence, liens de dépôt, consignes...' : 'List textbooks, submission link portals, or custom tasks...'}
                   className="w-full bg-[#F3EDF7] border border-[#E1E3E1] text-xs text-[#1D1B20] rounded-xl px-3.5 py-2.5 focus:ring-1 focus:ring-[#6750A4] outline-none resize-none"
                 />
               </div>
@@ -308,7 +330,11 @@ export default function AssignmentsView({
                   {isSubmitting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <span>{editingAssignment ? 'Save Changes' : 'Create Assignment'}</span>
+                    <span>
+                      {editingAssignment
+                        ? (language === 'fr-FR' ? 'Enregistrer les modifications' : 'Save Changes')
+                        : (language === 'fr-FR' ? 'Créer le devoir' : 'Create Assignment')}
+                    </span>
                   )}
                 </button>
               </div>
@@ -324,6 +350,12 @@ export default function AssignmentsView({
             filteredAssignments.map((assignment) => {
               const isCompleted = assignment.status === 'completed';
               const color = getCourseColor(assignment.courseId);
+
+              const priorityLabel = assignment.priority === 'high' 
+                ? t('priority.high') 
+                : assignment.priority === 'low' 
+                ? t('priority.low') 
+                : t('priority.medium');
 
               return (
                 <motion.div
@@ -347,6 +379,7 @@ export default function AssignmentsView({
                           ? 'bg-[#EADDFF] border-[#6750A4] text-[#21005D]'
                           : 'border-[#79747E] hover:border-[#6750A4] text-transparent'
                       }`}
+                      title={isCompleted ? (language === 'fr-FR' ? 'Marquer comme non terminé' : 'Mark as pending') : (language === 'fr-FR' ? 'Marquer comme terminé' : 'Mark as completed')}
                     >
                       <Check className="w-3.5 h-3.5" />
                     </button>
@@ -360,11 +393,11 @@ export default function AssignmentsView({
                       )}
                       <div className="flex flex-wrap items-center gap-2 mt-2">
                         <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border" style={{ backgroundColor: color + '12', borderColor: color + '25', color }}>
-                          {courses.find(c => c.id === assignment.courseId)?.name || 'Subject'}
+                          {courses.find(c => c.id === assignment.courseId)?.name || (language === 'fr-FR' ? 'Matière' : 'Subject')}
                         </span>
                         <span className="flex items-center gap-1 text-[9px] text-[#49454F] font-semibold font-mono">
                           <Clock className="w-3 h-3 text-[#49454F]" />
-                          Due: {assignment.dueDate}
+                          {language === 'fr-FR' ? `Pour le : ${formatDate(assignment.dueDate)}` : `Due: ${formatDate(assignment.dueDate)}`}
                         </span>
                       </div>
                     </div>
@@ -377,21 +410,21 @@ export default function AssignmentsView({
                       assignment.priority === 'medium' ? 'bg-[#FFF4E5] border-[#FFE2CC] text-[#D05C00]' :
                       'bg-[#F7F9FC] border-[#E1E3E1] text-[#49454F]'
                     }`}>
-                      {assignment.priority}
+                      {priorityLabel}
                     </span>
 
                     <div className="flex items-center gap-1.5 border-l border-[#E1E3E1] pl-3">
                       <button
                         onClick={() => handleOpenEdit(assignment)}
                         className="p-1.5 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#1D1B20] rounded-lg border border-[#E1E3E1] transition-colors btn-press cursor-pointer"
-                        title="Edit Assignment"
+                        title={language === 'fr-FR' ? 'Modifier le devoir' : 'Edit Assignment'}
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => onDeleteAssignment(assignment.id)}
                         className="p-1.5 bg-[#FDECEB] hover:bg-[#F9DEDC] text-[#B3261E] rounded-lg border border-[#F9DEDC] transition-colors btn-press cursor-pointer"
-                        title="Delete Assignment"
+                        title={language === 'fr-FR' ? 'Supprimer le devoir' : 'Delete Assignment'}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -408,8 +441,14 @@ export default function AssignmentsView({
               id="assignments-empty-state"
             >
               <CheckSquare className="w-10 h-10 text-[#79747E] mx-auto" />
-              <h4 className="text-xs font-bold text-[#1D1B20]">No matching assignments!</h4>
-              <p className="text-[10px] text-[#49454F] max-w-sm mx-auto">Click "New Assignment" above to track upcoming homework items.</p>
+              <h4 className="text-xs font-bold text-[#1D1B20]">
+                {language === 'fr-FR' ? 'Aucun devoir correspondant !' : 'No matching assignments!'}
+              </h4>
+              <p className="text-[10px] text-[#49454F] max-w-sm mx-auto">
+                {language === 'fr-FR'
+                  ? 'Cliquez sur « Ajouter un devoir » ci-dessus pour planifier vos devoirs et projets.'
+                  : 'Click "New Assignment" above to track upcoming homework items.'}
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
