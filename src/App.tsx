@@ -1004,10 +1004,15 @@ export default function App() {
   };
 
   const handleUpgradeSuccess = (updatedSubscription: Subscription) => {
+    const userDetails = authUser?.uid ? {
+      userId: authUser.uid,
+      userEmail: authUser.email || undefined,
+    } : undefined;
+
     // 1. Immediately store in dedicated independent entitlement ledger
-    saveStoredEntitlement(updatedSubscription, 'payment');
+    saveStoredEntitlement(updatedSubscription, 'payment', userDetails);
     // 2. Sync to server-side subscriptions_ledger.json
-    syncEntitlementToBackend(updatedSubscription);
+    syncEntitlementToBackend(updatedSubscription, userDetails);
     // 3. Update active workspace state
     setDbState(prev => {
       if (!prev) return null;

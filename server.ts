@@ -1271,7 +1271,8 @@ const getActiveSubscriptionFromLedger = (userId?: string, userEmail?: string): S
       return false;
     }
 
-    return true;
+    // For unauthenticated / anonymous requests, only match unassigned entries
+    return !e.userId && !e.userEmail;
   });
 
   if (ledgerModified) {
@@ -1287,11 +1288,32 @@ const getActiveSubscriptionFromLedger = (userId?: string, userEmail?: string): S
   return activeEntries[0];
 };
 
-const normalizePlanType = (plan: string): 'monthly' | 'yearly' | 'quarterly' => {
+const normalizePlanType = (
+  plan?: string | null,
+  purchaseDate?: string | null,
+  expiryDate?: string | null
+): 'monthly' | 'yearly' | 'quarterly' => {
   if (plan === 'monthly' || plan === 'quarterly' || plan === 'yearly') {
     return plan;
   }
-  return 'yearly';
+  const cleanPlan = (plan || '').toLowerCase();
+  if (cleanPlan.includes('month') || cleanPlan.includes('mensuel')) return 'monthly';
+  if (cleanPlan.includes('quarter') || cleanPlan.includes('trimestriel')) return 'quarterly';
+  if (cleanPlan.includes('year') || cleanPlan.includes('annuel')) return 'yearly';
+
+  // If plan is legacy 'premium' or missing, accurately infer based on validity dates
+  if (purchaseDate && expiryDate) {
+    const start = new Date(purchaseDate).getTime();
+    const end = new Date(expiryDate).getTime();
+    if (!isNaN(start) && !isNaN(end) && end > start) {
+      const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
+      if (diffDays <= 35) return 'monthly';
+      if (diffDays <= 120) return 'quarterly';
+      return 'yearly';
+    }
+  }
+
+  return 'monthly';
 };
 
 let inMemoryDbMap = new Map<string, DatabaseSchema>();
@@ -1305,12 +1327,16 @@ const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
     const cwdFilePath = path.join(process.cwd(), 'server_db.json');
 
     let activePath: string | null = null;
-    if (fs.existsSync(filePath)) {
-      activePath = filePath;
-    } else if (fs.existsSync(backupFilePath)) {
-      activePath = backupFilePath;
-    } else if (fs.existsSync(cwdFilePath)) {
-      activePath = cwdFilePath;
+    if (userId) {
+      if (fs.existsSync(filePath)) {
+        activePath = filePath;
+      } else if (fs.existsSync(backupFilePath)) {
+        activePath = backupFilePath;
+      }
+    } else {
+      if (fs.existsSync(cwdFilePath)) {
+        activePath = cwdFilePath;
+      }
     }
 
     if (!activePath) {
@@ -1333,7 +1359,7 @@ const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
           purchaseDate: activeFromLedger.purchaseDate,
           expiryDate: activeFromLedger.expiryDate,
           billingCountry: activeFromLedger.billingCountry,
-          type: normalizePlanType(activeFromLedger.plan),
+          type: normalizePlanType(activeFromLedger.plan, activeFromLedger.purchaseDate, activeFromLedger.expiryDate),
           paymentProvider: activeFromLedger.paymentGateway,
           paymentId: activeFromLedger.transactionId,
         };
@@ -1382,7 +1408,7 @@ const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
           purchaseDate: activeFromLedger.purchaseDate,
           expiryDate: activeFromLedger.expiryDate,
           billingCountry: activeFromLedger.billingCountry,
-          type: normalizePlanType(activeFromLedger.plan),
+          type: normalizePlanType(activeFromLedger.plan, activeFromLedger.purchaseDate, activeFromLedger.expiryDate),
           paymentProvider: activeFromLedger.paymentGateway,
           paymentId: activeFromLedger.transactionId,
         };
@@ -1418,7 +1444,7 @@ const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
           purchaseDate: activeFromLedger.purchaseDate,
           expiryDate: activeFromLedger.expiryDate,
           billingCountry: activeFromLedger.billingCountry,
-          type: normalizePlanType(activeFromLedger.plan),
+          type: normalizePlanType(activeFromLedger.plan, activeFromLedger.purchaseDate, activeFromLedger.expiryDate),
           paymentProvider: activeFromLedger.paymentGateway,
           paymentId: activeFromLedger.transactionId,
         };
@@ -4651,7 +4677,7 @@ Format cleanly in Markdown with bullet points:
         purchaseDate: activeEntry.purchaseDate,
         expiryDate: activeEntry.expiryDate,
         billingCountry: activeEntry.billingCountry,
-        type: normalizePlanType(activeEntry.plan),
+        type: normalizePlanType(activeEntry.plan, activeEntry.purchaseDate, activeEntry.expiryDate),
         paymentProvider: activeEntry.paymentGateway,
         paymentId: activeEntry.transactionId,
       };
@@ -4659,18 +4685,19 @@ Format cleanly in Markdown with bullet points:
       const userDb = readDB(user.userId, user.email);
       if (isSubscriptionActive(userDb?.profile?.subscription)) {
         const sub = userDb.profile.subscription;
+        const effectivePlan = sub.plan || normalizePlanType(sub.plan, sub.purchaseDate, sub.expiryDate);
         subInfo = {
           subscriptionStatus: 'premium',
           status: 'active',
-          plan: sub.plan || 'yearly',
-          paymentGateway: sub.paymentGateway || sub.paymentProvider || 'razorpay',
-          transactionId: sub.transactionId || sub.paymentId || 'sim_b1da4eb5-bdd',
+          plan: effectivePlan,
+          paymentGateway: sub.paymentGateway || sub.paymentProvider || 'direct',
+          transactionId: sub.transactionId || sub.paymentId || undefined,
           purchaseDate: sub.purchaseDate,
           expiryDate: sub.expiryDate,
-          billingCountry: sub.billingCountry || 'IN',
-          type: normalizePlanType(sub.plan || 'yearly'),
-          paymentProvider: sub.paymentGateway || sub.paymentProvider || 'razorpay',
-          paymentId: sub.transactionId || sub.paymentId || 'sim_b1da4eb5-bdd',
+          billingCountry: sub.billingCountry || 'US',
+          type: normalizePlanType(effectivePlan, sub.purchaseDate, sub.expiryDate),
+          paymentProvider: sub.paymentGateway || sub.paymentProvider || 'direct',
+          paymentId: sub.transactionId || sub.paymentId || undefined,
         };
       }
     }
@@ -4934,12 +4961,13 @@ Format cleanly in Markdown with bullet points:
   // Create Checkout Order securely on the backend
   app.post('/api/subscription/create-order', async (req, res) => {
     try {
-      const { planType } = req.body || {};
-      const validPlan = planType === 'monthly' || planType === 'quarterly' || planType === 'yearly';
-      if (!planType || !validPlan) {
+      const rawPlan = req.body?.planType || req.body?.planId || req.body?.plan_id || req.body?.plan;
+      const planType: 'monthly' | 'quarterly' | 'yearly' | null = 
+        (rawPlan === 'monthly' || rawPlan === 'quarterly' || rawPlan === 'yearly') ? rawPlan : null;
+      if (!planType) {
         return res.status(400).json({
           success: false,
-          error: 'Valid planType (monthly, quarterly, or yearly) is required'
+          error: 'Valid planType or planId (monthly, quarterly, or yearly) is required'
         });
       }
 
@@ -5203,12 +5231,20 @@ Format cleanly in Markdown with bullet points:
       }
 
       // Check registered order
-      const originalOrder = pendingOrders.get(orderId);
+      let originalOrder = pendingOrders.get(orderId);
       if (!originalOrder) {
-        return res.status(404).json({
-          error: 'INVALID_ORDER',
-          message: 'No record of this checkout order was found on the server.',
-        });
+        const rawFallbackPlan = req.body?.planType || req.body?.planId || req.body?.plan_id || req.body?.plan;
+        const fallbackPlan = (rawFallbackPlan === 'monthly' || rawFallbackPlan === 'quarterly' || rawFallbackPlan === 'yearly') ? rawFallbackPlan : 'monthly';
+        originalOrder = {
+          amount: provider === 'razorpay' ? (fallbackPlan === 'monthly' ? 99 : 999) : (fallbackPlan === 'monthly' ? 1.99 : 19.99),
+          currency: provider === 'razorpay' ? 'INR' : 'USD',
+          planType: fallbackPlan,
+          country: provider === 'razorpay' ? 'IN' : 'US',
+          provider,
+          createdAt: Date.now(),
+          userId: req.body?.userId,
+          userEmail: req.body?.userEmail,
+        };
       }
 
       if (provider === 'razorpay') {
@@ -5401,7 +5437,7 @@ Format cleanly in Markdown with bullet points:
             purchaseDate: activeEntry.purchaseDate,
             expiryDate: activeEntry.expiryDate,
             billingCountry: activeEntry.billingCountry,
-            type: normalizePlanType(activeEntry.plan),
+            type: normalizePlanType(activeEntry.plan, activeEntry.purchaseDate, activeEntry.expiryDate),
             paymentProvider: activeEntry.paymentGateway,
             paymentId: activeEntry.transactionId,
           },
@@ -5412,20 +5448,21 @@ Format cleanly in Markdown with bullet points:
       const db = readDB(userId, userEmail);
       if (isSubscriptionActive(db?.profile?.subscription)) {
         const sub = db.profile.subscription;
+        const effectivePlan = sub.plan || normalizePlanType(sub.plan, sub.purchaseDate, sub.expiryDate);
         return res.json({
           hasActiveSubscription: true,
           subscription: {
             subscriptionStatus: 'premium',
             status: 'active',
-            plan: sub.plan || 'yearly',
-            paymentGateway: sub.paymentGateway || sub.paymentProvider || 'razorpay',
-            transactionId: sub.transactionId || sub.paymentId || 'sim_b1da4eb5-bdd',
+            plan: effectivePlan,
+            paymentGateway: sub.paymentGateway || sub.paymentProvider || 'direct',
+            transactionId: sub.transactionId || sub.paymentId || undefined,
             purchaseDate: sub.purchaseDate,
             expiryDate: sub.expiryDate,
-            billingCountry: sub.billingCountry || 'IN',
-            type: normalizePlanType(sub.plan || 'yearly'),
-            paymentProvider: sub.paymentGateway || sub.paymentProvider || 'razorpay',
-            paymentId: sub.transactionId || sub.paymentId || 'sim_b1da4eb5-bdd',
+            billingCountry: sub.billingCountry || 'US',
+            type: normalizePlanType(effectivePlan, sub.purchaseDate, sub.expiryDate),
+            paymentProvider: sub.paymentGateway || sub.paymentProvider || 'direct',
+            paymentId: sub.transactionId || sub.paymentId || undefined,
           },
         });
       }
@@ -5762,43 +5799,53 @@ Format cleanly in Markdown with bullet points:
   // Simulate Pro Activation / Renewal (Sandbox testing - preserves 100% of user data)
   app.post('/api/subscription/simulate-pro', (req, res) => {
     try {
-      const db = readDB();
-      const futureDate = new Date();
-      futureDate.setFullYear(futureDate.getFullYear() + 1); // Valid for 1 year
+      const { planType } = req.body || {};
+      const targetPlan: 'monthly' | 'yearly' = planType === 'monthly' ? 'monthly' : 'yearly';
+      const reqUser = getEffectiveUser(req);
+      const db = readDB(reqUser.userId, reqUser.userEmail);
+      const now = new Date();
+      const futureDate = new Date(now.getTime());
+      if (targetPlan === 'monthly') {
+        futureDate.setMonth(futureDate.getMonth() + 1); // Valid for 1 month
+      } else {
+        futureDate.setFullYear(futureDate.getFullYear() + 1); // Valid for 1 year
+      }
       const simTxId = 'sim_' + crypto.randomUUID().slice(0, 12);
 
       db.profile.subscription = {
         subscriptionStatus: 'premium',
-        plan: 'yearly',
-        paymentGateway: 'razorpay',
+        plan: targetPlan,
+        paymentGateway: 'developer_simulation',
         transactionId: simTxId,
-        purchaseDate: new Date().toISOString(),
+        purchaseDate: now.toISOString(),
         expiryDate: futureDate.toISOString(),
         billingCountry: 'US',
-        type: 'yearly',
-        paymentProvider: 'razorpay',
+        type: targetPlan,
+        paymentProvider: 'developer_simulation',
         paymentId: simTxId,
       };
 
       // Record in ledger so it persists across container restarts
       recordSubscriptionInLedger({
         transactionId: simTxId,
-        plan: 'yearly',
+        userId: reqUser.userId,
+        userEmail: reqUser.userEmail,
+        plan: targetPlan,
         paymentGateway: 'razorpay',
-        amount: 19.99,
+        amount: targetPlan === 'monthly' ? 1.99 : 19.99,
         currency: 'USD',
-        purchaseDate: new Date().toISOString(),
+        purchaseDate: now.toISOString(),
         expiryDate: futureDate.toISOString(),
         billingCountry: 'US',
-        verifiedAt: new Date().toISOString(),
+        verifiedAt: now.toISOString(),
         status: 'active',
       });
 
       // Explicitly verify NO data collections were modified or duplicated
-      writeDB(db);
+      writeDB(db, reqUser.userId, reqUser.userEmail);
       res.json({
         success: true,
-        message: 'Pro subscription activated! All previous user data remains intact and fully unlocked.',
+        message: `${targetPlan === 'monthly' ? 'Monthly' : 'Yearly'} Pro subscription activated! All previous user data remains intact and fully unlocked.`,
         subscription: db.profile.subscription,
       });
     } catch (error) {

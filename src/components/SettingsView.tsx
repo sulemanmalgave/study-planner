@@ -4,6 +4,7 @@ import { UserProfile } from '../types';
 import { AuthUserProfile } from '../lib/emailAuth';
 import EmailAuthCard from './EmailAuthCard';
 import { useTranslation, Language } from '../lib/i18n';
+import { getPlanDisplayName } from '../lib/paymentConfig';
 
 interface SettingsViewProps {
   profile: UserProfile;
@@ -127,23 +128,32 @@ export default function SettingsView({
     }
   };
 
-  const handleSimulatePro = async () => {
+  const handleSimulatePro = async (targetPlan: 'monthly' | 'yearly' = 'monthly') => {
     setIsSimulating(true);
     try {
       const now = new Date();
-      const nextYear = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+      const expiry = new Date(now.getTime());
+      if (targetPlan === 'monthly') {
+        expiry.setMonth(expiry.getMonth() + 1);
+      } else {
+        expiry.setFullYear(expiry.getFullYear() + 1);
+      }
       const activeSub = {
         ...profile.subscription,
         subscriptionStatus: 'premium' as const,
-        plan: 'Yearly Pro',
-        type: 'yearly',
+        plan: targetPlan,
+        type: targetPlan,
         paymentGateway: 'developer_simulation',
         transactionId: `sim_${Date.now()}`,
         purchaseDate: now.toISOString(),
-        expiryDate: nextYear.toISOString(),
+        expiryDate: expiry.toISOString(),
       };
       await onUpdateProfile({ subscription: activeSub });
-      setUpdateMessage(language === 'fr-FR' ? 'Fonctionnalités Premium activées dans le bac à sable.' : 'Pro features activated in sandbox.');
+      setUpdateMessage(
+        language === 'fr-FR' 
+          ? `Fonctionnalités Premium (${targetPlan === 'monthly' ? 'Mensuel' : 'Annuel'}) activées dans le bac à sable.` 
+          : `Pro features (${targetPlan === 'monthly' ? 'Monthly' : 'Yearly'}) activated in sandbox.`
+      );
     } catch (err: any) {
       setUpdateMessage(language === 'fr-FR' ? 'Échec de la simulation d\'activation.' : 'Failed to simulate activation.');
     } finally {
@@ -362,7 +372,9 @@ export default function SettingsView({
                 <div className="text-[10px] text-[#49454F] space-y-1.5 font-mono">
                   <div className="flex justify-between">
                     <span>{t('settings.planLabel')}</span>
-                    <span className="text-[#1D1B20] font-bold capitalize">{profile.subscription.plan || 'Premium'} ({profile.subscription.type || 'Yearly'})</span>
+                    <span className="text-[#1D1B20] font-bold">
+                      {getPlanDisplayName(profile.subscription, language)}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>{t('settings.gatewayLabel')}</span>
@@ -652,15 +664,26 @@ export default function SettingsView({
                   <span>{t('settings.simulateExpire')}</span>
                 </button>
               ) : (
-                <button
-                  onClick={handleSimulatePro}
-                  disabled={isSimulating}
-                  className="w-full py-2 bg-purple-50 text-[#6750A4] hover:bg-purple-100 border border-purple-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                  id="settings-simulate-pro-btn"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-[#6750A4]" />
-                  <span>{t('settings.simulatePro')}</span>
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleSimulatePro('monthly')}
+                    disabled={isSimulating}
+                    className="w-full py-2 bg-purple-50 text-[#6750A4] hover:bg-purple-100 border border-purple-200 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                    id="settings-simulate-pro-monthly-btn"
+                  >
+                    <Sparkles className="w-3 h-3 text-[#6750A4]" />
+                    <span>{language === 'fr-FR' ? 'Tester Mensuel' : 'Simulate Monthly'}</span>
+                  </button>
+                  <button
+                    onClick={() => handleSimulatePro('yearly')}
+                    disabled={isSimulating}
+                    className="w-full py-2 bg-purple-50 text-[#6750A4] hover:bg-purple-100 border border-purple-200 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                    id="settings-simulate-pro-yearly-btn"
+                  >
+                    <Sparkles className="w-3 h-3 text-[#6750A4]" />
+                    <span>{language === 'fr-FR' ? 'Tester Annuel' : 'Simulate Yearly'}</span>
+                  </button>
+                </div>
               )}
 
               <button

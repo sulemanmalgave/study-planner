@@ -20,7 +20,9 @@ import {
   getCountryConfig, 
   GATEWAY_CONFIGS, 
   detectUserCountry, 
-  PlanOption 
+  PlanOption,
+  getPlanDisplayName,
+  inferPlanInterval
 } from '../lib/paymentConfig';
 import { modalBackdropVariants, modalPanelVariants } from '../lib/animations';
 import { AuthUserProfile } from '../lib/emailAuth';
@@ -143,11 +145,19 @@ export default function UpgradeModal({
     if (isOpen) {
       setError(null);
       setPaymentSuccessMessage(null);
+
+      // Sync selected plan with active subscription if present
+      const currentPlan = effectiveSubscription?.plan || (effectiveSubscription as any)?.type;
+      if (currentPlan) {
+        const interval = inferPlanInterval(currentPlan, effectiveSubscription?.purchaseDate, effectiveSubscription?.expiryDate);
+        if (interval === 'monthly' || interval === 'quarterly' || interval === 'yearly') {
+          setSelectedPlanId(interval);
+        }
+      }
       
       detectUserCountry().then((detected) => {
         const countryCode = detected === 'IN' ? 'IN' : 'US';
         setBillingCountry(countryCode);
-        setSelectedPlanId('yearly');
       });
 
       // Query authoritative server-side subscription state
@@ -246,6 +256,9 @@ export default function UpgradeModal({
         headers,
         body: JSON.stringify({
           ...payload,
+          planType: activePlan.id,
+          planId: activePlan.id,
+          plan: activePlan.id,
           userId: authUser?.uid,
           userEmail: authUser?.email,
         }),
@@ -304,6 +317,8 @@ export default function UpgradeModal({
         headers,
         body: JSON.stringify({
           planType: activePlan.id,
+          planId: activePlan.id,
+          plan: activePlan.id,
           country: billingCountry,
           userId: authUser.uid,
           userEmail: authUser.email,
@@ -525,12 +540,8 @@ export default function UpgradeModal({
                           <Zap className="w-3.5 h-3.5 text-[#6750A4]" />
                           {t('settings.planLabel')}
                         </span>
-                        <span className="font-bold text-slate-900 capitalize">
-                          {effectiveSubscription?.plan === 'yearly' || (!effectiveSubscription?.plan && effectiveSubscription?.type === 'yearly')
-                            ? (language === 'fr-FR' ? 'Formule annuelle (Illimitée)' : 'Yearly Plan (Unlimited)')
-                            : effectiveSubscription?.plan 
-                              ? `${effectiveSubscription.plan}` 
-                              : (language === 'fr-FR' ? 'Formule annuelle (Illimitée)' : 'Yearly Plan (Unlimited)')}
+                        <span className="font-bold text-slate-900">
+                          {getPlanDisplayName(effectiveSubscription, language)}
                         </span>
                       </div>
 

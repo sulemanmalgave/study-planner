@@ -1,3 +1,5 @@
+import { Subscription } from '../types';
+
 export type GatewayProvider = 'razorpay' | 'paypal';
 
 export interface PlanOption {
@@ -144,4 +146,62 @@ export async function detectUserCountry(): Promise<string> {
 // Legacy function retained for backward compatibility (no-op)
 export function saveBillingCountry(_countryCode: string): void {
   // Billing country selection is strictly automatic and non-overridable.
+}
+
+/**
+ * Infers the normalized plan interval ('monthly' | 'quarterly' | 'yearly')
+ * based on plan string, transaction properties, or time duration.
+ * Returns null if the plan is generic/unspecified and cannot be resolved by dates.
+ */
+export function inferPlanInterval(
+  plan?: string | null,
+  purchaseDate?: string | null,
+  expiryDate?: string | null
+): 'monthly' | 'quarterly' | 'yearly' | null {
+  const p = (plan || '').toLowerCase();
+  if (p === 'monthly' || p.includes('month') || p.includes('mensuel')) return 'monthly';
+  if (p === 'quarterly' || p.includes('quarter') || p.includes('trimestriel')) return 'quarterly';
+  if (p === 'yearly' || p === 'annual' || p.includes('year') || p.includes('annuel')) return 'yearly';
+
+  // If plan is legacy 'premium' or missing, accurately infer based on validity dates
+  if (purchaseDate && expiryDate) {
+    const start = new Date(purchaseDate).getTime();
+    const end = new Date(expiryDate).getTime();
+    if (!isNaN(start) && !isNaN(end) && end > start) {
+      const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
+      if (diffDays <= 35) return 'monthly';
+      if (diffDays <= 120) return 'quarterly';
+      return 'yearly';
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Provides an authoritative, localized display title for the subscription plan.
+ * Guarantees that users on Monthly plans are clearly and accurately identified,
+ * and never blindly defaults missing plans to "Yearly".
+ */
+export function getPlanDisplayName(
+  sub?: Subscription | null,
+  language: string = 'en'
+): string {
+  if (!sub || sub.subscriptionStatus === 'free') {
+    return language === 'fr-FR' ? 'Gratuit' : 'Free';
+  }
+
+  const interval = inferPlanInterval(sub.plan || (sub as any).type, sub.purchaseDate, sub.expiryDate);
+
+  if (interval === 'monthly') {
+    return language === 'fr-FR' ? 'Formule mensuelle (Illimitée)' : 'Monthly Plan (Unlimited)';
+  }
+  if (interval === 'quarterly') {
+    return language === 'fr-FR' ? 'Formule trimestrielle (Illimitée)' : 'Quarterly Plan (Unlimited)';
+  }
+  if (interval === 'yearly') {
+    return language === 'fr-FR' ? 'Formule annuelle (Illimitée)' : 'Yearly Plan (Unlimited)';
+  }
+
+  return language === 'fr-FR' ? 'Formule Premium (Illimitée)' : 'Premium Plan (Unlimited)';
 }

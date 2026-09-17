@@ -6,14 +6,14 @@
     "subscription": {
       "subscriptionStatus": "premium",
       "plan": "yearly",
-      "paymentGateway": "razorpay",
-      "transactionId": "sim_b1da4eb5-bdd",
-      "purchaseDate": "2026-09-04T03:51:54.933Z",
-      "expiryDate": "2027-09-04T03:51:54.933Z",
+      "paymentGateway": "developer_simulation",
+      "transactionId": "sim_e71b6879-c84",
+      "purchaseDate": "2026-09-17T14:57:08.988Z",
+      "expiryDate": "2027-09-17T14:57:08.988Z",
       "billingCountry": "US",
       "type": "yearly",
-      "paymentProvider": "razorpay",
-      "paymentId": "sim_b1da4eb5-bdd"
+      "paymentProvider": "developer_simulation",
+      "paymentId": "sim_e71b6879-c84"
     },
     "aiUsage": {
       "operationsCount": 9,
