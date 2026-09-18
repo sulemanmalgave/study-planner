@@ -6,6 +6,7 @@ export const getInitialClientState = (): DatabaseSchema => {
       name: 'Student',
       email: '',
       initials: 'ST',
+      language: 'fr-FR',
       subscription: {
         subscriptionStatus: 'free',
         plan: null,

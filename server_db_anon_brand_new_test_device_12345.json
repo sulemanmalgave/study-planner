@@ -3,6 +3,7 @@
     "name": "Student",
     "email": "",
     "initials": "ST",
+    "language": "fr-FR",
     "subscription": {
       "subscriptionStatus": "free",
       "plan": null,
@@ -19,9 +20,8 @@
       "maxMonthlyOperations": 60,
       "minutesTranscribed": 0,
       "maxMonthlyMinutes": 300,
-      "periodStart": "2026-09-18T00:00:00.000Z"
-    },
-    "language": "fr-FR"
+      "periodStart": "2026-09-18T04:17:50.957Z"
+    }
   },
   "courses": [],
   "timetable": [],

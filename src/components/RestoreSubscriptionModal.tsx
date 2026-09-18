@@ -372,7 +372,7 @@ export default function RestoreSubscriptionModal({
                 </label>
                 <input
                   type="text"
-                  placeholder={language === 'fr-FR' ? 'ex. pay_Nabc12345 ou sim_...' : 'e.g. pay_Nabc12345 or sim_...'}
+                  placeholder={language === 'fr-FR' ? 'ex. pay_Nabc12345 ou order_...' : 'e.g. pay_Nabc12345 or order_...'}
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full px-3 py-2 border border-[#E1E3E1] rounded-xl text-xs text-[#1D1B20] focus:outline-none focus:border-[#6750A4]"

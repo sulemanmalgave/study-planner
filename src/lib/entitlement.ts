@@ -15,6 +15,17 @@ export interface EntitlementRecord extends Subscription {
  */
 export function isEntitlementActive(sub?: Subscription | null): boolean {
   if (!sub) return false;
+
+  // DEVELOPER_SIMULATION must never grant Premium in production or UI
+  const gateway = (sub.paymentGateway || (sub as any).paymentProvider || '').toLowerCase();
+  if (gateway === 'developer_simulation' || gateway === 'simulation') {
+    return false;
+  }
+  const txId = sub.transactionId || (sub as any).paymentId || '';
+  if (txId && txId.startsWith('sim_')) {
+    return false;
+  }
+
   const isStatusPremium =
     sub.subscriptionStatus === 'premium' ||
     (sub as any).status === 'active' ||
@@ -50,6 +61,10 @@ export function getStoredEntitlement(): EntitlementRecord | null {
     if (stored) {
       const parsed = JSON.parse(stored) as EntitlementRecord;
       if (parsed && typeof parsed === 'object') {
+        if (!isEntitlementActive(parsed)) {
+          localStorage.removeItem(ENTITLEMENT_STORAGE_KEY);
+          return null;
+        }
         return parsed;
       }
     }
@@ -68,6 +83,22 @@ export function getStoredEntitlement(): EntitlementRecord | null {
         // Idempotent migration write to dedicated store
         localStorage.setItem(ENTITLEMENT_STORAGE_KEY, JSON.stringify(migrated));
         return migrated;
+      } else if (legacySub && !isEntitlementActive(legacySub)) {
+        // If legacy sub was simulated or invalid, clear it
+        if (legacySub.paymentGateway === 'developer_simulation' || (legacySub as any).paymentProvider === 'developer_simulation') {
+          parsedState.profile.subscription = {
+            subscriptionStatus: 'free',
+            plan: null,
+            paymentGateway: null,
+            transactionId: null,
+            purchaseDate: null,
+            expiryDate: null,
+            billingCountry: 'US',
+            paymentProvider: null,
+            paymentId: null,
+          };
+          localStorage.setItem(DB_STATE_STORAGE_KEY, JSON.stringify(parsedState));
+        }
       }
     }
   } catch (err) {
@@ -140,13 +171,23 @@ export function reconcileSubscription(
     return { ...incomingSub };
   }
 
-  // If incoming exists, return it
-  if (incomingSub) {
+  // Sanitize incomingSub if it contains simulation data
+  if (
+    incomingSub &&
+    incomingSub.paymentGateway !== 'developer_simulation' &&
+    (incomingSub as any).paymentProvider !== 'developer_simulation' &&
+    (!incomingSub.transactionId || !incomingSub.transactionId.startsWith('sim_'))
+  ) {
     return incomingSub;
   }
 
-  // Fallback to local or default free
-  if (localEntitlement) {
+  // Fallback to local (if not simulation) or default free
+  if (
+    localEntitlement &&
+    localEntitlement.paymentGateway !== 'developer_simulation' &&
+    (localEntitlement as any).paymentProvider !== 'developer_simulation' &&
+    (!localEntitlement.transactionId || !localEntitlement.transactionId.startsWith('sim_'))
+  ) {
     return localEntitlement;
   }
 

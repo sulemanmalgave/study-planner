@@ -31,8 +31,26 @@ export interface AuthResult {
   subscription: Subscription | null;
 }
 
+export const DEVICE_ID_STORAGE_KEY = 'studyflow_device_id';
+
+export function getOrCreateAnonymousDeviceId(): string {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return 'default';
+  }
+  try {
+    let deviceId = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+    if (!deviceId) {
+      deviceId = 'dev_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now().toString(36);
+      localStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId);
+    }
+    return deviceId;
+  } catch (e) {
+    return 'default';
+  }
+}
+
 /**
- * Helper to build auth headers including optional session token
+ * Helper to build auth headers including optional session token and device-level isolation
  */
 export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
@@ -47,6 +65,10 @@ export function getAuthHeaders(): Record<string, string> {
     const user = getLocalAuthUser();
     if (user?.userId || user?.uid) {
       headers['x-user-id'] = user.userId || user.uid || '';
+    } else {
+      const deviceId = getOrCreateAnonymousDeviceId();
+      headers['x-device-id'] = deviceId;
+      headers['x-user-id'] = `anon_${deviceId}`;
     }
     if (user?.email) {
       headers['x-user-email'] = user.email;

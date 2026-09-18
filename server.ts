@@ -774,6 +774,17 @@ const pairingSessions = new Map<string, PairingSessionData>();
 // Helper function to evaluate subscription status and expiration
 function isSubscriptionActive(sub: any): boolean {
   if (!sub) return false;
+
+  // Never accept developer_simulation in subscription checks
+  const gateway = (sub.paymentGateway || sub.paymentProvider || '').toLowerCase();
+  if (gateway === 'developer_simulation' || gateway === 'simulation') {
+    return false;
+  }
+  const txId = sub.transactionId || sub.paymentId || '';
+  if (txId && (txId.startsWith('sim_e71b6879') || txId.startsWith('sim_dev'))) {
+    return false;
+  }
+
   const isStatusPremium =
     sub.subscriptionStatus === 'premium' ||
     sub.status === 'active' ||
@@ -796,6 +807,7 @@ const getInitialDatabaseState = (): DatabaseSchema => {
       name: 'Student',
       email: '',
       initials: 'ST',
+      language: 'fr-FR',
       subscription: {
         subscriptionStatus: 'free',
         plan: null,
@@ -989,7 +1001,7 @@ interface StoredSubscriptionLedgerEntry {
   userId?: string;
   userEmail?: string;
   plan: 'monthly' | 'quarterly' | 'yearly' | 'premium';
-  paymentGateway: 'razorpay' | 'paypal';
+  paymentGateway: 'razorpay' | 'paypal' | 'developer_simulation';
   amount?: number;
   currency?: string;
   purchaseDate: string;
@@ -1245,11 +1257,21 @@ const getActiveSubscriptionFromLedger = (userId?: string, userEmail?: string): S
 
   const activeEntries = ledger.filter(e => {
     if (e.status !== 'active') return false;
+
+    // Discard any simulated transactions from ledger
+    if (
+      e.paymentGateway === 'developer_simulation' ||
+      (e.transactionId && (e.transactionId.startsWith('sim_e71b') || e.transactionId.startsWith('sim_dev')))
+    ) {
+      return false;
+    }
+
     const expiry = new Date(e.expiryDate).getTime();
     if (isNaN(expiry) || expiry <= now) return false;
 
-    if (userId || userEmail) {
-      // 1. Direct or cross-identity match
+    // Only match explicitly identified users (not anonymous device IDs)
+    if (userId && !userId.startsWith('anon_') || userEmail) {
+      // Direct or cross-identity match
       if (isUserIdentityMatch(e.userId, e.userEmail, userId, userEmail)) {
         if ((userId && !e.userId) || (userEmail && !e.userEmail)) {
           if (userId && !e.userId) e.userId = userId;
@@ -1258,21 +1280,11 @@ const getActiveSubscriptionFromLedger = (userId?: string, userEmail?: string): S
         }
         return true;
       }
-
-      // 2. Backward compatibility: If an active unassigned subscription exists from pre-auth migration,
-      // associate it with the current active user
-      if (!e.userId && !e.userEmail) {
-        if (userId) e.userId = userId;
-        if (userEmail) e.userEmail = userEmail;
-        ledgerModified = true;
-        return true;
-      }
-
       return false;
     }
 
-    // For unauthenticated / anonymous requests, only match unassigned entries
-    return !e.userId && !e.userEmail;
+    // Unauthenticated or anonymous users NEVER match ledger entries
+    return false;
   });
 
   if (ledgerModified) {
@@ -1396,8 +1408,20 @@ const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
       };
     }
 
-    // Protect subscription entitlement: If state has free but ledger has active subscription, reconcile
+    // Protect subscription entitlement: If state has free or invalid simulation, sanitize to free unless ledger has active subscription
     if (!isSubscriptionActive(parsed.profile?.subscription)) {
+      parsed.profile.subscription = {
+        subscriptionStatus: 'free',
+        plan: null,
+        paymentGateway: null,
+        transactionId: null,
+        purchaseDate: null,
+        expiryDate: null,
+        billingCountry: parsed.profile.subscription?.billingCountry || 'US',
+        paymentProvider: null,
+        paymentId: null,
+      };
+
       const activeFromLedger = getActiveSubscriptionFromLedger(userId, userEmail);
       if (activeFromLedger) {
         parsed.profile.subscription = {
@@ -1434,6 +1458,18 @@ const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
     if (!fallback.audioLectures) fallback.audioLectures = [];
     if (!fallback.studyMaterials) fallback.studyMaterials = [];
     if (!isSubscriptionActive(fallback.profile?.subscription)) {
+      fallback.profile.subscription = {
+        subscriptionStatus: 'free',
+        plan: null,
+        paymentGateway: null,
+        transactionId: null,
+        purchaseDate: null,
+        expiryDate: null,
+        billingCountry: fallback.profile.subscription?.billingCountry || 'US',
+        paymentProvider: null,
+        paymentId: null,
+      };
+
       const activeFromLedger = getActiveSubscriptionFromLedger(userId, userEmail);
       if (activeFromLedger) {
         fallback.profile.subscription = {
@@ -1458,6 +1494,18 @@ const writeDB = (data: DatabaseSchema, userId?: string, userEmail?: string) => {
   const memKey = userId ? `user_${userId}` : 'default';
   // Entitlement protection: Prevent accidental downgrade if ledger has active subscription
   if (!isSubscriptionActive(data.profile?.subscription)) {
+    data.profile.subscription = {
+      subscriptionStatus: 'free',
+      plan: null,
+      paymentGateway: null,
+      transactionId: null,
+      purchaseDate: null,
+      expiryDate: null,
+      billingCountry: data.profile.subscription?.billingCountry || 'US',
+      paymentProvider: null,
+      paymentId: null,
+    };
+
     const activeFromLedger = getActiveSubscriptionFromLedger(userId, userEmail);
     if (activeFromLedger) {
       data.profile.subscription = {
@@ -1531,12 +1579,19 @@ const getEffectiveUser = (req: express.Request): { userId?: string; userEmail?: 
     }
   }
 
-  // 2. Fallback to headers (for backward compatibility)
-  const userId = (req.headers['x-user-id'] || req.query.userId || req.body?.userId || '') as string;
-  const userEmail = (req.headers['x-user-email'] || req.query.userEmail || req.body?.userEmail || '') as string;
+  // 2. Fallback to headers (for backward compatibility and device isolation)
+  const rawUserId = (req.headers['x-user-id'] || req.query.userId || req.body?.userId || '') as string;
+  const rawUserEmail = (req.headers['x-user-email'] || req.query.userEmail || req.body?.userEmail || '') as string;
+  const deviceId = (req.headers['x-device-id'] || '') as string;
+
+  let userId: string | undefined = rawUserId ? String(rawUserId).trim() : undefined;
+  if (!userId && deviceId) {
+    userId = `anon_${String(deviceId).trim()}`;
+  }
+
   return {
-    userId: userId ? String(userId).trim() : undefined,
-    userEmail: userEmail ? String(userEmail).trim() : undefined,
+    userId,
+    userEmail: rawUserEmail ? String(rawUserEmail).trim() : undefined,
   };
 };
 
@@ -1546,21 +1601,16 @@ function checkUserHasActiveSubscription(req: express.Request, db?: DatabaseSchem
     const { userId, userEmail } = getEffectiveUser(req);
     // 1. Check ledger
     const activeEntry = getActiveSubscriptionFromLedger(userId, userEmail);
-    if (activeEntry) return true;
+    if (activeEntry && isSubscriptionActive(activeEntry)) return true;
 
     // 2. Check profile subscription in db
     const currentDb = db || readDB(userId, userEmail);
     const sub = currentDb?.profile?.subscription;
-    if (sub && ((sub as any).status === 'active' || sub.subscriptionStatus === 'premium' || isSubscriptionActive(sub))) {
+    if (sub && isSubscriptionActive(sub)) {
       return true;
     }
 
-    // 3. Client forwarded header/body hint (for stateless or serverless environments)
-    const subHeader = req.headers['x-subscription-status'];
-    if (subHeader === 'active' || subHeader === 'premium') return true;
-    if (req.body?.isPremium === true || req.body?.subscription?.status === 'active') return true;
-
-    // 4. Primary account holder / premium user fallback
+    // 3. Primary account holder / premium user fallback
     if (userEmail && (userEmail.toLowerCase().includes('suleman') || userEmail.toLowerCase() === 'sulemanmalgave1@gmail.com')) {
       return true;
     }
@@ -2025,11 +2075,7 @@ app.put('/api/state', (req, res) => {
     try {
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
-      let list = db.audioLectures || [];
-      if (list.length === 0) {
-        const defaultDb = readDB();
-        list = defaultDb.audioLectures || [];
-      }
+      const list = db.audioLectures || [];
       res.json(list);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch audio lectures' });
@@ -2087,17 +2133,6 @@ app.put('/api/state', (req, res) => {
       let index = targetDb.audioLectures.findIndex((al) => al.id === req.params.id);
 
       if (index === -1) {
-        const defaultDb = readDB();
-        const defaultIdx = (defaultDb.audioLectures || []).findIndex((al) => al.id === req.params.id);
-        if (defaultIdx !== -1) {
-          defaultDb.audioLectures[defaultIdx] = {
-            ...defaultDb.audioLectures[defaultIdx],
-            ...req.body,
-            updatedAt: new Date().toISOString(),
-          };
-          writeDB(defaultDb);
-          return res.json(defaultDb.audioLectures[defaultIdx]);
-        }
         return res.status(404).json({ error: 'Audio lecture not found' });
       }
 
@@ -2120,11 +2155,6 @@ app.put('/api/state', (req, res) => {
       if (db.audioLectures) {
         db.audioLectures = db.audioLectures.filter((al) => al.id !== req.params.id);
         writeDB(db, userId, userEmail);
-      }
-      const defaultDb = readDB();
-      if (defaultDb.audioLectures) {
-        defaultDb.audioLectures = defaultDb.audioLectures.filter((al) => al.id !== req.params.id);
-        writeDB(defaultDb);
       }
       res.json({ success: true });
     } catch (error) {
@@ -2191,14 +2221,6 @@ app.put('/api/state', (req, res) => {
 
       let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
       let targetDb = db;
-      if (!lecture) {
-        const defaultDb = readDB();
-        const found = (defaultDb.audioLectures || []).find((al) => al.id === req.params.id);
-        if (found) {
-          lecture = found;
-          targetDb = defaultDb;
-        }
-      }
 
       // Stateless/serverless fallback: reconstruct lecture object from client request
       if (!lecture) {
@@ -2311,14 +2333,6 @@ app.put('/api/state', (req, res) => {
 
       let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
       let targetDb = db;
-      if (!lecture) {
-        const defaultDb = readDB();
-        const found = (defaultDb.audioLectures || []).find((al) => al.id === req.params.id);
-        if (found) {
-          lecture = found;
-          targetDb = defaultDb;
-        }
-      }
 
       // Stateless/serverless fallback: reconstruct lecture object from client request
       if (!lecture) {
@@ -2472,14 +2486,6 @@ Ensure clarity, rigor, and actionable revision value for students.`
 
       let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
       let targetDb = db;
-      if (!lecture) {
-        const defaultDb = readDB();
-        const found = (defaultDb.audioLectures || []).find((al) => al.id === req.params.id);
-        if (found) {
-          lecture = found;
-          targetDb = defaultDb;
-        }
-      }
 
       // Stateless/serverless fallback: reconstruct lecture object from client request
       if (!lecture) {
@@ -2651,14 +2657,6 @@ Format cleanly in Markdown with bullet points:
 
       let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
       let targetDb = db;
-      if (!lecture) {
-        const defaultDb = readDB();
-        const found = (defaultDb.audioLectures || []).find((al) => al.id === req.params.id);
-        if (found) {
-          lecture = found;
-          targetDb = defaultDb;
-        }
-      }
 
       // Stateless/serverless fallback: reconstruct lecture object from client request
       if (!lecture) {
@@ -2969,11 +2967,10 @@ Structure in clean Markdown:
         }
       }
 
-      // Self-healing database fallback if container restarted
+      // Database lookup for stored file
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
-      const defaultDb = readDB();
-      const allMaterials = [...(db.studyMaterials || []), ...(defaultDb.studyMaterials || [])];
+      const allMaterials = db.studyMaterials || [];
       const match = allMaterials.find((m) =>
         (m.storagePath && m.storagePath.includes(filename)) ||
         (m.storageKey && m.storageKey.includes(filename)) ||
@@ -3320,10 +3317,6 @@ Structure in clean Markdown:
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
       let material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
-      if (!material && userId) {
-        const defaultDb = readDB();
-        material = (defaultDb.studyMaterials || []).find((m) => m.id === req.params.id);
-      }
       if (!material) {
         return res.status(404).json({ error: 'Study material not found' });
       }
@@ -3368,10 +3361,6 @@ Structure in clean Markdown:
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
       let material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
-      if (!material && userId) {
-        const defaultDb = readDB();
-        material = (defaultDb.studyMaterials || []).find((m) => m.id === req.params.id);
-      }
       if (!material) {
         return res.status(404).json({ error: 'Study material not found' });
       }
@@ -3418,10 +3407,6 @@ Structure in clean Markdown:
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
       let material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
-      if (!material && userId) {
-        const defaultDb = readDB();
-        material = (defaultDb.studyMaterials || []).find((m) => m.id === req.params.id);
-      }
       if (!material) {
         return res.status(404).json({ error: 'Study material not found' });
       }
@@ -3500,18 +3485,6 @@ Structure in clean Markdown:
       if (!db.studyMaterials) db.studyMaterials = [];
       let index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
 
-      if (index === -1 && userId) {
-        const defaultDb = readDB();
-        const defIdx = (defaultDb.studyMaterials || []).findIndex((m) => m.id === req.params.id);
-        if (defIdx !== -1) {
-          const item = defaultDb.studyMaterials[defIdx];
-          defaultDb.studyMaterials.splice(defIdx, 1);
-          writeDB(defaultDb);
-          db.studyMaterials.push(item);
-          index = db.studyMaterials.length - 1;
-        }
-      }
-
       if (index === -1) {
         return res.status(404).json({ error: 'Study material not found' });
       }
@@ -3543,16 +3516,6 @@ Structure in clean Markdown:
       const db = readDB(userId, userEmail);
       if (!db.studyMaterials) db.studyMaterials = [];
       let material = db.studyMaterials.find((m) => m.id === req.params.id);
-
-      if (!material && userId) {
-        const defaultDb = readDB();
-        const defIdx = (defaultDb.studyMaterials || []).findIndex((m) => m.id === req.params.id);
-        if (defIdx !== -1) {
-          material = defaultDb.studyMaterials[defIdx];
-          defaultDb.studyMaterials.splice(defIdx, 1);
-          writeDB(defaultDb);
-        }
-      }
 
       if (material) {
         // Delete from Vercel Blob if stored in persistent cloud storage
@@ -3692,14 +3655,6 @@ Structure in clean Markdown:
       if (!db.studyMaterials) db.studyMaterials = [];
       let index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
       let targetDb = db;
-      if (index === -1) {
-        const defaultDb = readDB();
-        const defIdx = (defaultDb.studyMaterials || []).findIndex((m) => m.id === req.params.id);
-        if (defIdx !== -1) {
-          targetDb = defaultDb;
-          index = defIdx;
-        }
-      }
 
       if (index === -1) {
         return res.status(404).json({ error: 'Study material not found' });
@@ -3817,14 +3772,6 @@ ${payload.text}`
       if (!db.studyMaterials) db.studyMaterials = [];
       let index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
       let targetDb = db;
-      if (index === -1) {
-        const defaultDb = readDB();
-        const defIdx = (defaultDb.studyMaterials || []).findIndex((m) => m.id === req.params.id);
-        if (defIdx !== -1) {
-          targetDb = defaultDb;
-          index = defIdx;
-        }
-      }
 
       if (index === -1) {
         return res.status(404).json({ error: 'Study material not found' });
@@ -3942,14 +3889,6 @@ ${payload.text}`
       if (!db.studyMaterials) db.studyMaterials = [];
       let index = db.studyMaterials.findIndex((m) => m.id === req.params.id);
       let targetDb = db;
-      if (index === -1) {
-        const defaultDb = readDB();
-        const defIdx = (defaultDb.studyMaterials || []).findIndex((m) => m.id === req.params.id);
-        if (defIdx !== -1) {
-          targetDb = defaultDb;
-          index = defIdx;
-        }
-      }
 
       if (index === -1) {
         return res.status(404).json({ error: 'Study material not found' });
@@ -5764,10 +5703,14 @@ Format cleanly in Markdown with bullet points:
     }
   });
 
-  // Simulate Pro Expiration (Sandbox testing - preserves 100% of user data)
+  // Simulate Pro Expiration (Sandbox testing - dev only)
   app.post('/api/subscription/simulate-expire', (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Simulation endpoints are disabled in production.' });
+    }
     try {
-      const db = readDB();
+      const reqUser = getEffectiveUser(req);
+      const db = readDB(reqUser.userId, reqUser.userEmail);
       const pastDate = new Date();
       pastDate.setDate(pastDate.getDate() - 1); // Expired yesterday
 
@@ -5779,13 +5722,15 @@ Format cleanly in Markdown with bullet points:
 
       // Mark ledger entries as expired so testing works properly
       const ledger = readSubscriptionsLedger();
-      ledger.forEach(e => {
-        e.status = 'expired';
+      ledger.forEach((e) => {
+        if (e.userId === reqUser.userId || (reqUser.userEmail && e.userEmail === reqUser.userEmail)) {
+          e.status = 'expired';
+        }
       });
       writeSubscriptionsLedger(ledger);
 
       // Explicitly verify NO data collections were modified
-      writeDB(db);
+      writeDB(db, reqUser.userId, reqUser.userEmail);
       res.json({
         success: true,
         message: 'Subscription set to expired. All user data, courses, notes, and audio lectures remain safely preserved.',
@@ -5796,8 +5741,11 @@ Format cleanly in Markdown with bullet points:
     }
   });
 
-  // Simulate Pro Activation / Renewal (Sandbox testing - preserves 100% of user data)
+  // Simulate Pro Activation / Renewal (Sandbox testing - dev only)
   app.post('/api/subscription/simulate-pro', (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'FORBIDDEN', message: 'Simulation endpoints are disabled in production.' });
+    }
     try {
       const { planType } = req.body || {};
       const targetPlan: 'monthly' | 'yearly' = planType === 'monthly' ? 'monthly' : 'yearly';
@@ -5825,13 +5773,13 @@ Format cleanly in Markdown with bullet points:
         paymentId: simTxId,
       };
 
-      // Record in ledger so it persists across container restarts
+      // Record in ledger with developer_simulation so it doesn't impersonate real payment gateway
       recordSubscriptionInLedger({
         transactionId: simTxId,
         userId: reqUser.userId,
         userEmail: reqUser.userEmail,
         plan: targetPlan,
-        paymentGateway: 'razorpay',
+        paymentGateway: 'developer_simulation',
         amount: targetPlan === 'monthly' ? 1.99 : 19.99,
         currency: 'USD',
         purchaseDate: now.toISOString(),
@@ -5856,7 +5804,8 @@ Format cleanly in Markdown with bullet points:
   // Manual Reset to default state (preserves active subscription)
   app.post('/api/reset', (req, res) => {
     try {
-      const currentDb = readDB();
+      const reqUser = getEffectiveUser(req);
+      const currentDb = readDB(reqUser.userId, reqUser.userEmail);
       const activeSub = isSubscriptionActive(currentDb?.profile?.subscription)
         ? currentDb.profile.subscription
         : null;
@@ -5865,7 +5814,7 @@ Format cleanly in Markdown with bullet points:
       if (activeSub) {
         defaultState.profile.subscription = { ...activeSub };
       }
-      writeDB(defaultState);
+      writeDB(defaultState, reqUser.userId, reqUser.userEmail);
       res.json({ success: true, state: defaultState });
     } catch (error) {
       res.status(500).json({ error: 'Failed to reset state' });

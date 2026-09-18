@@ -643,60 +643,62 @@ export default function SettingsView({
             )}
           </div>
 
-          {/* Developer Testing Control box */}
-          <div className="p-5 bg-white border border-[#E1E3E1] rounded-2xl space-y-4">
-            <h4 className="text-xs font-extrabold text-[#B3261E] uppercase tracking-wider border-b border-[#E1E3E1] pb-2">
-              {t('settings.devSandbox')}
-            </h4>
-            <p className="text-[10px] text-[#49454F] leading-relaxed">
-              {t('settings.devSandboxDesc')}
-            </p>
+          {/* Developer Testing Control box - Hidden in Production */}
+          {import.meta.env.DEV && (
+            <div className="p-5 bg-white border border-[#E1E3E1] rounded-2xl space-y-4">
+              <h4 className="text-xs font-extrabold text-[#B3261E] uppercase tracking-wider border-b border-[#E1E3E1] pb-2">
+                {t('settings.devSandbox')}
+              </h4>
+              <p className="text-[10px] text-[#49454F] leading-relaxed">
+                {t('settings.devSandboxDesc')}
+              </p>
 
-            <div className="space-y-2">
-              {isPremium ? (
+              <div className="space-y-2">
+                {isPremium ? (
+                  <button
+                    onClick={handleSimulateExpire}
+                    disabled={isSimulating}
+                    className="w-full py-2 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                    id="settings-simulate-expire-btn"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>{t('settings.simulateExpire')}</span>
+                  </button>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handleSimulatePro('monthly')}
+                      disabled={isSimulating}
+                      className="w-full py-2 bg-purple-50 text-[#6750A4] hover:bg-purple-100 border border-purple-200 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      id="settings-simulate-pro-monthly-btn"
+                    >
+                      <Sparkles className="w-3 h-3 text-[#6750A4]" />
+                      <span>{language === 'fr-FR' ? 'Tester Mensuel' : 'Simulate Monthly'}</span>
+                    </button>
+                    <button
+                      onClick={() => handleSimulatePro('yearly')}
+                      disabled={isSimulating}
+                      className="w-full py-2 bg-purple-50 text-[#6750A4] hover:bg-purple-100 border border-purple-200 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      id="settings-simulate-pro-yearly-btn"
+                    >
+                      <Sparkles className="w-3 h-3 text-[#6750A4]" />
+                      <span>{language === 'fr-FR' ? 'Tester Annuel' : 'Simulate Yearly'}</span>
+                    </button>
+                  </div>
+                )}
+
                 <button
-                  onClick={handleSimulateExpire}
-                  disabled={isSimulating}
-                  className="w-full py-2 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                  id="settings-simulate-expire-btn"
+                  onClick={handleReset}
+                  disabled={isResetting}
+                  className="w-full py-2 bg-[#FDECEB] text-[#B3261E] hover:bg-[#FDECEB]/80 border border-[#F9DEDC] font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                  id="settings-sandbox-reset"
                 >
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                  <span>{t('settings.simulateExpire')}</span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
+                  <span>{t('settings.restoreSandbox')}</span>
                 </button>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => handleSimulatePro('monthly')}
-                    disabled={isSimulating}
-                    className="w-full py-2 bg-purple-50 text-[#6750A4] hover:bg-purple-100 border border-purple-200 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                    id="settings-simulate-pro-monthly-btn"
-                  >
-                    <Sparkles className="w-3 h-3 text-[#6750A4]" />
-                    <span>{language === 'fr-FR' ? 'Tester Mensuel' : 'Simulate Monthly'}</span>
-                  </button>
-                  <button
-                    onClick={() => handleSimulatePro('yearly')}
-                    disabled={isSimulating}
-                    className="w-full py-2 bg-purple-50 text-[#6750A4] hover:bg-purple-100 border border-purple-200 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                    id="settings-simulate-pro-yearly-btn"
-                  >
-                    <Sparkles className="w-3 h-3 text-[#6750A4]" />
-                    <span>{language === 'fr-FR' ? 'Tester Annuel' : 'Simulate Yearly'}</span>
-                  </button>
-                </div>
-              )}
-
-              <button
-                onClick={handleReset}
-                disabled={isResetting}
-                className="w-full py-2 bg-[#FDECEB] text-[#B3261E] hover:bg-[#FDECEB]/80 border border-[#F9DEDC] font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
-                id="settings-sandbox-reset"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
-                <span>{t('settings.restoreSandbox')}</span>
-              </button>
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
 

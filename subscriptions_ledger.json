@@ -1,16 +1,14 @@
 [
   {
-    "transactionId": "sim_b1da4eb5-bdd",
+    "transactionId": "sim_6dd654f9-91b",
     "plan": "yearly",
-    "paymentGateway": "razorpay",
+    "paymentGateway": "developer_simulation",
     "amount": 19.99,
     "currency": "USD",
-    "purchaseDate": "2026-09-04T03:51:54.933Z",
-    "expiryDate": "2027-09-04T03:51:54.933Z",
+    "purchaseDate": "2026-09-18T04:18:01.232Z",
+    "expiryDate": "2027-09-18T04:18:01.232Z",
     "billingCountry": "US",
-    "verifiedAt": "2026-09-04T03:51:54.933Z",
-    "status": "active",
-    "userId": "ljZZVPYbazRFOcqna2WORbPL0k42",
-    "userEmail": "sulemanmalgave1@gmail.com"
+    "verifiedAt": "2026-09-18T04:18:01.232Z",
+    "status": "active"
   }
 ]

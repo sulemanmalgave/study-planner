@@ -55,15 +55,25 @@ export function sanitizeSchema(state: any): DatabaseSchema {
   const fallback = getInitialClientState();
   if (!state || typeof state !== 'object') return fallback;
 
+  let sub = state.profile?.subscription || fallback.profile.subscription;
+  if (
+    sub &&
+    (sub.paymentGateway === 'developer_simulation' ||
+      (sub as any).paymentProvider === 'developer_simulation' ||
+      (sub.transactionId && sub.transactionId.startsWith('sim_e71b')))
+  ) {
+    sub = fallback.profile.subscription;
+  }
+
   return {
     profile: {
       name: state.profile?.name || fallback.profile.name,
       email: state.profile?.email || fallback.profile.email,
       initials: state.profile?.initials || fallback.profile.initials,
       photoURL: state.profile?.photoURL || null,
-      subscription: state.profile?.subscription || fallback.profile.subscription,
+      subscription: sub,
       aiUsage: state.profile?.aiUsage || fallback.profile.aiUsage,
-      language: state.profile?.language || (typeof window !== 'undefined' ? localStorage.getItem('studyflow_language') || 'en' : 'en'),
+      language: state.profile?.language || (typeof window !== 'undefined' ? localStorage.getItem('studyflow_language') || 'fr-FR' : 'fr-FR'),
     },
     courses: Array.isArray(state.courses) ? state.courses : [],
     timetable: Array.isArray(state.timetable) ? state.timetable : [],

@@ -486,7 +486,7 @@ export default function App() {
     try {
       const response = await fetch('/api/profile', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(updatedProfile),
       }).catch(() => null);
 
@@ -524,7 +524,7 @@ export default function App() {
     try {
       const response = await fetch('/api/courses', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(course),
       });
       const data = await response.json();
@@ -542,7 +542,7 @@ export default function App() {
     try {
       const response = await fetch(`/api/courses/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(course),
       });
       const data = await response.json();
@@ -582,7 +582,7 @@ export default function App() {
       });
 
       // 2. Notify backend endpoint
-      await fetch(`/api/courses/${id}`, { method: 'DELETE' }).catch(err => {
+      await fetch(`/api/courses/${id}`, { method: 'DELETE', headers: getAuthHeaders() }).catch(err => {
         console.warn('Backend course deletion warning:', err);
       });
     } catch (e) {
@@ -599,7 +599,7 @@ export default function App() {
     try {
       const response = await fetch('/api/timetable', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(period),
       });
       const data = await response.json();
@@ -617,7 +617,7 @@ export default function App() {
     try {
       const response = await fetch(`/api/timetable/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(period),
       });
       const data = await response.json();
@@ -637,7 +637,7 @@ export default function App() {
 
   const handleDeleteTimetable = async (id: string) => {
     try {
-      const response = await fetch(`/api/timetable/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/timetable/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
       if (response.ok) {
         setDbState(prev => prev ? { ...prev, timetable: prev.timetable.filter(t => t.id !== id) } : null);
       }
@@ -656,7 +656,7 @@ export default function App() {
     try {
       const response = await fetch('/api/assignments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(assignment),
       });
       const data = await response.json();
@@ -674,7 +674,7 @@ export default function App() {
     try {
       const response = await fetch(`/api/assignments/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(assignment),
       });
       const data = await response.json();
@@ -694,7 +694,7 @@ export default function App() {
 
   const handleDeleteAssignment = async (id: string) => {
     try {
-      const response = await fetch(`/api/assignments/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/assignments/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
       if (response.ok) {
         setDbState(prev => prev ? { ...prev, assignments: prev.assignments.filter(a => a.id !== id) } : null);
       }
@@ -712,7 +712,7 @@ export default function App() {
     try {
       const response = await fetch('/api/exams', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(exam),
       });
       const data = await response.json();
@@ -730,7 +730,7 @@ export default function App() {
     try {
       const response = await fetch(`/api/exams/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(exam),
       });
       const data = await response.json();
@@ -750,7 +750,7 @@ export default function App() {
 
   const handleDeleteExam = async (id: string) => {
     try {
-      const response = await fetch(`/api/exams/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/exams/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
       if (response.ok) {
         setDbState(prev => prev ? { ...prev, exams: prev.exams.filter(e => e.id !== id) } : null);
       }
@@ -768,7 +768,7 @@ export default function App() {
     try {
       const response = await fetch('/api/notes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(note),
       });
       const data = await response.json();
@@ -786,7 +786,7 @@ export default function App() {
     try {
       const response = await fetch(`/api/notes/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(note),
       });
       const data = await response.json();
@@ -806,7 +806,7 @@ export default function App() {
 
   const handleDeleteNote = async (id: string) => {
     try {
-      const response = await fetch(`/api/notes/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/notes/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
       if (response.ok) {
         setDbState(prev => prev ? { ...prev, notes: prev.notes.filter(n => n.id !== id) } : null);
       }
@@ -819,7 +819,7 @@ export default function App() {
     try {
       const response = await fetch('/api/sessions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(session),
       });
       const data = await response.json();
@@ -840,7 +840,7 @@ export default function App() {
     try {
       const response = await fetch('/api/audio-lectures', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(lectureData),
       });
 
@@ -874,7 +874,7 @@ export default function App() {
     try {
       await fetch(`/api/audio-lectures/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(updates),
       }).catch(() => null);
 
@@ -895,7 +895,7 @@ export default function App() {
 
   const handleDeleteAudioLecture = async (id: string) => {
     try {
-      await fetch(`/api/audio-lectures/${id}`, { method: 'DELETE' }).catch(() => null);
+      await fetch(`/api/audio-lectures/${id}`, { method: 'DELETE', headers: getAuthHeaders() }).catch(() => null);
 
       setDbState(prev => {
         if (!prev) return null;
@@ -925,7 +925,7 @@ export default function App() {
     try {
       await fetch(`/api/study-materials/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(updates),
       }).catch(() => null);
 
@@ -946,7 +946,7 @@ export default function App() {
 
   const handleDeleteStudyMaterial = async (id: string) => {
     try {
-      await fetch(`/api/study-materials/${id}`, { method: 'DELETE' }).catch(() => null);
+      await fetch(`/api/study-materials/${id}`, { method: 'DELETE', headers: getAuthHeaders() }).catch(() => null);
 
       setDbState(prev => {
         if (!prev) return null;
@@ -966,7 +966,7 @@ export default function App() {
       const activeEntitlement = getStoredEntitlement();
       const hasActive = isEntitlementActive(activeEntitlement);
 
-      const response = await fetch('/api/reset', { method: 'POST' }).catch(() => null);
+      const response = await fetch('/api/reset', { method: 'POST', headers: getAuthHeaders() }).catch(() => null);
       if (response && response.ok) {
         const data = await response.json();
         const resetState = data.state as DatabaseSchema;

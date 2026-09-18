@@ -4,23 +4,22 @@
     "email": "",
     "initials": "ST",
     "subscription": {
-      "subscriptionStatus": "premium",
-      "plan": "yearly",
-      "paymentGateway": "developer_simulation",
-      "transactionId": "sim_e71b6879-c84",
-      "purchaseDate": "2026-09-17T14:57:08.988Z",
-      "expiryDate": "2027-09-17T14:57:08.988Z",
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
       "billingCountry": "US",
-      "type": "yearly",
-      "paymentProvider": "developer_simulation",
-      "paymentId": "sim_e71b6879-c84"
+      "paymentProvider": null,
+      "paymentId": null
     },
     "aiUsage": {
-      "operationsCount": 9,
+      "operationsCount": 0,
       "maxMonthlyOperations": 60,
       "minutesTranscribed": 0,
       "maxMonthlyMinutes": 300,
-      "periodStart": "2026-09-04T03:52:12.674Z"
+      "periodStart": "2026-09-18T00:00:00.000Z"
     },
     "language": "fr-FR"
   },
@@ -30,49 +29,6 @@
   "exams": [],
   "notes": [],
   "studySessions": [],
-  "audioLectures": [
-    {
-      "id": "al_4f9f4175",
-      "userId": "default",
-      "courseId": "",
-      "subjectName": "General",
-      "section": "fg",
-      "title": "rf",
-      "audioDataUrl": "",
-      "originalFileName": "AUD-20260827-WA0002.mp3",
-      "fileSize": 314157,
-      "fileType": "audio/mpeg",
-      "duration": 52,
-      "transcript": "Welcome to Wedding Checklist, your all-in-one planner for the perfect celebration.\n\nClipboard: Start from the home screen, clean, simple, and beautifully organized to keep your plans on track.\n\nWhite heavy check mark: Create and manage your wedding checklist easily, add tasks, set reminders, and track every detail stress-free.\n\nBusts in silhouette: Manage your guest list with ease, add names, update RSVP status, and stay perfectly organized for your big day.\n\nMoney bag: Keep your budget clear and in control, track expenses and compare planned versus actual costs in one place.\n\nLabel: Plan your vendors smartly, manage contacts, prices, and booking status without missing a thing.\n\nSparkling heart: Wedding Checklist, designed to make your journey simple, smooth, and stress-free.",
-      "transcriptGeneratedAt": "2026-09-10T07:15:13.743Z",
-      "summary": "Here is a comprehensive study summary based on the presentation:\n\n---\n\n### 1. Lecture Overview & Primary Objectives\n* **Title/Subject:** Wedding Checklist Application Overview\n* **Primary Objective:** To introduce the interface, core functional modules, and organizational architecture of the **Wedding Checklist** digital planning tool.\n* **Goal:** Demonstrate how centralized digital tools streamline event coordination, mitigate stress, and ensure systematic execution across timeline, guest management, budgeting, and vendor relations.\n\n---\n\n### 2. Core Themes & Theoretical Framework\n* **Centralization of Event Workflow:** Shifting from fragmented notes to an integrated, all-in-one management hub.\n* **Variance & Financial Tracking:** Continuous monitoring of projected figures versus actual operational costs.\n* **Stakeholder & Task Lifecycle Management:** Tracking participant engagement (guests, vendors) and action items across predefined checkpoints.\n\n---\n\n### 3. Key Concepts & Detailed Explanations\n\n#### A. Central Dashboard (Home Screen)\n* **Design Philosophy:** Minimalist, clean, and structured interface intended to minimize cognitive load during complex planning cycles.\n* **Role:** Serves as the primary operational baseline to view upcoming milestones and overall progress.\n\n#### B. Dynamic Task & Checklist Management\n* **Feature Set:** Task creation, milestone scheduling, and automated reminders.\n* **Functionality:** Prevents oversight through systematic breakdown of deliverables into discrete, time-stamped checkpoints.\n\n#### C. Guest List & RSVP Operations\n* **Feature Set:** Contact compilation, party sizing, and RSVP tracking.\n* **Functionality:** Real-time headcount updates essential for venue logistics, seating arrangements, and catering accuracy.\n\n#### D. Budget & Expense Tracking\n* **Feature Set:** Dual-entry expense auditing (planned/budgeted vs. actual realized costs).\n* **Functionality:** Enforces financial discipline and real-time visibility over cost variances.\n\n#### E. Vendor Coordination & Procurement\n* **Feature Set:** Centralized vendor contact directory, price tracking, and booking status management.\n* **Functionality:** Standardizes service provider oversight (e.g., florists, caterers, photographers) to ensure contractual deadlines and service expectations are fulfilled.\n\n---\n\n### 4. Practical Examples & Real-world Applications\n* **Budget Reconciliation:** Comparing an allocated $5,000 venue deposit against invoice receipts directly in the app to identify budget surpluses or deficits instantly.\n* **RSVP Headcount Sync:** Updating an RSVP status immediately when a guest confirms attendance, allowing for real-time adjustments to table configurations and meal counts.\n* **Vendor Contract Auditing:** Logging photographer booking status, quoted package rates, and direct contact numbers into a single tab for quick access during vendor meetings.\n\n---\n\n### 5. High-Yield Revision Takeaways\n* **Platform Identity:** \"Wedding Checklist\" – an all-in-one digital planning framework.\n* **Five Core Functional Pillars:**\n  1. **Home Screen / Hub:** Streamlined overview and navigational starting point.\n  2. **Checklist & Reminders:** Detailed, time-bound task management.\n  3. **Guest Management:** RSVP tracking and head-count maintenance.\n  4. **Financial Control:** Continuous planned vs. actual expense auditing.\n  5. **Vendor Management:** Comprehensive contact, pricing, and booking tracking.\n* **Key User Value:** Designed to replace fragmented workflows with a clean, stress-free, and systematized planning process.",
-      "summaryGeneratedAt": "2026-09-10T07:14:06.362Z",
-      "studyNotes": "fguijjh jjhhgg",
-      "studyNotesGeneratedAt": null,
-      "keyPoints": "Based on the lecture content provided regarding the \"Wedding Checklist\" system, here are the high-yield takeaways and essential concepts organized for your review.\n\n### 📌 Critical Exam Takeaways\n-   **Centralized Lifecycle Management**: The system functions as a modular project management framework designed to track four critical domains: Task Management, Guest Relations, Financial Tracking, and Vendor Procurement.\n-   **Efficiency through Standardization**: The core principle of the platform is the reduction of cognitive load by consolidating disparate wedding planning elements (budget, RSVPs, tasks) into a single interface.\n-   **Data-Driven Planning**: The \"Budget\" and \"Vendor\" modules prioritize quantitative tracking, allowing for the comparison of projected (planned) vs. realized (actual) metrics to maintain fiscal discipline.\n\n### 🔑 Essential Terms & Definitions\n-   **Task Management**: The administrative process of creating, sequencing, and setting reminders for time-bound wedding activities; essential for meeting project deadlines.\n-   **RSVP Status**: The binary or categorical tracking of guest attendance; critical for logistics and headcount-dependent budgeting.\n-   **Budgeting (Planned vs. Actual)**: The financial control mechanism that compares the initial allocation of funds against realized expenditures to prevent cost overruns.\n-   **Vendor Procurement**: The systematic management of third-party service providers, focusing on contact retention, pricing negotiation, and contractual status.\n\n### ⚠️ Common Pitfalls & Clarifications\n-   **Pitfall: Managing in Silos**: A common failure point is treating the \"Budget\" and \"Vendor\" modules as independent; always remember that vendor contracts directly dictate the \"Actual\" costs in the budget module.\n-   **Clarification: The Distinction Between \"Task\" and \"Logistics\"**: Do not confuse the \"Checklist\" (action-oriented tasks) with \"Guest List\" management (relational/logistical data). Tasks drive the *process*, while guest management drives the *scale* of the event.\n-   **Memory Aid**: Remember the **\"T-G-B-V\" Framework** to master the system components:\n-   **T**asks (Workflow)\n-   **G**uests (Demographics)\n-   **B**udget (Finance)\n-   **V**endors (Supply Chain)",
-      "keyPointsGeneratedAt": "2026-09-11T12:59:11.062Z",
-      "createdAt": "2026-09-09T06:19:13.087Z",
-      "updatedAt": "2026-09-11T12:59:12.268Z"
-    },
-    {
-      "id": "test-lecture-1",
-      "userId": "default",
-      "title": "Introduction to Biology",
-      "subjectName": "Biology 101",
-      "section": "Cellular Respiration",
-      "originalFileName": "lecture.mp3",
-      "audioDataUrl": "",
-      "fileType": "audio/mp3",
-      "fileSize": 0,
-      "duration": 0,
-      "notes": "Cellular respiration is a set of metabolic reactions that convert chemical energy from nutrients into ATP.",
-      "studyNotes": "Cellular respiration is a set of metabolic reactions that convert chemical energy from nutrients into ATP.",
-      "transcript": "",
-      "createdAt": "2026-09-11T13:05:38.707Z",
-      "updatedAt": "2026-09-11T13:05:43.523Z",
-      "summary": "## 1. Lecture Overview & Primary Objectives\nCellular respiration is the foundational metabolic process by which aerobic organisms extract energy from organic molecules. The primary objective of this lecture is to understand how cells harvest energy from glucose to synthesize **Adenosine Triphosphate (ATP)**, the primary \"energy currency\" of the cell. Students should be able to trace the flow of electrons through metabolic pathways and account for the energy transformations occurring in each stage.\n\n---\n\n### 2. Core Themes & Theoretical Framework\nThe central theme is the **redox reaction** (reduction-oxidation). Cellular respiration is essentially a controlled combustion process where glucose is oxidized and oxygen is reduced.\n\n*   **The Reaction Equation:** $C_6H_{12}O_6 + 6O_2 \\rightarrow 6CO_2 + 6H_2O + \\text{Energy (ATP + heat)}$\n*   **Energy Coupling:** Exergonic reactions (breaking down glucose) are coupled with endergonic reactions (phosphorylating ADP to ATP).\n*   **Electron Shuttling:** High-energy electrons are carried by coenzymes **NAD⁺** and **FAD** to the electron transport chain.\n\n---\n\n### 3. Key Concepts & Detailed Explanations\n\n#### A. Glycolysis (\"Sugar Splitting\")\n*   **Location:** Cytosol.\n*   **Process:** Breaks one 6-carbon glucose molecule into two 3-carbon pyruvate molecules.\n*   **Yield:** Net 2 ATP (via substrate-level phosphorylation) and 2 NADH. Does not require oxygen.\n\n#### B. The Citric Acid Cycle (Krebs Cycle)\n*   **Location:** Mitochondrial Matrix.\n*   **Process:** Pyruvate is converted to Acetyl-CoA, which enters the cycle. It completes the breakdown of glucose into $CO_2$.\n*   **Yield:** 2 ATP, 6 NADH, and 2 $FADH_2$ per glucose molecule.\n\n#### C. Oxidative Phosphorylation\n*   **Location:** Inner Mitochondrial Membrane (Cristae).\n*   **Components:** \n    1.  **Electron Transport Chain (ETC):** Proteins use electron energy to pump $H^+$ ions across the membrane, creating a proton gradient.\n    2.  **Chemiosmosis:** ATP Synthase uses the kinetic energy of the $H^+$ gradient (proton-motive force) to produce the bulk of cellular ATP.\n*   **Yield:** ~26–28 ATP. Oxygen acts as the final electron acceptor, forming water.\n\n---\n\n### 4. Practical Examples & Real-world Applications\n*   **Metabolic Poisoning:** Cyanide binds to the final complex in the ETC, preventing oxygen from accepting electrons. This stops ATP production, leading to rapid cell death.\n*   **Exercise Physiology:** During intense anaerobic exercise, cells cannot supply enough oxygen to the ETC. They shift to **Lactic Acid Fermentation** to keep glycolysis running, resulting in the \"burn\" felt in muscles.\n*   **Brown Fat:** In hibernating animals or infants, \"uncoupling proteins\" allow $H^+$ to leak back into the matrix without making ATP, generating heat instead—a vital survival mechanism for thermoregulation.\n\n---\n\n### 5. High-Yield Revision Takeaways\n\n*   **The ATP Ledger:** Know the total tally. Glycolysis (2) + Krebs (2) + Oxidative Phosphorylation (26-28) = **~30–32 ATP per glucose.**\n*   **The Role of Oxygen:** Without $O_2$, the ETC backs up, NADH cannot be recycled to NAD⁺, and the Krebs cycle stalls. \n*   **Mnemonic for Inputs/Outputs:** \n    *   *Glycolysis:* Input = Glucose; Output = Pyruvate + ATP + NADH.\n    *   *Krebs:* Input = Acetyl-CoA; Output = $CO_2$ + NADH + $FADH_2$ + ATP.\n    *   *ETC:* Input = NADH/$FADH_2$ + $O_2$; Output = $H_2O$ + ATP.\n*   **Study Tip:** Draw the mitochondrion. Label the **Intermembrane Space** (where $H^+$ accumulates) versus the **Matrix** (where the Krebs cycle occurs) to visualize the concentration gradient.",
-      "summaryGeneratedAt": "2026-09-11T13:05:43.523Z"
-    }
-  ],
+  "audioLectures": [],
   "studyMaterials": []
 }
