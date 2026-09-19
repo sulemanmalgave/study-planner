@@ -20,6 +20,7 @@ import { UserProfile } from '../types';
 import { drawerVariants, modalBackdropVariants } from '../lib/animations';
 import { AuthUserProfile } from '../lib/emailAuth';
 import { useTranslation } from '../lib/i18n';
+import { isEntitlementActive } from '../lib/entitlement';
 
 interface SidebarProps {
   activeTab: string;
@@ -44,7 +45,7 @@ export default function Sidebar({
   onSignIn,
   onSignOut,
 }: SidebarProps) {
-  const isPremium = profile.subscription.subscriptionStatus === 'premium' || profile.subscription.plan === 'premium';
+  const isPremium = isEntitlementActive(profile.subscription);
   const { t, language } = useTranslation();
 
   const menuItems = [

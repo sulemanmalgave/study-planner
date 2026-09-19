@@ -5,6 +5,7 @@ import { AuthUserProfile } from '../lib/emailAuth';
 import EmailAuthCard from './EmailAuthCard';
 import { useTranslation, Language } from '../lib/i18n';
 import { getPlanDisplayName } from '../lib/paymentConfig';
+import { isEntitlementActive } from '../lib/entitlement';
 
 interface SettingsViewProps {
   profile: UserProfile;
@@ -66,7 +67,7 @@ export default function SettingsView({
     }
   };
 
-  const isPremium = profile.subscription.subscriptionStatus === 'premium' || profile.subscription.plan === 'premium';
+  const isPremium = isEntitlementActive(profile.subscription);
   const isExpired = profile.subscription.subscriptionStatus === 'expired';
 
   const handleLanguageChange = async (newLang: Language) => {
