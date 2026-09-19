@@ -838,6 +838,22 @@ const getInitialDatabaseState = (): DatabaseSchema => {
   };
 };
 
+// Helper to filter out demo, fake, test, or placeholder audio lectures
+export function isRealUserAudioLecture(lecture: any): boolean {
+  if (!lecture || typeof lecture !== 'object') return false;
+  const id = String(lecture.id || '');
+  if (id === 'test-lecture-1' || id.startsWith('test-') || id.startsWith('demo-')) {
+    return false;
+  }
+  const title = String(lecture.title || '').trim().toLowerCase();
+  const subject = String(lecture.subjectName || '').trim().toLowerCase();
+  const section = String(lecture.section || '').trim().toLowerCase();
+  if (title === 'introduction to biology' && (subject.includes('biology') || section.includes('cellular respiration'))) {
+    return false;
+  }
+  return true;
+}
+
 const getDbFilePath = (userId?: string, isBackup: boolean = false) => {
   const baseDir = (process.env.VERCEL || process.env.TMPDIR) ? '/tmp' : process.cwd();
   const suffix = isBackup ? '_backup.json' : '.json';
@@ -989,7 +1005,7 @@ function mergeDatabaseStates(
     exams: Array.from(examMap.values()),
     notes: Array.from(notesMap.values()),
     studySessions: Array.from(sessionMap.values()),
-    audioLectures: Array.from(audioMap.values()),
+    audioLectures: Array.from(audioMap.values()).filter(isRealUserAudioLecture),
     studyMaterials: Array.from(materialsMap.values()),
   };
 }
@@ -1393,7 +1409,11 @@ const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
     if (!parsed.exams) parsed.exams = [];
     if (!parsed.notes) parsed.notes = [];
     if (!parsed.studySessions) parsed.studySessions = [];
-    if (!parsed.audioLectures) parsed.audioLectures = [];
+    if (!parsed.audioLectures) {
+      parsed.audioLectures = [];
+    } else {
+      parsed.audioLectures = parsed.audioLectures.filter(isRealUserAudioLecture);
+    }
     if (!parsed.studyMaterials) parsed.studyMaterials = [];
     if (!parsed.profile) {
       parsed.profile = getInitialDatabaseState().profile;
@@ -1455,7 +1475,11 @@ const readDB = (userId?: string, userEmail?: string): DatabaseSchema => {
     if (!fallback.exams) fallback.exams = [];
     if (!fallback.notes) fallback.notes = [];
     if (!fallback.studySessions) fallback.studySessions = [];
-    if (!fallback.audioLectures) fallback.audioLectures = [];
+    if (!fallback.audioLectures) {
+      fallback.audioLectures = [];
+    } else {
+      fallback.audioLectures = fallback.audioLectures.filter(isRealUserAudioLecture);
+    }
     if (!fallback.studyMaterials) fallback.studyMaterials = [];
     if (!isSubscriptionActive(fallback.profile?.subscription)) {
       fallback.profile.subscription = {
@@ -2075,7 +2099,7 @@ app.put('/api/state', (req, res) => {
     try {
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
-      const list = db.audioLectures || [];
+      const list = (db.audioLectures || []).filter(isRealUserAudioLecture);
       res.json(list);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch audio lectures' });
@@ -2086,7 +2110,7 @@ app.put('/api/state', (req, res) => {
     try {
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
-      if (!db.audioLectures) db.audioLectures = [];
+      db.audioLectures = (db.audioLectures || []).filter(isRealUserAudioLecture);
       const isPro = checkUserHasActiveSubscription(req, db);
       if (!isPro && db.audioLectures.length >= FREE_PLAN_LIMITS.audioLectures) {
         return res.status(403).json({
@@ -2220,30 +2244,13 @@ app.put('/api/state', (req, res) => {
       }
 
       let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
-      let targetDb = db;
-
-      // Stateless/serverless fallback: reconstruct lecture object from client request
       if (!lecture) {
-        lecture = {
-          id: req.params.id,
-          userId: userId || 'default',
-          title: req.body?.title || 'Lecture',
-          subjectName: req.body?.subjectName || 'Study Material',
-          section: req.body?.section || '',
-          originalFileName: req.body?.originalFileName || 'lecture.mp3',
-          audioDataUrl: req.body?.audioBase64 || '',
-          fileType: req.body?.audioMimeType || 'audio/mp3',
-          fileSize: 0,
-          duration: 0,
-          notes: req.body?.notes || '',
-          studyNotes: req.body?.notes || '',
-          transcript: req.body?.transcript || '',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        if (!targetDb.audioLectures) targetDb.audioLectures = [];
-        targetDb.audioLectures.push(lecture);
+        return res.status(404).json({
+          error: 'AUDIO_LECTURE_NOT_FOUND',
+          message: 'Audio lecture not found. Please upload the audio lecture first.',
+        });
       }
+      let targetDb = db;
 
       const rawAudio = req.body?.audioBase64 || lecture.audioDataUrl;
       const audioPart = extractAudioInlineData(rawAudio, req.body?.audioMimeType || lecture.fileType);
@@ -2332,30 +2339,13 @@ app.put('/api/state', (req, res) => {
       }
 
       let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
-      let targetDb = db;
-
-      // Stateless/serverless fallback: reconstruct lecture object from client request
       if (!lecture) {
-        lecture = {
-          id: req.params.id,
-          userId: userId || 'default',
-          title: req.body?.title || 'Lecture',
-          subjectName: req.body?.subjectName || 'Study Material',
-          section: req.body?.section || '',
-          originalFileName: req.body?.originalFileName || 'lecture.mp3',
-          audioDataUrl: req.body?.audioBase64 || '',
-          fileType: req.body?.audioMimeType || 'audio/mp3',
-          fileSize: 0,
-          duration: 0,
-          notes: req.body?.notes || '',
-          studyNotes: req.body?.notes || '',
-          transcript: req.body?.transcript || '',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        if (!targetDb.audioLectures) targetDb.audioLectures = [];
-        targetDb.audioLectures.push(lecture);
+        return res.status(404).json({
+          error: 'AUDIO_LECTURE_NOT_FOUND',
+          message: 'Audio lecture not found. Please upload the audio lecture first.',
+        });
       }
+      let targetDb = db;
 
       let ai;
       try {
@@ -2485,30 +2475,13 @@ Ensure clarity, rigor, and actionable revision value for students.`
       }
 
       let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
-      let targetDb = db;
-
-      // Stateless/serverless fallback: reconstruct lecture object from client request
       if (!lecture) {
-        lecture = {
-          id: req.params.id,
-          userId: userId || 'default',
-          title: req.body?.title || 'Lecture',
-          subjectName: req.body?.subjectName || 'Study Material',
-          section: req.body?.section || '',
-          originalFileName: req.body?.originalFileName || 'lecture.mp3',
-          audioDataUrl: req.body?.audioBase64 || '',
-          fileType: req.body?.audioMimeType || 'audio/mp3',
-          fileSize: 0,
-          duration: 0,
-          notes: req.body?.notes || '',
-          studyNotes: req.body?.notes || '',
-          transcript: req.body?.transcript || '',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        if (!targetDb.audioLectures) targetDb.audioLectures = [];
-        targetDb.audioLectures.push(lecture);
+        return res.status(404).json({
+          error: 'AUDIO_LECTURE_NOT_FOUND',
+          message: 'Audio lecture not found. Please upload the audio lecture first.',
+        });
       }
+      let targetDb = db;
 
       let ai;
       try {
@@ -2656,30 +2629,13 @@ Format cleanly in Markdown with bullet points:
       }
 
       let lecture = (db.audioLectures || []).find((al) => al.id === req.params.id);
-      let targetDb = db;
-
-      // Stateless/serverless fallback: reconstruct lecture object from client request
       if (!lecture) {
-        lecture = {
-          id: req.params.id,
-          userId: userId || 'default',
-          title: req.body?.title || 'Lecture',
-          subjectName: req.body?.subjectName || 'Study Material',
-          section: req.body?.section || '',
-          originalFileName: req.body?.originalFileName || 'lecture.mp3',
-          audioDataUrl: req.body?.audioBase64 || '',
-          fileType: req.body?.audioMimeType || 'audio/mp3',
-          fileSize: 0,
-          duration: 0,
-          notes: req.body?.notes || '',
-          studyNotes: req.body?.notes || '',
-          transcript: req.body?.transcript || '',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        if (!targetDb.audioLectures) targetDb.audioLectures = [];
-        targetDb.audioLectures.push(lecture);
+        return res.status(404).json({
+          error: 'AUDIO_LECTURE_NOT_FOUND',
+          message: 'Audio lecture not found. Please upload the audio lecture first.',
+        });
       }
+      let targetDb = db;
 
       let ai;
       try {

@@ -49,6 +49,25 @@ export function hasMeaningfulData(state: DatabaseSchema | null | undefined): boo
 }
 
 /**
+ * Validates that an audio lecture is authentic user-uploaded data,
+ * and not demo, fake, test, or placeholder content.
+ */
+export function isRealUserAudioLecture(lecture: any): boolean {
+  if (!lecture || typeof lecture !== 'object') return false;
+  const id = String(lecture.id || '');
+  if (id === 'test-lecture-1' || id.startsWith('test-') || id.startsWith('demo-')) {
+    return false;
+  }
+  const title = String(lecture.title || '').trim().toLowerCase();
+  const subject = String(lecture.subjectName || '').trim().toLowerCase();
+  const section = String(lecture.section || '').trim().toLowerCase();
+  if (title === 'introduction to biology' && (subject.includes('biology') || section.includes('cellular respiration'))) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Safely sanitizes a database schema to ensure all collection arrays are initialized.
  */
 export function sanitizeSchema(state: any): DatabaseSchema {
@@ -81,7 +100,7 @@ export function sanitizeSchema(state: any): DatabaseSchema {
     exams: Array.isArray(state.exams) ? state.exams : [],
     notes: Array.isArray(state.notes) ? state.notes : [],
     studySessions: Array.isArray(state.studySessions) ? state.studySessions : [],
-    audioLectures: Array.isArray(state.audioLectures) ? state.audioLectures : [],
+    audioLectures: Array.isArray(state.audioLectures) ? state.audioLectures.filter(isRealUserAudioLecture) : [],
     studyMaterials: Array.isArray(state.studyMaterials) ? state.studyMaterials : [],
   };
 }
@@ -102,6 +121,13 @@ export function loadClientState(): DatabaseSchema | null {
       const parsed = JSON.parse(rawPrimary);
       const clean = sanitizeSchema(parsed);
       clean.profile.subscription = reconcileSubscription(clean.profile?.subscription, localEntitlement);
+      // If legacy demo/fake audio lectures were pruned, save clean state back to storage immediately
+      if (Array.isArray(parsed.audioLectures) && parsed.audioLectures.length !== clean.audioLectures.length) {
+        try {
+          localStorage.setItem(PRIMARY_STORAGE_KEY, JSON.stringify(clean));
+          localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(clean));
+        } catch (e) {}
+      }
       return clean;
     }
   } catch (e) {
@@ -115,9 +141,10 @@ export function loadClientState(): DatabaseSchema | null {
       const parsed = JSON.parse(rawBackup);
       const clean = sanitizeSchema(parsed);
       clean.profile.subscription = reconcileSubscription(clean.profile?.subscription, localEntitlement);
-      // Restore primary key from backup
+      // Restore primary and backup keys from cleaned backup
       try {
         localStorage.setItem(PRIMARY_STORAGE_KEY, JSON.stringify(clean));
+        localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(clean));
       } catch (err) {}
       return clean;
     }
@@ -344,7 +371,7 @@ export function mergeDatabaseStates(
     exams: Array.from(examMap.values()),
     notes: Array.from(notesMap.values()),
     studySessions: Array.from(sessionMap.values()),
-    audioLectures: Array.from(audioMap.values()),
+    audioLectures: Array.from(audioMap.values()).filter(isRealUserAudioLecture),
     studyMaterials: Array.from(materialsMap.values()),
   };
 }

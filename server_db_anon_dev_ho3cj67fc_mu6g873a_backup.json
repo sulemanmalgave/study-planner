@@ -1,0 +1,59 @@
+{
+  "profile": {
+    "name": "Student",
+    "email": "",
+    "initials": "ST",
+    "language": "en-US",
+    "subscription": {
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
+      "billingCountry": "US",
+      "paymentProvider": null,
+      "paymentId": null
+    },
+    "aiUsage": {
+      "operationsCount": 9,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-09-04T03:52:12.674Z"
+    },
+    "photoURL": null
+  },
+  "courses": [],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [],
+  "studySessions": [],
+  "audioLectures": [
+    {
+      "id": "al_4f9f4175",
+      "userId": "default",
+      "courseId": "",
+      "subjectName": "General",
+      "section": "fg",
+      "title": "rf",
+      "audioDataUrl": "",
+      "originalFileName": "AUD-20260827-WA0002.mp3",
+      "fileSize": 314157,
+      "fileType": "audio/mpeg",
+      "duration": 52,
+      "transcript": "Welcome to Wedding Checklist, your all-in-one planner for the perfect celebration.\n\nClipboard: Start from the home screen, clean, simple, and beautifully organized to keep your plans on track.\n\nWhite heavy check mark: Create and manage your wedding checklist easily, add tasks, set reminders, and track every detail stress-free.\n\nBusts in silhouette: Manage your guest list with ease, add names, update RSVP status, and stay perfectly organized for your big day.\n\nMoney bag: Keep your budget clear and in control, track expenses and compare planned versus actual costs in one place.\n\nLabel: Plan your vendors smartly, manage contacts, prices, and booking status without missing a thing.\n\nSparkling heart: Wedding Checklist, designed to make your journey simple, smooth, and stress-free.",
+      "transcriptGeneratedAt": "2026-09-10T07:15:13.743Z",
+      "summary": "Here is a comprehensive study summary based on the presentation:\n\n---\n\n### 1. Lecture Overview & Primary Objectives\n* **Title/Subject:** Wedding Checklist Application Overview\n* **Primary Objective:** To introduce the interface, core functional modules, and organizational architecture of the **Wedding Checklist** digital planning tool.\n* **Goal:** Demonstrate how centralized digital tools streamline event coordination, mitigate stress, and ensure systematic execution across timeline, guest management, budgeting, and vendor relations.\n\n---\n\n### 2. Core Themes & Theoretical Framework\n* **Centralization of Event Workflow:** Shifting from fragmented notes to an integrated, all-in-one management hub.\n* **Variance & Financial Tracking:** Continuous monitoring of projected figures versus actual operational costs.\n* **Stakeholder & Task Lifecycle Management:** Tracking participant engagement (guests, vendors) and action items across predefined checkpoints.\n\n---\n\n### 3. Key Concepts & Detailed Explanations\n\n#### A. Central Dashboard (Home Screen)\n* **Design Philosophy:** Minimalist, clean, and structured interface intended to minimize cognitive load during complex planning cycles.\n* **Role:** Serves as the primary operational baseline to view upcoming milestones and overall progress.\n\n#### B. Dynamic Task & Checklist Management\n* **Feature Set:** Task creation, milestone scheduling, and automated reminders.\n* **Functionality:** Prevents oversight through systematic breakdown of deliverables into discrete, time-stamped checkpoints.\n\n#### C. Guest List & RSVP Operations\n* **Feature Set:** Contact compilation, party sizing, and RSVP tracking.\n* **Functionality:** Real-time headcount updates essential for venue logistics, seating arrangements, and catering accuracy.\n\n#### D. Budget & Expense Tracking\n* **Feature Set:** Dual-entry expense auditing (planned/budgeted vs. actual realized costs).\n* **Functionality:** Enforces financial discipline and real-time visibility over cost variances.\n\n#### E. Vendor Coordination & Procurement\n* **Feature Set:** Centralized vendor contact directory, price tracking, and booking status management.\n* **Functionality:** Standardizes service provider oversight (e.g., florists, caterers, photographers) to ensure contractual deadlines and service expectations are fulfilled.\n\n---\n\n### 4. Practical Examples & Real-world Applications\n* **Budget Reconciliation:** Comparing an allocated $5,000 venue deposit against invoice receipts directly in the app to identify budget surpluses or deficits instantly.\n* **RSVP Headcount Sync:** Updating an RSVP status immediately when a guest confirms attendance, allowing for real-time adjustments to table configurations and meal counts.\n* **Vendor Contract Auditing:** Logging photographer booking status, quoted package rates, and direct contact numbers into a single tab for quick access during vendor meetings.\n\n---\n\n### 5. High-Yield Revision Takeaways\n* **Platform Identity:** \"Wedding Checklist\" – an all-in-one digital planning framework.\n* **Five Core Functional Pillars:**\n  1. **Home Screen / Hub:** Streamlined overview and navigational starting point.\n  2. **Checklist & Reminders:** Detailed, time-bound task management.\n  3. **Guest Management:** RSVP tracking and head-count maintenance.\n  4. **Financial Control:** Continuous planned vs. actual expense auditing.\n  5. **Vendor Management:** Comprehensive contact, pricing, and booking tracking.\n* **Key User Value:** Designed to replace fragmented workflows with a clean, stress-free, and systematized planning process.",
+      "summaryGeneratedAt": "2026-09-10T07:14:06.362Z",
+      "studyNotes": "fguijjh jjhhgg",
+      "studyNotesGeneratedAt": null,
+      "keyPoints": "Based on the lecture content provided regarding the \"Wedding Checklist\" system, here are the high-yield takeaways and essential concepts organized for your review.\n\n### 📌 Critical Exam Takeaways\n-   **Centralized Lifecycle Management**: The system functions as a modular project management framework designed to track four critical domains: Task Management, Guest Relations, Financial Tracking, and Vendor Procurement.\n-   **Efficiency through Standardization**: The core principle of the platform is the reduction of cognitive load by consolidating disparate wedding planning elements (budget, RSVPs, tasks) into a single interface.\n-   **Data-Driven Planning**: The \"Budget\" and \"Vendor\" modules prioritize quantitative tracking, allowing for the comparison of projected (planned) vs. realized (actual) metrics to maintain fiscal discipline.\n\n### 🔑 Essential Terms & Definitions\n-   **Task Management**: The administrative process of creating, sequencing, and setting reminders for time-bound wedding activities; essential for meeting project deadlines.\n-   **RSVP Status**: The binary or categorical tracking of guest attendance; critical for logistics and headcount-dependent budgeting.\n-   **Budgeting (Planned vs. Actual)**: The financial control mechanism that compares the initial allocation of funds against realized expenditures to prevent cost overruns.\n-   **Vendor Procurement**: The systematic management of third-party service providers, focusing on contact retention, pricing negotiation, and contractual status.\n\n### ⚠️ Common Pitfalls & Clarifications\n-   **Pitfall: Managing in Silos**: A common failure point is treating the \"Budget\" and \"Vendor\" modules as independent; always remember that vendor contracts directly dictate the \"Actual\" costs in the budget module.\n-   **Clarification: The Distinction Between \"Task\" and \"Logistics\"**: Do not confuse the \"Checklist\" (action-oriented tasks) with \"Guest List\" management (relational/logistical data). Tasks drive the *process*, while guest management drives the *scale* of the event.\n-   **Memory Aid**: Remember the **\"T-G-B-V\" Framework** to master the system components:\n-   **T**asks (Workflow)\n-   **G**uests (Demographics)\n-   **B**udget (Finance)\n-   **V**endors (Supply Chain)",
+      "keyPointsGeneratedAt": "2026-09-11T12:59:11.062Z",
+      "createdAt": "2026-09-09T06:19:13.087Z",
+      "updatedAt": "2026-09-11T12:59:11.212Z"
+    }
+  ],
+  "studyMaterials": []
+}
