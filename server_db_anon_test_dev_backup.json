@@ -1,0 +1,55 @@
+{
+  "profile": {
+    "name": "Student",
+    "email": "",
+    "initials": "ST",
+    "language": "fr-FR",
+    "subscription": {
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
+      "billingCountry": "US",
+      "paymentProvider": null,
+      "paymentId": null
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-09-20T07:39:07.538Z"
+    }
+  },
+  "courses": [],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [],
+  "studySessions": [],
+  "audioLectures": [
+    {
+      "id": "test_lecture_123",
+      "userId": "anon_test_dev",
+      "title": "Cardiovascular Biology",
+      "subjectName": "Biology",
+      "section": "Unit 3",
+      "originalFileName": "lecture.mp3",
+      "audioDataUrl": "",
+      "fileType": "audio/mp3",
+      "fileSize": 0,
+      "duration": 0,
+      "notes": "",
+      "studyNotes": "",
+      "transcript": "The human heart consists of four chambers: two atria and two ventricles. Deoxygenated blood enters the right atrium through the superior and inferior vena cava. It flows into the right ventricle, which pumps it to the lungs for oxygenation. Oxygenated blood returns to the left atrium and passes to the left ventricle, which contracts with high pressure to deliver oxygenated blood throughout the systemic circulation via the aorta. Cardiac valves prevent backflow.",
+      "summary": "# Study Summary: Cardiovascular Biology (Unit 3)\n\n### 1. Lecture Overview & Primary Objectives\nThis lecture covers the fundamental anatomical and physiological principles of the human cardiovascular system. The primary objective is to understand the **pulmonary and systemic circulation pathways**, the functional roles of the four-chambered heart, and the mechanisms that maintain unidirectional blood flow.\n\n---\n\n### 2. Core Themes & Theoretical Framework\nThe central theme is **Pressure-Driven Flow**. The heart acts as a dual-pump system:\n*   **The Right Heart (Pulmonary Circuit):** A low-pressure system designed to move deoxygenated blood to the lungs for gas exchange.\n*   **The Left Heart (Systemic Circuit):** A high-pressure system designed to distribute oxygenated, nutrient-rich blood to the entire body.\n*   **Homeostasis:** The system relies on precise coordination between muscular contraction and valvular timing to ensure efficient oxygen delivery and waste removal.\n\n---\n\n### 3. Key Concepts & Detailed Explanations\n\n#### A. The Four-Chambered Architecture\n*   **Atria:** Receiving chambers with thin walls; they act as primers for the ventricles.\n*   **Ventricles:** Discharging chambers with thick muscular walls. The **left ventricle** possesses the thickest myocardium to overcome the high resistance of systemic circulation.\n\n#### B. The Blood Flow Pathway (The \"Loop\")\n1.  **Systemic Deoxygenation:** Blood returns from the body via the **Superior Vena Cava** (upper body) and **Inferior Vena Cava** (lower body) into the **Right Atrium**.\n2.  **Right Ventricle:** Blood passes through the tricuspid valve into the right ventricle and is ejected into the pulmonary arteries toward the lungs.\n3.  **Oxygenation:** In the lungs, blood releases $CO_2$ and picks up $O_2$.\n4.  **Left Atrium:** Oxygenated blood returns via the pulmonary veins.\n5.  **Left Ventricle:** Blood passes through the mitral valve into the left ventricle, which ejects it into the **Aorta** to feed the systemic circulation.\n\n#### C. Valvular Function\nCardiac valves (Atrioventricular and Semilunar) are mechanical regulators. Their primary role is to ensure **unidirectional flow**, preventing the backflow of blood (regurgitation) during ventricular contraction (systole) and relaxation (diastole).\n\n---\n\n### 4. Practical Examples & Real-world Applications\n*   **Hypertension (High Blood Pressure):** If systemic pressure is chronically high, the left ventricle must work harder to eject blood, leading to \"Left Ventricular Hypertrophy\" (thickening of the heart muscle), which can eventually lead to heart failure.\n*   **Valve Pathology:** If a valve fails to close completely (valvular insufficiency) or open fully (stenosis), the efficiency of the pump decreases, often resulting in clinical symptoms like fatigue or heart murmurs.\n*   **Clinical Diagnostics:** Stethoscopes allow clinicians to hear the \"lub-dub\" sound, which corresponds directly to the closing of the heart valves.\n\n---\n\n### 5. High-Yield Revision Takeaways\n*   **Directionality Check:** Remember the sequence: Vena Cava $\\rightarrow$ RA $\\rightarrow$ RV $\\rightarrow$ Lungs $\\rightarrow$ LA $\\rightarrow$ LV $\\rightarrow$ Aorta.\n*   **Anatomical Distinctions:** The left ventricle is the most muscular chamber; failure of the right side causes systemic edema (fluid buildup), while failure of the left side causes pulmonary edema (fluid in the lungs).\n*   **Exam Strategy:** When drawing this, always distinguish between oxygenated blood (usually depicted as red) and deoxygenated blood (blue). Note that the **pulmonary artery** is the only artery in the adult body carrying deoxygenated blood.\n*   **Summary Mnemonic:** *RA-RV (Right for Respiratory/Lungs); LA-LV (Left for Life/Systemic).*",
+      "keyPoints": "",
+      "createdAt": "2026-09-20T07:40:58.133Z",
+      "updatedAt": "2026-09-20T07:41:11.247Z",
+      "summaryGeneratedAt": "2026-09-20T07:41:11.247Z"
+    }
+  ],
+  "studyMaterials": []
+}

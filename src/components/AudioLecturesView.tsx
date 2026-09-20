@@ -39,6 +39,7 @@ import {
   getAudioBlob,
   blobToBase64,
 } from '../lib/audioStorage';
+import { getAuthHeaders } from '../lib/emailAuth';
 
 interface AudioLecturesViewProps {
   courses: Course[];
@@ -238,29 +239,33 @@ export default function AudioLecturesView({
 
       const endpoint = `/api/ai/audio-lectures/${selectedLecture.id}/${routeMap[type]}`;
 
-      const effectiveUserEmail = userEmail || authUser?.email || 'sulemanmalgave1@gmail.com';
-      const effectiveUserId = authUser?.uid || 'default';
+      const authHeaders = getAuthHeaders();
+      const effectiveUserEmail = userEmail || authUser?.email || authHeaders['x-user-email'] || '';
+      const effectiveUserId = authUser?.uid || authHeaders['x-user-id'] || '';
 
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: {
+          ...authHeaders,
           'Content-Type': 'application/json',
-          'x-subscription-status': 'active', // Authoritative state: Active Premium subscriber
-          'x-user-id': effectiveUserId,
-          'x-user-email': effectiveUserEmail,
+          'x-subscription-status': isPremium ? 'active' : 'free',
+          ...(effectiveUserId ? { 'x-user-id': effectiveUserId } : {}),
+          ...(effectiveUserEmail ? { 'x-user-email': effectiveUserEmail } : {}),
         },
         body: JSON.stringify({
           audioBase64,
           audioMimeType,
-          transcript: transcriptText || selectedLecture.transcript,
-          title: selectedLecture.title,
-          subjectName: selectedLecture.subjectName,
-          section: selectedLecture.section,
-          originalFileName: selectedLecture.originalFileName,
-          notes: personalNotesText || selectedLecture.studyNotes || (selectedLecture as any).notes,
-          summary: summaryText || selectedLecture.summary,
-          keyPoints: keyPointsText || selectedLecture.keyPoints,
-          isPremium: true,
+          transcript: transcriptText || selectedLecture.transcript || '',
+          title: selectedLecture.title || '',
+          subjectName: selectedLecture.subjectName || '',
+          section: selectedLecture.section || '',
+          originalFileName: selectedLecture.originalFileName || '',
+          notes: personalNotesText || selectedLecture.studyNotes || (selectedLecture as any).notes || '',
+          summary: summaryText || selectedLecture.summary || '',
+          keyPoints: keyPointsText || selectedLecture.keyPoints || '',
+          duration: selectedLecture.duration || 0,
+          fileSize: selectedLecture.fileSize || 0,
+          isPremium: isPremium,
           userEmail: effectiveUserEmail,
           userId: effectiveUserId,
         }),
@@ -601,6 +606,13 @@ export default function AudioLecturesView({
     try {
       const subjectName = formSubjectName.trim() || (isFr ? 'Général' : 'General');
 
+      let audioDataUrl: string | undefined = undefined;
+      if (selectedFile.size <= 8 * 1024 * 1024) {
+        try {
+          audioDataUrl = await blobToBase64(selectedFile);
+        } catch {}
+      }
+
       const newLectureData = {
         courseId: formCourseId || '',
         subjectName,
@@ -610,6 +622,7 @@ export default function AudioLecturesView({
         fileSize: selectedFile.size,
         fileType: selectedFile.type || 'audio/mpeg',
         duration: Math.round(detectedDuration),
+        audioDataUrl,
       };
 
       // Save lecture record

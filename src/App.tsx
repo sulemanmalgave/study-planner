@@ -63,6 +63,7 @@ import {
   associateLocalDataWithEmailAccount,
   checkCurrentAuth,
   getAuthHeaders,
+  getOrCreateAnonymousDeviceId,
   handleSignOut as performSignOut
 } from './lib/emailAuth';
 import {
@@ -287,7 +288,11 @@ export default function App() {
 
     if (isFirebaseConfigured && db) {
       try {
-        await setDoc(doc(db, 'workspaces', 'default'), newState, { merge: true });
+        const authUser = getLocalAuthUser();
+        const workspaceId = authUser?.email
+          ? authUser.email.replace(/[^a-zA-Z0-9_-]/g, '_')
+          : `anon_${getOrCreateAnonymousDeviceId()}`;
+        await setDoc(doc(db, 'workspaces', workspaceId), newState, { merge: true });
       } catch (fErr) {
         console.warn('Failed to save state to Firestore:', fErr);
       }
@@ -380,7 +385,11 @@ export default function App() {
       // 2. Try Firestore if configured
       if (isFirebaseConfigured && db) {
         try {
-          const docRef = doc(db, 'workspaces', 'default');
+          const authUser = getLocalAuthUser();
+          const workspaceId = authUser?.email
+            ? authUser.email.replace(/[^a-zA-Z0-9_-]/g, '_')
+            : `anon_${getOrCreateAnonymousDeviceId()}`;
+          const docRef = doc(db, 'workspaces', workspaceId);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const firestoreData = docSnap.data() as DatabaseSchema;

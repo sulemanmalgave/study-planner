@@ -3,7 +3,7 @@ import { getInitialClientState } from '../defaultState';
 import { getStoredEntitlement, saveStoredEntitlement, reconcileSubscription, isEntitlementActive } from './entitlement';
 import { db, isFirebaseConfigured } from './firebase';
 import { doc, setDoc } from 'firebase/firestore';
-import { getAuthHeaders } from './emailAuth';
+import { getAuthHeaders, getOrCreateAnonymousDeviceId } from './emailAuth';
 
 export const PRIMARY_STORAGE_KEY = 'studyflow_db_state';
 export const BACKUP_STORAGE_KEY = 'studyflow_db_state_backup';
@@ -195,7 +195,9 @@ export function saveClientState(state: DatabaseSchema): void {
   // 4. Firestore persistence if configured
   if (isFirebaseConfigured && db) {
     try {
-      const authUserId = clean.profile?.email ? clean.profile.email.replace(/[^a-zA-Z0-9_-]/g, '_') : 'default';
+      const authUserId = clean.profile?.email
+        ? clean.profile.email.replace(/[^a-zA-Z0-9_-]/g, '_')
+        : `anon_${getOrCreateAnonymousDeviceId()}`;
       setDoc(doc(db, 'workspaces', authUserId), clean, { merge: true }).catch((err) => {
         console.warn('[Firestore] Non-blocking background save notice:', err);
       });
