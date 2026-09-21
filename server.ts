@@ -743,8 +743,8 @@ async function fetchPaypalAccessToken(clientId: string, clientSecret: string, ap
   return data.access_token;
 }
 
-// In-memory backend payment verification maps to prevent forgery & replay attacks
-const pendingOrders = new Map<string, {
+// Persistent & in-memory backend payment verification store to survive serverless environments & restarts
+interface PendingOrderRecord {
   amount: number;
   currency: string;
   planType: 'monthly' | 'quarterly' | 'yearly';
@@ -753,7 +753,83 @@ const pendingOrders = new Map<string, {
   createdAt: number;
   userId?: string;
   userEmail?: string;
-}>();
+}
+
+const pendingOrders = new Map<string, PendingOrderRecord>();
+const PENDING_ORDERS_FILE = path.join(process.cwd(), 'pending_orders.json');
+
+const loadPendingOrdersFromDisk = (): Map<string, PendingOrderRecord> => {
+  try {
+    if (fs.existsSync(PENDING_ORDERS_FILE)) {
+      const data = fs.readFileSync(PENDING_ORDERS_FILE, 'utf-8');
+      const parsed = JSON.parse(data);
+      const now = Date.now();
+      const map = new Map<string, PendingOrderRecord>();
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v && typeof v === 'object' && (now - ((v as any).createdAt || 0)) < 48 * 60 * 60 * 1000) {
+          map.set(k, v as PendingOrderRecord);
+        }
+      }
+      return map;
+    }
+  } catch (err) {
+    console.warn('[Pending Orders Disk Error]', err);
+  }
+  return new Map<string, PendingOrderRecord>();
+};
+
+// Seed initial in-memory cache from persistent disk storage
+try {
+  const initialPending = loadPendingOrdersFromDisk();
+  for (const [k, v] of initialPending.entries()) {
+    pendingOrders.set(k, v);
+  }
+} catch (e) {}
+
+const savePendingOrder = (orderId: string, orderData: PendingOrderRecord) => {
+  pendingOrders.set(orderId, orderData);
+  try {
+    const disk = loadPendingOrdersFromDisk();
+    disk.set(orderId, orderData);
+    const obj: Record<string, PendingOrderRecord> = {};
+    for (const [k, v] of disk.entries()) {
+      obj[k] = v;
+    }
+    fs.writeFileSync(PENDING_ORDERS_FILE, JSON.stringify(obj, null, 2));
+  } catch (err) {
+    console.warn('[Failed to persist pending order to disk]', err);
+  }
+};
+
+const getPendingOrder = (orderId: string): PendingOrderRecord | undefined => {
+  if (pendingOrders.has(orderId)) {
+    return pendingOrders.get(orderId);
+  }
+  const disk = loadPendingOrdersFromDisk();
+  if (disk.has(orderId)) {
+    const item = disk.get(orderId)!;
+    pendingOrders.set(orderId, item);
+    return item;
+  }
+  return undefined;
+};
+
+const removePendingOrder = (orderId: string) => {
+  pendingOrders.delete(orderId);
+  try {
+    const disk = loadPendingOrdersFromDisk();
+    if (disk.has(orderId)) {
+      disk.delete(orderId);
+      const obj: Record<string, PendingOrderRecord> = {};
+      for (const [k, v] of disk.entries()) {
+        obj[k] = v;
+      }
+      fs.writeFileSync(PENDING_ORDERS_FILE, JSON.stringify(obj, null, 2));
+    }
+  } catch (err) {
+    console.warn('[Failed to remove pending order from disk]', err);
+  }
+};
 
 const verifiedPayments = new Set<string>();
 
@@ -5011,6 +5087,21 @@ Format cleanly in Markdown with bullet points:
     res.json({ country, isIndia: country === 'IN' });
   });
 
+  // Public subscription gateway configuration endpoint
+  app.get('/api/subscription/config', (req, res) => {
+    const paypalCid = process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || '';
+    const paypalMode = (process.env.PAYPAL_MODE === 'live' || process.env.PAYPAL_MODE === 'production') ? 'live' : 'sandbox';
+    const razorpayKey = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
+    
+    res.json({
+      paypalClientId: paypalCid,
+      paypalMode,
+      razorpayKeyId: razorpayKey,
+      isPayPalConfigured: Boolean(paypalCid),
+      isRazorpayConfigured: Boolean(razorpayKey),
+    });
+  });
+
   // Create Checkout Order securely on the backend
   app.post('/api/subscription/create-order', async (req, res) => {
     try {
@@ -5060,9 +5151,10 @@ Format cleanly in Markdown with bullet points:
         });
       }
 
-      // Strictly enforce server-side geolocation detection from request headers/IP.
-      // Do NOT trust any country parameter supplied by the frontend.
-      const selectedCountry = detectCountryFromRequest(req);
+      // Determine billing country: user-selected billing country has precedence over IP detection
+      const requestedCountry = (req.body?.billingCountry || req.body?.country || '').toString().trim().toUpperCase();
+      const detectedCountry = detectCountryFromRequest(req);
+      const selectedCountry = requestedCountry || detectedCountry || 'US';
 
       const isIndia = selectedCountry === 'IN';
       const provider = isIndia ? 'razorpay' : 'paypal';
@@ -5113,7 +5205,7 @@ Format cleanly in Markdown with bullet points:
 
           const orderId = rzpOrder.id;
 
-          pendingOrders.set(orderId, {
+          savePendingOrder(orderId, {
             amount,
             currency: 'INR',
             planType: planType as 'monthly' | 'quarterly' | 'yearly',
@@ -5221,7 +5313,7 @@ Format cleanly in Markdown with bullet points:
 
           const orderId = ppData.id;
 
-          pendingOrders.set(orderId, {
+          savePendingOrder(orderId, {
             amount,
             currency: 'USD',
             planType: planType as 'monthly' | 'quarterly' | 'yearly',
@@ -5283,22 +5375,25 @@ Format cleanly in Markdown with bullet points:
         });
       }
 
-      // Check registered order
-      let originalOrder = pendingOrders.get(orderId);
+      // Check registered order from persistent store
+      let originalOrder = getPendingOrder(orderId);
       if (!originalOrder) {
         const rawFallbackPlan = req.body?.planType || req.body?.planId || req.body?.plan_id || req.body?.plan;
         const fallbackPlan = (rawFallbackPlan === 'monthly' || rawFallbackPlan === 'quarterly' || rawFallbackPlan === 'yearly') ? rawFallbackPlan : 'monthly';
+        const fallbackCountry = (req.body?.billingCountry || req.body?.country || (provider === 'razorpay' ? 'IN' : 'US')).toString().toUpperCase();
         originalOrder = {
           amount: provider === 'razorpay' ? (fallbackPlan === 'monthly' ? 99 : 999) : (fallbackPlan === 'monthly' ? 1.99 : 19.99),
           currency: provider === 'razorpay' ? 'INR' : 'USD',
           planType: fallbackPlan,
-          country: provider === 'razorpay' ? 'IN' : 'US',
+          country: fallbackCountry,
           provider,
           createdAt: Date.now(),
           userId: req.body?.userId,
           userEmail: req.body?.userEmail,
         };
       }
+
+      let finalTransactionId = transactionIdentifier;
 
       if (provider === 'razorpay') {
         const { keySecret } = getRazorpayCredentials();
@@ -5355,29 +5450,53 @@ Format cleanly in Markdown with bullet points:
           const captureText = await captureRes.text();
           console.log(`[PayPal Capture Response] Status: ${captureRes.status}, Body: ${captureText}`);
 
+          let captureData: any = null;
+
           if (!captureRes.ok) {
             let parsedCaptureErr: any = {};
             try { parsedCaptureErr = JSON.parse(captureText); } catch (e) {}
-            const captureErrDesc = parsedCaptureErr.details?.map((d: any) => `${d.field}: ${d.issue}`).join('; ') || parsedCaptureErr.message || captureText;
-            return res.status(captureRes.status).json({
-              error: parsedCaptureErr.name || 'PAYPAL_CAPTURE_FAILED',
-              name: parsedCaptureErr.name || 'PayPal Capture Failed',
-              message: `PayPal order capture failed (${captureRes.status}): ${captureErrDesc}`,
-              description: captureErrDesc,
-              suggestedFix: 'Ensure the buyer completed authorization before capturing the order.',
-            });
-          }
 
-          let captureData: any;
-          try {
-            captureData = JSON.parse(captureText);
-          } catch (e) {
-            return res.status(500).json({
-              error: 'PAYPAL_CAPTURE_RESPONSE_INVALID',
-              name: 'Invalid Capture Response',
-              message: `PayPal capture returned invalid JSON: ${captureText}`,
-              suggestedFix: 'Check PayPal API status and response format.',
-            });
+            // If already captured previously, query order details from PayPal
+            const isAlreadyCaptured = parsedCaptureErr.details?.some((d: any) => d.issue === 'ORDER_ALREADY_CAPTURED') ||
+              parsedCaptureErr.name === 'ORDER_ALREADY_CAPTURED' ||
+              captureText.includes('ORDER_ALREADY_CAPTURED');
+
+            if (isAlreadyCaptured) {
+              const checkOrderRes = await fetch(`${apiBase}/v2/checkout/orders/${orderId}`, {
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json',
+                },
+              });
+              if (checkOrderRes.ok) {
+                const checkData = await checkOrderRes.json();
+                if (checkData.status === 'COMPLETED') {
+                  captureData = checkData;
+                }
+              }
+            }
+
+            if (!captureData) {
+              const captureErrDesc = parsedCaptureErr.details?.map((d: any) => `${d.field}: ${d.issue}`).join('; ') || parsedCaptureErr.message || captureText;
+              return res.status(captureRes.status).json({
+                error: parsedCaptureErr.name || 'PAYPAL_CAPTURE_FAILED',
+                name: parsedCaptureErr.name || 'PayPal Capture Failed',
+                message: `PayPal order capture failed (${captureRes.status}): ${captureErrDesc}`,
+                description: captureErrDesc,
+                suggestedFix: 'Ensure the buyer completed authorization before capturing the order.',
+              });
+            }
+          } else {
+            try {
+              captureData = JSON.parse(captureText);
+            } catch (e) {
+              return res.status(500).json({
+                error: 'PAYPAL_CAPTURE_RESPONSE_INVALID',
+                name: 'Invalid Capture Response',
+                message: `PayPal capture returned invalid JSON: ${captureText}`,
+                suggestedFix: 'Check PayPal API status and response format.',
+              });
+            }
           }
 
           if (captureData.status !== 'COMPLETED') {
@@ -5387,6 +5506,30 @@ Format cleanly in Markdown with bullet points:
               message: `PayPal payment status is ${captureData.status}, expected COMPLETED.`,
               suggestedFix: 'Complete payment authorization in PayPal popup window.',
             });
+          }
+
+          // Authoritative capture verification
+          const unit = captureData.purchase_units?.[0];
+          const captureItem = unit?.payments?.captures?.[0];
+          const capturedVal = parseFloat(captureItem?.amount?.value || unit?.amount?.value || '0');
+          const capturedCurrency = captureItem?.amount?.currency_code || unit?.amount?.currency_code || 'USD';
+          const ppTransactionId = captureItem?.id || captureData.id;
+
+          if (ppTransactionId) {
+            finalTransactionId = ppTransactionId;
+          }
+
+          if (capturedCurrency !== 'USD') {
+            return res.status(400).json({
+              error: 'INVALID_CURRENCY',
+              message: `Expected PayPal transaction in USD, but got ${capturedCurrency}.`,
+            });
+          }
+
+          if (capturedVal > 0) {
+            originalOrder.amount = capturedVal;
+            originalOrder.currency = 'USD';
+            originalOrder.planType = capturedVal < 10 ? 'monthly' : 'yearly';
           }
         } catch (ppCaptureErr: any) {
           console.error('[PayPal Verify Payment Exception]:', ppCaptureErr);
@@ -5401,7 +5544,10 @@ Format cleanly in Markdown with bullet points:
       }
 
       // Record transaction to prevent replay
-      verifiedPayments.add(transactionIdentifier);
+      verifiedPayments.add(finalTransactionId);
+      if (finalTransactionId !== transactionIdentifier) {
+        verifiedPayments.add(transactionIdentifier);
+      }
 
       // Account-level identity verification
       const reqUser = getEffectiveUser(req);
@@ -5432,19 +5578,19 @@ Format cleanly in Markdown with bullet points:
         subscriptionStatus: 'premium',
         plan: originalOrder.planType,
         paymentGateway: originalOrder.provider,
-        transactionId: transactionIdentifier,
+        transactionId: finalTransactionId,
         purchaseDate: purchaseDate.toISOString(),
         expiryDate: expiryDate.toISOString(),
         billingCountry: originalOrder.country,
         // Legacy compatibility properties
         type: originalOrder.planType,
         paymentProvider: originalOrder.provider,
-        paymentId: transactionIdentifier,
+        paymentId: finalTransactionId,
       };
 
       // Record in persistent subscriptions ledger linked to Google Account ID
       recordSubscriptionInLedger({
-        transactionId: transactionIdentifier,
+        transactionId: finalTransactionId,
         orderId,
         userId: effectiveUserId,
         userEmail: effectiveUserEmail,
@@ -5460,7 +5606,7 @@ Format cleanly in Markdown with bullet points:
       });
 
       writeDB(db, effectiveUserId, effectiveUserEmail);
-      pendingOrders.delete(orderId); // Clean up cache
+      removePendingOrder(orderId); // Clean up cache from disk and memory
 
       res.json({
         success: true,
@@ -5756,6 +5902,73 @@ Format cleanly in Markdown with bullet points:
                 message: 'PayPal Premium subscription verified and restored successfully!',
                 subscription: db.profile.subscription,
               });
+            }
+          } else {
+            // Also try looking up as PayPal Capture ID
+            const captureLookupRes = await fetch(`${apiBase}/v2/payments/captures/${cleanId}`, {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+            });
+            if (captureLookupRes.ok) {
+              const captureData = (await captureLookupRes.json()) as any;
+              if (captureData.status === 'COMPLETED') {
+                const createTime = new Date(captureData.create_time || Date.now());
+                const val = parseFloat(captureData.amount?.value || '19.99');
+                const plan: 'monthly' | 'yearly' = val < 10 ? 'monthly' : 'yearly';
+                const expiryDate = new Date(createTime.getTime());
+                if (plan === 'monthly') {
+                  expiryDate.setMonth(expiryDate.getMonth() + 1);
+                } else {
+                  expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+                }
+
+                if (expiryDate.getTime() <= Date.now()) {
+                  return res.status(400).json({
+                    error: 'SUBSCRIPTION_EXPIRED',
+                    message: `This PayPal subscription expired on ${expiryDate.toLocaleDateString()}.`,
+                    expiryDate: expiryDate.toISOString(),
+                  });
+                }
+
+                const newLedgerEntry: StoredSubscriptionLedgerEntry = {
+                  transactionId: captureData.id,
+                  orderId: cleanId,
+                  plan,
+                  paymentGateway: 'paypal',
+                  amount: val,
+                  currency: captureData.amount?.currency_code || 'USD',
+                  purchaseDate: createTime.toISOString(),
+                  expiryDate: expiryDate.toISOString(),
+                  billingCountry: 'US',
+                  verifiedAt: new Date().toISOString(),
+                  status: 'active',
+                };
+
+                recordSubscriptionInLedger(newLedgerEntry);
+
+                const db = readDB();
+                db.profile.subscription = {
+                  subscriptionStatus: 'premium',
+                  plan,
+                  paymentGateway: 'paypal',
+                  transactionId: newLedgerEntry.transactionId,
+                  purchaseDate: newLedgerEntry.purchaseDate,
+                  expiryDate: newLedgerEntry.expiryDate,
+                  billingCountry: 'US',
+                  type: plan,
+                  paymentProvider: 'paypal',
+                  paymentId: newLedgerEntry.transactionId,
+                };
+                writeDB(db);
+
+                return res.json({
+                  success: true,
+                  message: 'PayPal Premium subscription verified and restored successfully!',
+                  subscription: db.profile.subscription,
+                });
+              }
             }
           }
         } catch (ppErr) {

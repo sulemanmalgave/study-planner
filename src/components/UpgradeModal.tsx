@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
@@ -20,6 +20,9 @@ import {
   getCountryConfig, 
   GATEWAY_CONFIGS, 
   detectUserCountry, 
+  SUPPORTED_COUNTRIES,
+  getSavedBillingCountry,
+  saveBillingCountry,
   PlanOption,
   getPlanDisplayName,
   inferPlanInterval
@@ -117,12 +120,46 @@ export default function UpgradeModal({
   profile,
 }: UpgradeModalProps) {
   const { t, language } = useTranslation();
-  const [billingCountry, setBillingCountry] = useState<string>('US');
+  const [billingCountry, setBillingCountry] = useState<string>(() => {
+    return getSavedBillingCountry() || 'US';
+  });
   const [selectedPlanId, setSelectedPlanId] = useState<'monthly' | 'quarterly' | 'yearly'>('yearly');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
   const [serverSubscription, setServerSubscription] = useState<Subscription | null>(null);
+  const [paypalClientId, setPaypalClientId] = useState<string | null>(null);
+  const [isPaypalSdkReady, setIsPaypalSdkReady] = useState<boolean>(false);
+
+  // Refs for tracking DOM elements, active PayPal button instance, and current checkout params
+  const paypalContainerRef = useRef<HTMLDivElement>(null);
+  const activePayPalButtonsRef = useRef<any>(null);
+  const authUserRef = useRef(authUser);
+  authUserRef.current = authUser;
+  const billingCountryRef = useRef(billingCountry);
+  billingCountryRef.current = billingCountry;
+  const languageRef = useRef(language);
+  languageRef.current = language;
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+
+  // Global handler to catch PayPal SDK v5 detached DOM container events cleanly
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event?.reason?.message || String(event?.reason || '');
+      if (
+        reason.includes('Detected container element removed from DOM') || 
+        reason.includes('paypal_js_sdk') ||
+        reason.includes('zoid')
+      ) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
 
   // Authoritative entitlement check combining server, prop, profile, and local entitlement
   const localEntitlement = getStoredEntitlement();
@@ -140,7 +177,14 @@ export default function UpgradeModal({
     isEntitlementActive(localEntitlement)
   );
 
-  // Refresh authoritative status on mount / open
+  // Handle user-selected billing country change
+  const handleCountryChange = (newCountryCode: string) => {
+    setBillingCountry(newCountryCode);
+    saveBillingCountry(newCountryCode);
+    setError(null);
+  };
+
+  // Refresh authoritative status and country detection on mount / open
   useEffect(() => {
     if (isOpen) {
       setError(null);
@@ -155,10 +199,26 @@ export default function UpgradeModal({
         }
       }
       
-      detectUserCountry().then((detected) => {
-        const countryCode = detected === 'IN' ? 'IN' : 'US';
-        setBillingCountry(countryCode);
-      });
+      const savedCountry = getSavedBillingCountry();
+      if (savedCountry) {
+        setBillingCountry(savedCountry);
+      } else {
+        detectUserCountry().then((detected) => {
+          setBillingCountry(detected);
+        });
+      }
+
+      // Fetch public payment configuration (PayPal client ID, etc.)
+      fetch('/api/subscription/config')
+        .then(res => res.json())
+        .then(cfg => {
+          if (cfg?.paypalClientId) {
+            setPaypalClientId(cfg.paypalClientId);
+          }
+        })
+        .catch(err => {
+          console.warn('[Payment Config Fetch Error]', err);
+        });
 
       // Query authoritative server-side subscription state
       const headers: Record<string, string> = {};
@@ -190,6 +250,8 @@ export default function UpgradeModal({
 
   // Selected plan object
   const activePlan = plans.find(p => p.id === selectedPlanId) || plans[0];
+  const activePlanRef = useRef(activePlan);
+  activePlanRef.current = activePlan;
 
   // Helper to load Razorpay SDK dynamically
   const loadRazorpayScript = (): Promise<boolean> => {
@@ -213,22 +275,26 @@ export default function UpgradeModal({
     });
   };
 
-  // Helper to load PayPal SDK dynamically
+  // Helper to load PayPal SDK dynamically with USD currency
   const loadPaypalScript = (clientId: string): Promise<boolean> => {
     return new Promise((resolve) => {
       if (window.paypal) {
         resolve(true);
         return;
       }
-      const existingScript = document.getElementById('paypal-sdk-script');
+      const existingScript = document.getElementById('paypal-sdk-script') as HTMLScriptElement | null;
       if (existingScript) {
-        existingScript.addEventListener('load', () => resolve(true));
-        existingScript.addEventListener('error', () => resolve(false));
-        return;
+        if (existingScript.src.includes(`client-id=${clientId}`)) {
+          existingScript.addEventListener('load', () => resolve(true));
+          existingScript.addEventListener('error', () => resolve(false));
+          return;
+        } else {
+          existingScript.remove();
+        }
       }
       const script = document.createElement('script');
       script.id = 'paypal-sdk-script';
-      script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&enable-funding=venmo,paylater`;
+      script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&intent=capture`;
       script.onload = () => resolve(true);
       script.onerror = () => resolve(false);
       document.body.appendChild(script);
@@ -256,6 +322,7 @@ export default function UpgradeModal({
         headers,
         body: JSON.stringify({
           ...payload,
+          billingCountry: billingCountry,
           planType: activePlan.id,
           planId: activePlan.id,
           plan: activePlan.id,
@@ -264,7 +331,11 @@ export default function UpgradeModal({
         }),
       });
 
-      setPaymentSuccessMessage('Payment verified successfully! Welcome to Study Planner Premium.');
+      setPaymentSuccessMessage(
+        language === 'fr-FR'
+          ? 'Paiement vérifié avec succès ! Bienvenue dans Study Planner Premium.'
+          : 'Payment verified successfully! Welcome to Study Planner Premium.'
+      );
       if (onSuccess && data.subscription) {
         onSuccess(data.subscription);
       }
@@ -281,19 +352,236 @@ export default function UpgradeModal({
     }
   };
 
+  // Dedicated effect to mount PayPal Buttons when billing country is outside India
+  useEffect(() => {
+    if (!isOpen || isUserPremium || isIndia) {
+      if (activePayPalButtonsRef.current) {
+        try {
+          if (typeof activePayPalButtonsRef.current.close === 'function') {
+            activePayPalButtonsRef.current.close();
+          }
+        } catch (_) {}
+        activePayPalButtonsRef.current = null;
+      }
+      return;
+    }
+
+    let isCancelled = false;
+
+    const initPayPalButtons = async () => {
+      try {
+        let cid = paypalClientId;
+        if (!cid) {
+          const cfgRes = await fetch('/api/subscription/config');
+          if (cfgRes.ok) {
+            const cfg = await cfgRes.json();
+            if (cfg.paypalClientId) {
+              cid = cfg.paypalClientId;
+              if (!isCancelled) setPaypalClientId(cid);
+            }
+          }
+        }
+
+        if (!cid || isCancelled) return;
+
+        const isLoaded = await loadPaypalScript(cid);
+        if (!isLoaded || !window.paypal || isCancelled) return;
+
+        if (!isCancelled) {
+          setIsPaypalSdkReady(true);
+        }
+
+        const container = paypalContainerRef.current || document.getElementById('paypal-button-container');
+        if (!container || !container.isConnected || isCancelled) return;
+
+        // If buttons are already rendered in this container, do not re-render
+        if (activePayPalButtonsRef.current && container.children.length > 0) {
+          return;
+        }
+
+        // Clean up previous button instance safely
+        if (activePayPalButtonsRef.current) {
+          try {
+            if (typeof activePayPalButtonsRef.current.close === 'function') {
+              activePayPalButtonsRef.current.close();
+            }
+          } catch (_) {}
+          activePayPalButtonsRef.current = null;
+        }
+
+        container.innerHTML = '';
+
+        if (isCancelled || !container.isConnected) return;
+
+        const buttons = window.paypal.Buttons({
+          style: {
+            layout: 'vertical',
+            color: 'gold',
+            shape: 'rect',
+            label: 'paypal',
+            height: 42,
+          },
+          createOrder: async () => {
+            const currentAuth = authUserRef.current;
+            const currentPlan = activePlanRef.current;
+            const currentCountry = billingCountryRef.current;
+            const currentLang = languageRef.current;
+
+            if (!currentAuth || !currentAuth.uid) {
+              setError(
+                currentLang === 'fr-FR'
+                  ? 'Veuillez vérifier votre compte e-mail ci-dessous avant de procéder au paiement.'
+                  : 'Please verify your email account below before proceeding to payment.'
+              );
+              const authElem = document.getElementById('email-account-auth-container');
+              if (authElem) authElem.scrollIntoView({ behavior: 'smooth' });
+              throw new Error('AUTH_REQUIRED');
+            }
+
+            setIsLoading(true);
+            setError(null);
+            try {
+              const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+              if (currentAuth.uid) headers['x-user-id'] = currentAuth.uid;
+              if (currentAuth.email) headers['x-user-email'] = currentAuth.email;
+
+              const orderData = await safeFetchJson('/api/subscription/create-order', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  planType: currentPlan.id,
+                  planId: currentPlan.id,
+                  plan: currentPlan.id,
+                  billingCountry: currentCountry,
+                  country: currentCountry,
+                  userId: currentAuth.uid,
+                  userEmail: currentAuth.email,
+                }),
+              });
+
+              if (orderData.alreadyActive) {
+                setPaymentSuccessMessage(
+                  currentLang === 'fr-FR'
+                    ? 'Votre abonnement Premium est déjà actif.'
+                    : 'Your Premium subscription is already active.'
+                );
+                if (orderData.subscription && onSuccessRef.current) {
+                  onSuccessRef.current(orderData.subscription);
+                }
+                setIsLoading(false);
+                throw new Error('ALREADY_ACTIVE');
+              }
+
+              return orderData.orderId;
+            } catch (createErr: any) {
+              setIsLoading(false);
+              if (createErr.message !== 'AUTH_REQUIRED' && createErr.message !== 'ALREADY_ACTIVE') {
+                setError(createErr.message || 'Failed to initiate PayPal order');
+              }
+              throw createErr;
+            }
+          },
+          onApprove: async (data: any) => {
+            await handleVerifyPaymentOnBackend({
+              orderId: data.orderID,
+              provider: 'paypal',
+            });
+          },
+          onError: (err: any) => {
+            console.error('[PayPal SDK Error]', err);
+            const detailStr = typeof err === 'string' ? err : err?.message || JSON.stringify(err);
+            setError(languageRef.current === 'fr-FR' ? `Erreur PayPal : ${detailStr}` : `PayPal Checkout Error: ${detailStr}`);
+            setIsLoading(false);
+          },
+          onCancel: () => {
+            setIsLoading(false);
+          },
+        });
+
+        activePayPalButtonsRef.current = buttons;
+
+        if (typeof buttons.isEligible === 'function' && !buttons.isEligible()) {
+          return;
+        }
+
+        if (container.isConnected && !isCancelled) {
+          await buttons.render(container).catch((renderErr: any) => {
+            const msg = renderErr?.message || String(renderErr);
+            if (msg.includes('container element removed') || isCancelled || !container.isConnected) {
+              return;
+            }
+            console.warn('[PayPal Render Error]', renderErr);
+          });
+        }
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        if (!msg.includes('container element removed')) {
+          console.warn('[PayPal setup exception]', err);
+        }
+      }
+    };
+
+    // Small delay to ensure container element is mounted in DOM
+    const timer = setTimeout(initPayPalButtons, 150);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+      if (activePayPalButtonsRef.current) {
+        try {
+          if (typeof activePayPalButtonsRef.current.close === 'function') {
+            activePayPalButtonsRef.current.close();
+          }
+        } catch (_) {}
+        activePayPalButtonsRef.current = null;
+      }
+    };
+  }, [isOpen, isUserPremium, isIndia, paypalClientId]);
+
   // Execute checkout with duplicate purchase protection
   const handleCheckout = async () => {
     // Client-side guard: Never allow an already active premium subscriber to start checkout
     if (isUserPremium) {
-      setError('Your Premium subscription is already active. You will not be charged again.');
+      setError(
+        language === 'fr-FR'
+          ? 'Votre abonnement Premium est déjà actif. Aucun débit supplémentaire ne sera effectué.'
+          : 'Your Premium subscription is already active. You will not be charged again.'
+      );
       return;
     }
 
     if (!authUser || !authUser.uid) {
-      setError('Please create or sign in to your Study Planner account first so your Premium subscription is securely linked to your account.');
+      setError(
+        language === 'fr-FR'
+          ? 'Veuillez vous connecter à votre compte Study Planner afin d\'associer votre abonnement Premium.'
+          : 'Please create or sign in to your Study Planner account first so your Premium subscription is securely linked to your account.'
+      );
       const authElem = document.getElementById('email-account-auth-container');
       if (authElem) {
         authElem.scrollIntoView({ behavior: 'smooth' });
+      }
+      return;
+    }
+
+    // For international users with PayPal buttons visible, highlight the PayPal button
+    if (!isIndia) {
+      const paypalSection = document.getElementById('paypal-checkout-section');
+      if (paypalSection) {
+        paypalSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      const container = paypalContainerRef.current || document.getElementById('paypal-button-container');
+      if (container) {
+        container.classList.add('ring-2', 'ring-[#6750A4]', 'ring-offset-2', 'rounded-xl');
+        setTimeout(() => {
+          container?.classList.remove('ring-2', 'ring-[#6750A4]', 'ring-offset-2', 'rounded-xl');
+        }, 2000);
+      }
+      if (!isPaypalSdkReady) {
+        setError(
+          language === 'fr-FR'
+            ? 'Le module PayPal est en cours de chargement. Veuillez patienter...'
+            : 'PayPal checkout is loading. Please wait a moment...'
+        );
       }
       return;
     }
@@ -319,6 +607,7 @@ export default function UpgradeModal({
           planType: activePlan.id,
           planId: activePlan.id,
           plan: activePlan.id,
+          billingCountry: billingCountry,
           country: billingCountry,
           userId: authUser.uid,
           userEmail: authUser.email,
@@ -327,7 +616,11 @@ export default function UpgradeModal({
 
       // If backend reports subscription is already active, acknowledge without charging
       if (orderData.alreadyActive) {
-        setPaymentSuccessMessage('Your Premium subscription is already active.');
+        setPaymentSuccessMessage(
+          language === 'fr-FR'
+            ? 'Votre abonnement Premium est déjà actif.'
+            : 'Your Premium subscription is already active.'
+        );
         if (orderData.subscription && onSuccess) {
           onSuccess(orderData.subscription);
         }
@@ -376,49 +669,18 @@ export default function UpgradeModal({
           throw new Error('Razorpay Checkout SDK failed to load. Please check your network connection.');
         }
       } else {
-        // PayPal Gateway Flow
-        const isPaypalLoaded = await loadPaypalScript(keyId);
-
-        if (isPaypalLoaded && window.paypal) {
-          const container = document.getElementById('paypal-button-container');
-          if (container) {
-            container.innerHTML = '';
-          }
-
-          window.paypal.Buttons({
-            createOrder: () => orderId,
-            onApprove: async (data: any) => {
-              await handleVerifyPaymentOnBackend({
-                orderId: data.orderID,
-                provider: 'paypal',
-              });
-            },
-            onError: (err: any) => {
-              console.error('[PayPal Checkout Error Detail]', err);
-              const detailStr = typeof err === 'string' ? err : err?.message || JSON.stringify(err);
-              setError(`PayPal Checkout Error: ${detailStr}`);
-              setIsLoading(false);
-            },
-            onCancel: () => {
-              setIsLoading(false);
-            }
-          }).render('#paypal-button-container');
-
-          setIsLoading(false);
-        } else {
-          // Direct verification fallback if script fails to load
-          await handleVerifyPaymentOnBackend({
-            orderId,
-            provider: 'paypal',
-          });
-        }
+        throw new Error('Unsupported payment provider');
       }
     } catch (err: any) {
       console.error('Checkout error:', err);
       // If error indicates already premium, handle gracefully
       if (err?.code === 'ALREADY_PREMIUM' || err?.message?.includes('already active')) {
         setError(null);
-        setPaymentSuccessMessage('Your Premium subscription is already active.');
+        setPaymentSuccessMessage(
+          language === 'fr-FR'
+            ? 'Votre abonnement Premium est déjà actif.'
+            : 'Your Premium subscription is already active.'
+        );
         setIsLoading(false);
         return;
       }
@@ -683,6 +945,42 @@ export default function UpgradeModal({
                     </div>
                   )}
 
+                  {/* Billing Country Selection & Currency Routing */}
+                  <div className="p-3.5 bg-slate-50/90 rounded-2xl border border-slate-200/80 space-y-2.5" id="billing-country-card">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                        <Globe className="w-3.5 h-3.5 text-[#6750A4]" />
+                        <span>{t('premium.billingCountry')}</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700 flex items-center gap-1">
+                        <span>{countryConfig.flag}</span>
+                        <span>{countryConfig.currency} • {isIndia ? 'Razorpay' : 'PayPal'}</span>
+                      </span>
+                    </div>
+
+                    <div className="relative">
+                      <select
+                        id="billing-country-select"
+                        value={billingCountry}
+                        onChange={(e) => handleCountryChange(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 appearance-none focus:outline-none focus:ring-2 focus:ring-[#6750A4]/30 focus:border-[#6750A4] cursor-pointer"
+                      >
+                        {SUPPORTED_COUNTRIES.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.flag} {c.name} ({c.currency} • {c.gateway === 'razorpay' ? 'Razorpay' : 'PayPal'})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
+                        <ArrowRight className="w-3.5 h-3.5 rotate-90" />
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-slate-500 leading-tight">
+                      {isIndia ? t('premium.indiaGatewayNotice') : t('premium.intlGatewayNotice')}
+                    </p>
+                  </div>
+
                   {/* Pricing Cards Selection */}
                   <div className="space-y-2">
                     <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
@@ -790,11 +1088,35 @@ export default function UpgradeModal({
 
                   {/* Dynamic PayPal Gateway Container (Rendered when PayPal is active) */}
                   {!isIndia && (
-                    <div className="space-y-2">
+                    <div className="p-4 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-3" id="paypal-checkout-section">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="w-4 h-4 text-[#6750A4]" />
+                          <span>{t('premium.completeInPaypal')}</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                          USD ($) • PayPal & Cards
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-500">
+                        {language === 'fr-FR' 
+                          ? 'Payez en toute sécurité avec votre compte PayPal ou par carte bancaire/crédit.' 
+                          : 'Pay securely using your PayPal balance, debit, or credit card.'}
+                      </p>
+
                       <div 
+                        ref={paypalContainerRef}
                         id="paypal-button-container" 
-                        className="w-full min-h-[45px] empty:hidden transition-all"
+                        className="w-full min-h-[42px] transition-all"
                       />
+
+                      {!isPaypalSdkReady && (
+                        <div className="flex items-center justify-center gap-2 py-3 text-xs text-slate-500">
+                          <Loader2 className="w-4 h-4 animate-spin text-[#6750A4]" />
+                          <span>{t('premium.paypalLoading')}</span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -876,7 +1198,13 @@ export default function UpgradeModal({
                       <>
                         <CreditCard className="w-4 h-4" />
                         <span>
-                          {language === 'fr-FR' ? `Régler ${activePlan.formattedPrice} avec ${activeGateway.name}` : `Pay ${activePlan.formattedPrice} with ${activeGateway.name}`}
+                          {language === 'fr-FR'
+                            ? (isIndia
+                                ? `Régler ${activePlan.formattedPrice} avec Razorpay`
+                                : `Payer ${activePlan.formattedPrice} avec PayPal / Carte`)
+                            : (isIndia
+                                ? `Pay ${activePlan.formattedPrice} with Razorpay`
+                                : `Pay ${activePlan.formattedPrice} with PayPal / Card`)}
                         </span>
                         <ArrowRight className="w-4 h-4" />
                       </>

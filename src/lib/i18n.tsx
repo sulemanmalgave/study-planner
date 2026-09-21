@@ -530,6 +530,14 @@ export const translations: Record<Language, Record<string, string>> = {
     'premium.restoreLink': 'Already purchased? Restore your subscription',
     'premium.activeTitle': 'Study Planner Premium Active',
     'premium.activeSubtitle': 'Your account has full access to all premium features',
+    'premium.billingCountry': 'Billing Country',
+    'premium.changeCountry': 'Change billing country',
+    'premium.selectBillingCountry': 'Select your billing country',
+    'premium.payWithPaypal': 'Pay with PayPal',
+    'premium.payWithRazorpay': 'Pay with Razorpay',
+    'premium.internationalNotice': 'International payments processed securely via PayPal in USD',
+    'premium.indiaNotice': 'Payments in India processed securely via Razorpay in INR',
+    'premium.completeInPaypal': 'Please complete payment in the PayPal window below:',
 
     // Limit Dialog
     'limit.title': 'Free Plan Limit Reached',
@@ -960,6 +968,14 @@ export const translations: Record<Language, Record<string, string>> = {
     'premium.restoreLink': 'Déjà abonné ? Restaurer votre abonnement',
     'premium.activeTitle': 'Study Planner Premium actif',
     'premium.activeSubtitle': 'Votre compte bénéficie d\'un accès complet à l\'ensemble des fonctionnalités Premium',
+    'premium.billingCountry': 'Pays de facturation',
+    'premium.changeCountry': 'Modifier le pays de facturation',
+    'premium.selectBillingCountry': 'Sélectionnez votre pays de facturation',
+    'premium.payWithPaypal': 'Payer avec PayPal',
+    'premium.payWithRazorpay': 'Payer avec Razorpay',
+    'premium.internationalNotice': 'Paiements internationaux traités en toute sécurité via PayPal en USD',
+    'premium.indiaNotice': 'Paiements en Inde traités en toute sécurité via Razorpay en INR',
+    'premium.completeInPaypal': 'Veuillez finaliser le paiement dans la fenêtre PayPal ci-dessous :',
 
     // Limit Dialog
     'limit.title': 'Limite du forfait gratuit atteinte',
