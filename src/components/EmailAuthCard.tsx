@@ -42,7 +42,7 @@ export default function EmailAuthCard({
 }: EmailAuthCardProps) {
   const { language } = useTranslation();
   const [mode, setMode] = useState<AuthMode>('signup');
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -62,41 +62,44 @@ export default function EmailAuthCard({
     setConfirmPassword('');
   };
 
-  // 1. Sign Up Handler (NAME + EMAIL + PASSWORD)
+  // 1. Sign Up Handler (FIRST NAME + PASSWORD + CONFIRM PASSWORD)
   const onSubmitSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
     setError(null);
     setSuccessMessage(null);
 
-    const cleanName = name.trim();
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanFirstName = firstName.trim();
 
-    if (!cleanName) {
-      setError(language === 'fr-FR' ? 'Veuillez saisir votre nom.' : 'Please enter your name.');
+    if (!cleanFirstName) {
+      setError(language === 'fr-FR' ? 'Le prénom est obligatoire.' : 'First Name is required.');
       return;
     }
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setError(language === 'fr-FR' ? 'Veuillez saisir une adresse e-mail valide.' : 'Please enter a valid email address.');
+    if (!password) {
+      setError(language === 'fr-FR' ? 'Le mot de passe est obligatoire.' : 'Password is required.');
       return;
     }
-    if (!password || password.length < 6) {
-      setError(language === 'fr-FR' ? 'Le mot de passe doit comporter au moins 6 caractères.' : 'Password must be at least 6 characters.');
+    if (password.length < 8) {
+      setError(language === 'fr-FR' ? 'Le mot de passe doit comporter au moins 8 caractères.' : 'Password must be at least 8 characters.');
+      return;
+    }
+    if (!confirmPassword) {
+      setError(language === 'fr-FR' ? 'Veuillez confirmer votre mot de passe.' : 'Confirm Password is required.');
       return;
     }
     if (password !== confirmPassword) {
-      setError(language === 'fr-FR' ? 'Les mots de passe ne correspondent pas.' : 'Passwords do not match. Please verify your password.');
+      setError(language === 'fr-FR' ? 'Les mots de passe ne correspondent pas. Veuillez vérifier votre mot de passe.' : 'Passwords do not match. Please verify your password.');
       return;
     }
 
     setIsLoading(true);
     try {
-      const result = await handleSignUp(cleanName, cleanEmail, password, confirmPassword);
-      setSuccessMessage(language === 'fr-FR' ? 'Compte créé avec succès.' : 'Account created successfully.');
+      const result = await handleSignUp(cleanFirstName, '', password, confirmPassword);
+      setSuccessMessage(language === 'fr-FR' ? 'Compte vérifié et activé avec succès.' : 'Account verified and ready to continue.');
       onAuthSuccess(result.user, result.hasActiveSubscription, result.subscription);
     } catch (err: any) {
       console.warn('[EmailAuthCard] Signup notice:', err?.message || err);
-      setError(err?.message || (language === 'fr-FR' ? 'Échec de la création du compte. Veuillez réessayer.' : 'Failed to create account. Please try again.'));
+      setError(err?.message || (language === 'fr-FR' ? 'Échec de la vérification du compte. Veuillez réessayer.' : 'Failed to verify account. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -195,7 +198,9 @@ export default function EmailAuthCard({
                 {language === 'fr-FR' ? 'Compte actif' : 'Active Account'}
               </span>
             </div>
-            <div className="text-[11px] text-slate-600 truncate mt-0.5">{authUser.email}</div>
+            {authUser.email && !authUser.email.endsWith('@studyplanner.internal') && (
+              <div className="text-[11px] text-slate-600 truncate mt-0.5">{authUser.email}</div>
+            )}
             <div className="text-[10px] text-slate-500 font-mono mt-0.5">ID: {authUser.uid}</div>
           </div>
         </div>
@@ -281,38 +286,22 @@ export default function EmailAuthCard({
       )}
 
       {/* ======================================================= */}
-      {/* 1. SIGNUP FORM: Name + Email + Password + Confirm Pass  */}
+      {/* 1. SIGNUP FORM: First Name + Password + Confirm Pass    */}
       {/* ======================================================= */}
       {mode === 'signup' && (
         <form onSubmit={onSubmitSignUp} className="space-y-3" id="email-signup-form">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'Nom' : 'Name'}</label>
+            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'Prénom' : 'First Name'}</label>
             <div className="relative">
               <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={language === 'fr-FR' ? 'Votre nom complet' : 'Your full name'}
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder={language === 'fr-FR' ? 'Votre prénom' : 'Your first name'}
                 required
                 className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
                 id="email-auth-name-input"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'E-mail' : 'Email'}</label>
-            <div className="relative">
-              <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                required
-                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
-                id="email-auth-email-input"
               />
             </div>
           </div>
@@ -325,8 +314,8 @@ export default function EmailAuthCard({
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={language === 'fr-FR' ? 'Minimum 6 caractères' : 'Minimum 6 characters'}
-                minLength={6}
+                placeholder={language === 'fr-FR' ? 'Minimum 8 caractères' : 'Minimum 8 characters'}
+                minLength={8}
                 required
                 className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
                 id="email-auth-password-input"
@@ -352,7 +341,7 @@ export default function EmailAuthCard({
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder={language === 'fr-FR' ? 'Retapez le mot de passe' : 'Re-enter password'}
-                minLength={6}
+                minLength={8}
                 required
                 className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
                 id="email-auth-confirm-password-input"
@@ -379,11 +368,11 @@ export default function EmailAuthCard({
               {isLoading ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>{language === 'fr-FR' ? 'Création du compte...' : 'Creating account...'}</span>
+                  <span>{language === 'fr-FR' ? 'Vérification du compte...' : 'Verifying Account...'}</span>
                 </>
               ) : (
                 <>
-                  <span>{language === 'fr-FR' ? 'Créer un compte' : 'Create Account'}</span>
+                  <span>{language === 'fr-FR' ? 'Vérifier le compte pour continuer' : 'Verify Account to Continue'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}

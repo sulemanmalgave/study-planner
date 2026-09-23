@@ -92,7 +92,9 @@ export function sanitizeSchema(state: any): DatabaseSchema {
       photoURL: state.profile?.photoURL || null,
       subscription: sub,
       aiUsage: state.profile?.aiUsage || fallback.profile.aiUsage,
-      language: state.profile?.language || (typeof window !== 'undefined' ? localStorage.getItem('studyflow_language') || 'fr-FR' : 'fr-FR'),
+      language: (typeof window !== 'undefined' && localStorage.getItem('studyflow_user_selected_language') === 'fr-FR')
+        ? 'fr-FR'
+        : 'en',
     },
     courses: Array.isArray(state.courses) ? state.courses : [],
     timetable: Array.isArray(state.timetable) ? state.timetable : [],

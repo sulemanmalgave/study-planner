@@ -50,5 +50,14 @@
     "updatedAt": "2026-09-06T05:39:52.595Z",
     "passwordResetToken": "ba1b954da00bd4b12fc60fdbcdbaa67cf2b415cd3913987ae5968c155f09c865",
     "passwordResetExpires": 1788676792595
+  },
+  {
+    "userId": "usr_3cd296361997409a",
+    "name": "TestStudent1790138181318",
+    "email": "teststudent1790138181318_3cd296361997409a@studyplanner.internal",
+    "passwordHash": "$2b$10$EBu2xrWgtSJNqm6Cwlfg.us9OA./EstWkaclV2aa0JiyNKj1XQsLG",
+    "emailVerified": true,
+    "createdAt": "2026-09-23T04:36:21.438Z",
+    "updatedAt": "2026-09-23T04:36:21.438Z"
   }
 ]

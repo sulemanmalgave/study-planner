@@ -430,8 +430,8 @@ export default function UpgradeModal({
             if (!currentAuth || !currentAuth.uid) {
               setError(
                 currentLang === 'fr-FR'
-                  ? 'Veuillez vérifier votre compte e-mail ci-dessous avant de procéder au paiement.'
-                  : 'Please verify your email account below before proceeding to payment.'
+                  ? 'Veuillez vérifier votre compte ci-dessous avant de procéder au paiement.'
+                  : 'Please verify your account below before proceeding to payment.'
               );
               const authElem = document.getElementById('email-account-auth-container');
               if (authElem) authElem.scrollIntoView({ behavior: 'smooth' });
@@ -857,7 +857,7 @@ export default function UpgradeModal({
                           {language === 'fr-FR' ? 'Compte' : 'Account'}
                         </span>
                         <span className="font-medium text-slate-800 truncate max-w-[200px]">
-                          {authUser?.email || profile?.email || (language === 'fr-FR' ? 'Utilisateur actif' : 'Active Workspace User')}
+                          {authUser?.displayName || authUser?.name || (authUser?.email && !authUser.email.endsWith('@studyplanner.internal') ? authUser.email : null) || profile?.name || (language === 'fr-FR' ? 'Utilisateur actif' : 'Active Workspace User')}
                         </span>
                       </div>
                     </div>
@@ -1030,11 +1030,11 @@ export default function UpgradeModal({
                     </div>
                   </div>
 
-                  {/* Simple Email Account & Verification Section */}
+                  {/* Simple Account & Verification Section */}
                   <div className="space-y-1.5">
                     <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
                       <span>{t('settings.accountProtection')}</span>
-                      <span className="text-[10px] text-slate-400 font-medium">{language === 'fr-FR' ? 'E-mail vérifié' : 'Verified Email'}</span>
+                      <span className="text-[10px] text-slate-400 font-medium">{language === 'fr-FR' ? 'Compte vérifié' : 'Verified Account'}</span>
                     </div>
 
                     <EmailAuthCard

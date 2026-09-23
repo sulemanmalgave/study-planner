@@ -1,9 +1,16 @@
 [
   {
-    "token": "f1d97452579892a6a3c710e652724d2d366c5b82983453b569bea40a17534a51",
-    "userId": "usr_ea185b1ab69de8f2",
-    "email": "test_student@example.com",
-    "createdAt": 1788673180692,
-    "expiresAt": 1791265180692
+    "token": "eee299b54929f2103730154de468d99dee654688721b06de2147c9d30adbe371",
+    "userId": "usr_3cd296361997409a",
+    "email": "teststudent1790138181318_3cd296361997409a@studyplanner.internal",
+    "createdAt": 1790138181439,
+    "expiresAt": 1792730181439
+  },
+  {
+    "token": "6e17d9769338570e65a858989f3cc0bf427fa45fe3e74905cf69a923b3764e1d",
+    "userId": "usr_3cd296361997409a",
+    "email": "teststudent1790138181318_3cd296361997409a@studyplanner.internal",
+    "createdAt": 1790138181548,
+    "expiresAt": 1792730181548
   }
 ]

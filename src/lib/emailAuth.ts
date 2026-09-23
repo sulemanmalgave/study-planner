@@ -85,23 +85,27 @@ export function getAuthHeaders(): Record<string, string> {
  */
 export async function handleSignUp(
   name: string,
-  email: string,
-  password: string,
+  email?: string,
+  password?: string,
   confirmPassword?: string
 ): Promise<AuthResult> {
-  const cleanName = name.trim();
-  const cleanEmail = email.trim().toLowerCase();
+  const cleanName = (typeof name === 'string' ? name : '').trim();
+  const cleanEmail = (typeof email === 'string' && email.trim()) ? email.trim().toLowerCase() : '';
+  const cleanPassword = password || '';
 
   if (!cleanName) {
-    throw new Error('Please enter your name.');
+    throw new Error('First Name is required.');
   }
-  if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+  if (cleanEmail && (!cleanEmail.includes('@') || !cleanEmail.includes('.'))) {
     throw new Error('Please enter a valid email address.');
   }
-  if (!password || password.length < 6) {
-    throw new Error('Password must be at least 6 characters.');
+  if (!cleanPassword) {
+    throw new Error('Password is required.');
   }
-  if (confirmPassword !== undefined && password !== confirmPassword) {
+  if (cleanPassword.length < 8) {
+    throw new Error('Password must be at least 8 characters.');
+  }
+  if (confirmPassword !== undefined && cleanPassword !== confirmPassword) {
     throw new Error('Passwords do not match. Please verify your password.');
   }
 
@@ -109,10 +113,11 @@ export async function handleSignUp(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      firstName: cleanName,
       name: cleanName,
       email: cleanEmail,
-      password,
-      confirmPassword: confirmPassword || password,
+      password: cleanPassword,
+      confirmPassword: confirmPassword || cleanPassword,
     }),
   });
 

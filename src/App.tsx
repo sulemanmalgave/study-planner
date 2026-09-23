@@ -438,9 +438,21 @@ export default function App() {
   // Sync language with profile setting
   useEffect(() => {
     if (dbState?.profile?.language) {
-      const targetLang: Language = dbState.profile.language === 'fr-FR' ? 'fr-FR' : 'en';
-      if (targetLang !== language) {
-        setLanguage(targetLang);
+      const explicitUserSelected = typeof window !== 'undefined' ? localStorage.getItem('studyflow_user_selected_language') : null;
+      if (explicitUserSelected === 'fr-FR') {
+        if (language !== 'fr-FR') {
+          setLanguage('fr-FR');
+        }
+      } else if (explicitUserSelected === 'en') {
+        if (language !== 'en') {
+          setLanguage('en');
+        }
+      } else {
+        // No manual language selection was made.
+        // Guarantee English default: if profile has old legacy 'fr-FR', sanitize it to 'en' without switching UI to French
+        if (dbState.profile.language === 'fr-FR') {
+          handleUpdateProfile({ language: 'en' });
+        }
       }
     }
   }, [dbState?.profile?.language]);
@@ -1148,8 +1160,8 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   setLanguage('en');
-                  if (profile?.language !== 'en-US') {
-                    handleUpdateProfile({ language: 'en-US' });
+                  if (profile?.language !== 'en') {
+                    handleUpdateProfile({ language: 'en' });
                   }
                 }}
                 className={`px-2 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1 ${

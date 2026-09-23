@@ -881,7 +881,7 @@ const getInitialDatabaseState = (): DatabaseSchema => {
       name: 'Student',
       email: '',
       initials: 'ST',
-      language: 'fr-FR',
+      language: 'en',
       subscription: {
         subscriptionStatus: 'free',
         plan: null,
@@ -1312,6 +1312,12 @@ const findUserByEmail = (email: string): StoredUserRecord | undefined => {
 const findUserById = (userId: string): StoredUserRecord | undefined => {
   const users = readUsers();
   return users.find(u => u.userId === userId);
+};
+
+const findUserByName = (name: string): StoredUserRecord | undefined => {
+  const users = readUsers();
+  const normalized = name.trim().toLowerCase();
+  return users.find(u => u.name.trim().toLowerCase() === normalized);
 };
 
 const upsertUser = (user: StoredUserRecord): StoredUserRecord => {
@@ -4545,24 +4551,37 @@ Format cleanly in Markdown with bullet points:
   // No Google, No Microsoft, No OTP, No Email Verification Required
   // ==============================================================
 
-  // 1. Native Account Registration (Name, Email, Password, Confirm Password)
+  // 1. Native Account Registration (First Name, Password, Confirm Password)
   app.post('/api/auth/register', async (req, res) => {
     try {
-      const { name, email, password, confirmPassword } = req.body || {};
-      const cleanName = (typeof name === 'string' ? name : '').trim();
-      const cleanEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
+      const { name, firstName, email, password, confirmPassword } = req.body || {};
+      const cleanName = (typeof firstName === 'string' && firstName.trim()
+        ? firstName
+        : (typeof name === 'string' ? name : '')
+      ).trim();
+      let cleanEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
 
       if (!cleanName) {
-        return res.status(400).json({ error: 'NAME_REQUIRED', message: 'Please enter your name.' });
+        return res.status(400).json({ error: 'FIRST_NAME_REQUIRED', message: 'First Name is required.' });
       }
-      if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-        return res.status(400).json({ error: 'INVALID_EMAIL', message: 'Please enter a valid email address.' });
+      if (!password || typeof password !== 'string') {
+        return res.status(400).json({ error: 'PASSWORD_REQUIRED', message: 'Password is required.' });
       }
-      if (!password || typeof password !== 'string' || password.length < 6) {
-        return res.status(400).json({ error: 'WEAK_PASSWORD', message: 'Password must be at least 6 characters.' });
+      if (password.length < 8) {
+        return res.status(400).json({ error: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters.' });
       }
       if (confirmPassword !== undefined && password !== confirmPassword) {
         return res.status(400).json({ error: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });
+      }
+
+      if (cleanEmail && (!cleanEmail.includes('@') || !cleanEmail.includes('.'))) {
+        return res.status(400).json({ error: 'INVALID_EMAIL', message: 'Please enter a valid email address.' });
+      }
+
+      const generatedId = `usr_${crypto.randomBytes(8).toString('hex')}`;
+      if (!cleanEmail) {
+        const slug = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'student';
+        cleanEmail = `${slug}_${generatedId.slice(4)}@studyplanner.internal`;
       }
 
       let existing = findUserByEmail(cleanEmail);
@@ -4571,8 +4590,8 @@ Format cleanly in Markdown with bullet points:
       if (existing) {
         if (existing.passwordHash) {
           return res.status(409).json({
-            error: 'EMAIL_ALREADY_EXISTS',
-            message: 'An account with this email already exists. Please log in.',
+            error: 'ACCOUNT_ALREADY_EXISTS',
+            message: 'An account already exists. Please log in.',
           });
         }
         // Seamlessly claim existing account that was previously imported/synced without a password
@@ -4586,7 +4605,7 @@ Format cleanly in Markdown with bullet points:
         upsertUser(existing);
       } else {
         // Generate permanent unique internal user ID
-        userId = `usr_${crypto.randomBytes(8).toString('hex')}`;
+        userId = generatedId;
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password, salt);
         existing = {
@@ -4671,14 +4690,14 @@ Format cleanly in Markdown with bullet points:
       const { email, password } = req.body || {};
       const cleanEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
 
-      if (!cleanEmail || !cleanEmail.includes('@')) {
-        return res.status(400).json({ error: 'EMAIL_REQUIRED', message: 'Please enter a valid email address.' });
+      if (!cleanEmail) {
+        return res.status(400).json({ error: 'IDENTIFIER_REQUIRED', message: 'Please enter your email or account name.' });
       }
       if (!password || typeof password !== 'string') {
         return res.status(400).json({ error: 'PASSWORD_REQUIRED', message: 'Please enter your password.' });
       }
 
-      const user = findUserByEmail(cleanEmail);
+      const user = findUserByEmail(cleanEmail) || findUserByName(cleanEmail);
       if (!user || !user.passwordHash) {
         return res.status(401).json({
           error: 'INVALID_CREDENTIALS',

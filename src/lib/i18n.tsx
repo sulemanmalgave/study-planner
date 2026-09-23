@@ -111,7 +111,142 @@ export const formatFrSlot = (startTime: string, endTime: string): string => {
   return `${start} – ${end}`;
 };
 
-const LANGUAGE_STORAGE_KEY = 'studyflow_language';
+export const USER_SELECTED_LANG_KEY = 'studyflow_user_selected_language';
+export const LANGUAGE_STORAGE_KEY = 'studyflow_language';
+
+// English (en-US) Date & Time formatters
+export const formatEnDate = (date: string | Date | number, options?: Intl.DateTimeFormatOptions): string => {
+  if (!date && date !== 0) return '';
+  try {
+    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const [y, m, d] = date.split('-');
+      if (!options) {
+        return `${m}/${d}/${y}`;
+      }
+      const parsedDate = new Date(`${date}T12:00:00Z`);
+      return new Intl.DateTimeFormat('en-US', options).format(parsedDate);
+    }
+    const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+    if (isNaN(d.getTime())) return String(date);
+    if (!options) {
+      return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }).format(d);
+    }
+    return new Intl.DateTimeFormat('en-US', options).format(d);
+  } catch {
+    return String(date);
+  }
+};
+
+export const formatEnTime = (
+  time: string | Date | number,
+  options?: { withSeconds?: boolean }
+): string => {
+  if (!time && time !== 0) return '';
+  if (typeof time === 'string') {
+    const match = time.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (match) {
+      const hours = parseInt(match[1], 10);
+      const mins = match[2];
+      const secs = match[3];
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const h12 = hours % 12 || 12;
+      if (options?.withSeconds && secs) {
+        return `${h12}:${mins}:${secs} ${ampm}`;
+      }
+      return `${h12}:${mins} ${ampm}`;
+    }
+  }
+  try {
+    const d = typeof time === 'string' || typeof time === 'number' ? new Date(time) : time;
+    if (!isNaN(d.getTime())) {
+      return new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        second: options?.withSeconds ? '2-digit' : undefined,
+        hour12: true,
+      }).format(d);
+    }
+  } catch {}
+  return String(time);
+};
+
+export const formatEnDateTime = (
+  dateTime: string | Date | number,
+  options?: Intl.DateTimeFormatOptions
+): string => {
+  if (!dateTime && dateTime !== 0) return '';
+  try {
+    if (typeof dateTime === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateTime)) {
+      return formatEnDate(dateTime, options);
+    }
+    const d = typeof dateTime === 'string' || typeof dateTime === 'number' ? new Date(dateTime) : dateTime;
+    if (isNaN(d.getTime())) return String(dateTime);
+    return new Intl.DateTimeFormat('en-US', options || {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(d);
+  } catch {
+    return String(dateTime);
+  }
+};
+
+export const formatEnSlot = (startTime: string, endTime: string): string => {
+  const start = formatEnTime(startTime);
+  const end = formatEnTime(endTime);
+  if (!start && !end) return '';
+  if (!end) return start;
+  if (!start) return end;
+  return `${start} – ${end}`;
+};
+
+/**
+ * Evaluates the language preference strictly following:
+ * 1. Explicit user selection stored locally
+ * 2. Hard-coded fallback to English ('en' / 'en-US')
+ * Browser/system/geolocation locales are deliberately ignored.
+ */
+export function getInitialLanguage(initialLanguage?: Language): Language {
+  if (typeof window !== 'undefined') {
+    try {
+      // 1. Explicit manual user selection has highest priority
+      const userSelected = localStorage.getItem(USER_SELECTED_LANG_KEY);
+      if (userSelected === 'fr-FR' || userSelected === 'fr') {
+        return 'fr-FR';
+      }
+      if (userSelected === 'en' || userSelected === 'en-US') {
+        return 'en';
+      }
+
+      // 2. If no explicit selection, check legacy storage key:
+      const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+      if (stored === 'en' || stored === 'en-US') {
+        return 'en';
+      }
+      if (stored === 'fr-FR') {
+        // Clear stale legacy default from earlier bug
+        localStorage.removeItem(LANGUAGE_STORAGE_KEY);
+      }
+    } catch (e) {
+      console.warn('Could not read stored language preference:', e);
+    }
+  }
+
+  // 3. Fallback to initialLanguage prop if valid English, or if explicit
+  if (initialLanguage === 'en') {
+    return 'en';
+  }
+
+  // 4. Default is ALWAYS English ('en' / en-US), regardless of device or browser locale
+  return 'en';
+}
 
 // Comprehensive dictionary for English and French (France)
 export const translations: Record<Language, Record<string, string>> = {
@@ -1003,27 +1138,27 @@ export function LanguageProvider({
   initialLanguage?: Language;
   onLanguageChange?: (lang: Language) => void;
 }) {
-  const [language, setLanguageState] = useState<Language>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY) as Language | null;
-      if (stored === 'fr-FR' || stored === 'en') {
-        return stored;
-      }
+  const [language, setLanguageState] = useState<Language>(() => getInitialLanguage(initialLanguage));
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = language === 'fr-FR' ? 'fr' : 'en';
     }
-    return initialLanguage || 'en';
-  });
+  }, [language]);
 
   const setLanguage = (lang: Language) => {
-    setLanguageState(lang);
+    const cleanLang: Language = lang === 'fr-FR' ? 'fr-FR' : 'en';
+    setLanguageState(cleanLang);
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+        localStorage.setItem(USER_SELECTED_LANG_KEY, cleanLang);
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, cleanLang);
       } catch (e) {
         console.warn('Failed to save language to localStorage:', e);
       }
     }
     if (onLanguageChange) {
-      onLanguageChange(lang);
+      onLanguageChange(cleanLang);
     }
   };
 
@@ -1041,24 +1176,24 @@ export function LanguageProvider({
   };
 
   const formatDate = (date: string | Date | number, options?: Intl.DateTimeFormatOptions): string => {
-    return formatFrDate(date, options);
+    return language === 'fr-FR' ? formatFrDate(date, options) : formatEnDate(date, options);
   };
 
   const formatTime = (time: string | Date | number, options?: { withSeconds?: boolean }): string => {
-    return formatFrTime(time, options);
+    return language === 'fr-FR' ? formatFrTime(time, options) : formatEnTime(time, options);
   };
 
   const formatDateTime = (dateTime: string | Date | number, options?: Intl.DateTimeFormatOptions): string => {
-    return formatFrDateTime(dateTime, options);
+    return language === 'fr-FR' ? formatFrDateTime(dateTime, options) : formatEnDateTime(dateTime, options);
   };
 
   const formatSlot = (startTime: string, endTime: string): string => {
-    return formatFrSlot(startTime, endTime);
+    return language === 'fr-FR' ? formatFrSlot(startTime, endTime) : formatEnSlot(startTime, endTime);
   };
 
   const formatNumber = (num: number, options?: Intl.NumberFormatOptions): string => {
     try {
-      return new Intl.NumberFormat('fr-FR', options).format(num);
+      return new Intl.NumberFormat(locale, options).format(num);
     } catch {
       return String(num);
     }
@@ -1108,13 +1243,13 @@ export function LanguageProvider({
 export function useTranslation() {
   const context = useContext(LanguageContext);
   if (!context) {
-    // Fallback if rendered outside provider
-    const fallbackLocale = 'fr-FR';
+    // Hard-coded default fallback: English ('en' / 'en-US')
+    const fallbackLocale = 'en-US';
     return {
-      language: 'fr-FR' as Language,
+      language: 'en' as Language,
       setLanguage: () => {},
       t: (key: string, vars?: Record<string, string | number>) => {
-        let text = translations['fr-FR']?.[key] || translations.en[key] || key;
+        let text = translations.en[key] || translations['fr-FR']?.[key] || key;
         if (vars) {
           Object.entries(vars).forEach(([k, v]) => {
             text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
@@ -1123,13 +1258,13 @@ export function useTranslation() {
         return text;
       },
       locale: fallbackLocale,
-      formatDate: formatFrDate,
-      formatTime: formatFrTime,
-      formatDateTime: formatFrDateTime,
-      formatSlot: formatFrSlot,
+      formatDate: formatEnDate,
+      formatTime: formatEnTime,
+      formatDateTime: formatEnDateTime,
+      formatSlot: formatEnSlot,
       formatNumber: (n: number) => {
         try {
-          return new Intl.NumberFormat('fr-FR').format(n);
+          return new Intl.NumberFormat('en-US').format(n);
         } catch {
           return String(n);
         }

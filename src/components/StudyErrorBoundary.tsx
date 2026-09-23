@@ -33,7 +33,7 @@ export class StudyErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
-      const isFrench = typeof window !== 'undefined' && localStorage.getItem('studyflow_language') === 'fr-FR';
+      const isFrench = typeof window !== 'undefined' && localStorage.getItem('studyflow_user_selected_language') === 'fr-FR';
       return (
         <div className="min-h-[400px] flex items-center justify-center p-6 bg-slate-50/50 rounded-3xl border border-slate-200/60 my-4">
           <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center space-y-4 shadow-xl border border-slate-200">
