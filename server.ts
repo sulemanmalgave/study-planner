@@ -5120,12 +5120,47 @@ Format cleanly in Markdown with bullet points:
           existingDb.profile.name = clientState.profile.name || existingDb.profile.name;
           existingDb.profile.email = effectiveUserEmail || clientState.profile.email || existingDb.profile.email;
           existingDb.profile.userId = effectiveUserId;
+          if (clientState.profile.language) {
+            existingDb.profile.language = clientState.profile.language;
+          }
+
+          // Preserve active subscription entitlement during migration
+          if (clientState.profile.subscription && isSubscriptionActive(clientState.profile.subscription)) {
+            if (!isSubscriptionActive(existingDb.profile.subscription)) {
+              existingDb.profile.subscription = { ...clientState.profile.subscription };
+            }
+
+            // Link existing subscription in ledger to this new userId
+            const subTx = clientState.profile.subscription.transactionId;
+            if (subTx) {
+              const ledger = readSubscriptionsLedger();
+              const lIdx = ledger.findIndex(e => e.transactionId && e.transactionId.toLowerCase() === subTx.toLowerCase());
+              if (lIdx >= 0) {
+                ledger[lIdx].userId = effectiveUserId;
+                if (effectiveUserEmail) ledger[lIdx].userEmail = effectiveUserEmail;
+                writeSubscriptionsLedger(ledger);
+              } else {
+                recordSubscriptionInLedger({
+                  transactionId: subTx,
+                  userId: effectiveUserId,
+                  userEmail: effectiveUserEmail,
+                  plan: (clientState.profile.subscription.plan as any) || 'monthly',
+                  paymentGateway: (clientState.profile.subscription.paymentGateway as any) || 'razorpay',
+                  purchaseDate: clientState.profile.subscription.purchaseDate || new Date().toISOString(),
+                  expiryDate: clientState.profile.subscription.expiryDate || new Date(Date.now() + 30 * 86400000).toISOString(),
+                  billingCountry: clientState.profile.subscription.billingCountry || 'US',
+                  verifiedAt: new Date().toISOString(),
+                  status: 'active',
+                });
+              }
+            }
+          }
         }
       }
 
       // Write merged state
       writeDB(existingDb, effectiveUserId, effectiveUserEmail);
-      return res.json({ success: true, message: 'Local data associated successfully.' });
+      return res.json({ success: true, message: 'Local data and subscription associated successfully.', subscription: existingDb.profile?.subscription });
     } catch (err: any) {
       console.error('[Email Auth] Error associating data:', err);
       return res.status(500).json({ error: 'FAILED_TO_ASSOCIATE', message: err.message });

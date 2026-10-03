@@ -13,7 +13,8 @@ import {
   Calendar,
   CheckSquare,
   Clock,
-  Globe
+  Globe,
+  ShieldCheck
 } from 'lucide-react';
 import { useTranslation, Language } from './lib/i18n';
 
@@ -74,6 +75,12 @@ import {
   sanitizeSchema,
 } from './lib/storage';
 import EmailAuthModal from './components/EmailAuthModal';
+import ProtectPlannerMigrationModal from './components/ProtectPlannerMigrationModal';
+import { 
+  detectExistingUserData, 
+  ExistingUserDataSummary, 
+  MIGRATION_DISMISSED_KEY 
+} from './lib/migration';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   getStoredEntitlement,
@@ -112,9 +119,28 @@ export default function App() {
   // Initialize state synchronously from resilient dual-key local storage so data is immediately available
   const [dbState, setDbState] = useState<DatabaseSchema | null>(() => loadClientState());
   const [isLoading, setIsLoading] = useState<boolean>(() => !loadClientState());
+  const [dataReady, setDataReady] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<AuthUserProfile | null>(() => getLocalAuthUser());
   const [isEmailAuthOpen, setIsEmailAuthOpen] = useState<boolean>(false);
+  const [migrationSummary, setMigrationSummary] = useState<ExistingUserDataSummary | null>(null);
+  const [isMigrationModalOpen, setIsMigrationModalOpen] = useState<boolean>(false);
+
+  // Check on mount if existing unmigrated data exists and needs account protection
+  useEffect(() => {
+    try {
+      const summary = detectExistingUserData();
+      if (summary.hasExistingData && !summary.isMigrated && !getLocalAuthUser()) {
+        setMigrationSummary(summary);
+        const isDismissed = typeof window !== 'undefined' ? sessionStorage.getItem(MIGRATION_DISMISSED_KEY) : null;
+        if (!isDismissed) {
+          setIsMigrationModalOpen(true);
+        }
+      }
+    } catch (e) {
+      console.warn('[Migration Check] Notice:', e);
+    }
+  }, []);
 
   // Check and query active session and subscription linked to authenticated Study Planner account
   useEffect(() => {
@@ -264,6 +290,21 @@ export default function App() {
     }
   };
 
+  const handleMigrationSuccess = (user: AuthUserProfile, migratedState: DatabaseSchema) => {
+    setAuthUser(user);
+    setDbState(migratedState);
+    saveClientState(migratedState);
+    setIsMigrationModalOpen(false);
+    setMigrationSummary((prev) => prev ? { ...prev, isMigrated: true, hasExistingData: false } : null);
+  };
+
+  const handleDismissMigration = () => {
+    try {
+      sessionStorage.setItem(MIGRATION_DISMISSED_KEY, 'true');
+    } catch (e) {}
+    setIsMigrationModalOpen(false);
+  };
+
   const handleSignOut = async () => {
     try {
       await performSignOut();
@@ -309,6 +350,7 @@ export default function App() {
 
   // Helper to persist state to LocalStorage (both primary & backup keys) and Firestore
   const persistState = async (newState: DatabaseSchema) => {
+    if (!newState) return;
     saveClientState(newState);
 
     // Always preserve and update dedicated independent entitlement storage
@@ -461,6 +503,7 @@ export default function App() {
       persistState(fallback);
     } finally {
       setIsLoading(false);
+      setDataReady(true);
     }
   };
 
@@ -1255,6 +1298,33 @@ export default function App() {
         {/* Dynamic Workspace Container */}
         <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 pb-20 md:pb-6 bg-[#F7F9FC] min-w-0" id="workspace-viewports">
           
+          {/* Unmigrated Data Protection Notice Banner */}
+          {migrationSummary?.hasExistingData && !authUser && (
+            <div className="mb-4 p-3.5 sm:p-4 bg-gradient-to-r from-[#F3EDF7] to-[#EADDFF] border border-[#D0BCFF] rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-[#6750A4] text-white rounded-xl shrink-0 shadow-xs">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-[#1D1B20]">
+                    {language === 'fr-FR' ? 'Protégez votre Study Planner' : 'Protect your Study Planner'}
+                  </h4>
+                  <p className="text-[11px] sm:text-xs text-[#49454F] mt-0.5">
+                    {language === 'fr-FR' 
+                      ? "Créez un compte pour sauvegarder en toute sécurité votre emploi du temps, vos notes, votre historique d'étude et votre accès Premium."
+                      : 'Create an account to securely save your timetable, notes, study history and Premium access.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsMigrationModalOpen(true)}
+                className="px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer shrink-0 self-end sm:self-center"
+              >
+                {language === 'fr-FR' ? 'Sécuriser mes données →' : 'Secure my data →'}
+              </button>
+            </div>
+          )}
+
           {/* Active Tab Dispatcher */}
           {activeTab === 'dashboard' && (
             <DashboardView 
@@ -1443,6 +1513,15 @@ export default function App() {
       </div>
 
       {/* 3. Global Action Modal Overlays */}
+      {migrationSummary && (
+        <ProtectPlannerMigrationModal
+          isOpen={isMigrationModalOpen}
+          onClose={handleDismissMigration}
+          dataSummary={migrationSummary}
+          onMigrationSuccess={handleMigrationSuccess}
+        />
+      )}
+
       <EmailAuthModal
         isOpen={isEmailAuthOpen}
         onClose={() => setIsEmailAuthOpen(false)}
