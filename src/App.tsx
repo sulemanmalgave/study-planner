@@ -196,48 +196,71 @@ export default function App() {
 
   const handleAuthSuccess = async (user: AuthUserProfile, hasActiveSubscription?: boolean, subscription?: any) => {
     setAuthUser(user);
+
+    // Save entitlement if present
     if (hasActiveSubscription && subscription) {
       saveStoredEntitlement(subscription, 'restored', {
         userId: user.uid,
         userEmail: user.email || undefined,
       });
-      setDbState((prev) => {
-        if (!prev) return prev;
-        const next = {
-          ...prev,
-          profile: {
-            ...prev.profile,
-            name: user.displayName || prev.profile.name,
-            email: user.email || prev.profile.email,
-            subscription: subscription,
-          },
-        };
-        saveClientState(next);
-        return next;
-      });
-    } else {
-      setDbState((prev) => {
-        if (!prev) return prev;
-        const next = {
-          ...prev,
-          profile: {
-            ...prev.profile,
-            name: user.displayName || prev.profile.name,
-            email: user.email || prev.profile.email,
-          },
-        };
-        saveClientState(next);
-        return next;
-      });
     }
 
-    // Non-destructively associate local workspace records with server
-    if (dbState) {
-      try {
-        await associateLocalDataWithEmailAccount(user, dbState);
-      } catch (err) {
-        console.warn('[Data Association Warning]', err);
+    // Capture existing local state to check if it contains anonymous guest data
+    const currentLocal = loadClientState();
+    const isAnonymousWorkspace = !currentLocal?.profile?.userId || currentLocal.profile.userId.startsWith('anon_');
+    const hasGuestWork = isAnonymousWorkspace && hasMeaningfulData(currentLocal);
+
+    try {
+      // Authoritatively fetch user's database state from server using authenticated headers
+      const res = await fetch('/api/state', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('studyflow_session_token') || ''}`,
+          'x-user-id': user.uid || user.userId,
+          ...(user.email ? { 'x-user-email': user.email } : {}),
+        },
+      });
+
+      if (res.ok) {
+        const serverData = (await res.json()) as DatabaseSchema;
+        let finalState: DatabaseSchema;
+
+        if (hasGuestWork) {
+          // First-time signup from anonymous workspace: safely merge guest tasks/notes into the new account
+          finalState = mergeDatabaseStates(currentLocal, serverData);
+          await associateLocalDataWithEmailAccount(user, finalState);
+        } else {
+          // Existing account login: load user's own data from server
+          finalState = sanitizeSchema(serverData);
+        }
+
+        if (hasActiveSubscription && subscription) {
+          finalState.profile.subscription = subscription;
+        }
+
+        finalState.profile.name = user.displayName || user.name || finalState.profile.name;
+        finalState.profile.userId = user.uid || user.userId;
+        setDbState(finalState);
+        saveClientState(finalState);
+        return;
       }
+    } catch (err) {
+      console.warn('[Auth Success] Error loading user workspace state from server:', err);
+    }
+
+    // Fallback if network is temporarily unreachable
+    if (dbState) {
+      const next = {
+        ...dbState,
+        profile: {
+          ...dbState.profile,
+          name: user.displayName || user.name || dbState.profile.name,
+          userId: user.uid || user.userId,
+          ...(hasActiveSubscription && subscription ? { subscription } : {}),
+        },
+      };
+      setDbState(next);
+      saveClientState(next);
     }
   };
 
@@ -247,6 +270,13 @@ export default function App() {
     } catch (e) {}
     clearLocalAuthUser();
     setAuthUser(null);
+
+    // Cross-account isolation: Reset active workspace to clean initial state
+    // so that signing out does not leave private tasks/exams exposed or cause them
+    // to leak into the next user's account.
+    const cleanGuestState = getInitialClientState();
+    setDbState(cleanGuestState);
+    saveClientState(cleanGuestState);
   };
 
   const handleNavigateToPrivacy = () => {
@@ -289,9 +319,12 @@ export default function App() {
     if (isFirebaseConfigured && db) {
       try {
         const authUser = getLocalAuthUser();
-        const workspaceId = authUser?.email
-          ? authUser.email.replace(/[^a-zA-Z0-9_-]/g, '_')
-          : `anon_${getOrCreateAnonymousDeviceId()}`;
+        const effectiveId = authUser?.userId || authUser?.uid;
+        const workspaceId = effectiveId
+          ? effectiveId.replace(/[^a-zA-Z0-9_-]/g, '_')
+          : (authUser?.email
+              ? authUser.email.replace(/[^a-zA-Z0-9_-]/g, '_')
+              : `anon_${getOrCreateAnonymousDeviceId()}`);
         await setDoc(doc(db, 'workspaces', workspaceId), newState, { merge: true });
       } catch (fErr) {
         console.warn('Failed to save state to Firestore:', fErr);

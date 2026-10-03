@@ -553,8 +553,8 @@ export default function UpgradeModal({
     if (!authUser || !authUser.uid) {
       setError(
         language === 'fr-FR'
-          ? 'Veuillez vous connecter à votre compte Study Planner afin d\'associer votre abonnement Premium.'
-          : 'Please create or sign in to your Study Planner account first so your Premium subscription is securely linked to your account.'
+          ? 'Veuillez d\'abord créer un compte ou vous connecter avec votre prénom et mot de passe pour continuer vers le paiement.'
+          : 'Please create an account or log in with your First Name and password first to continue to payment.'
       );
       const authElem = document.getElementById('email-account-auth-container');
       if (authElem) {
@@ -1189,25 +1189,12 @@ export default function UpgradeModal({
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span>{language === 'fr-FR' ? 'Sécurisation de la connexion de paiement...' : 'Securing Payment Connection...'}</span>
                       </>
-                    ) : !authUser ? (
-                      <>
-                        <span>{language === 'fr-FR' ? `Vérifier le compte pour continuer (${activePlan.formattedPrice})` : `Verify Account to Continue (${activePlan.formattedPrice})`}</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </>
                     ) : (
-                      <>
-                        <CreditCard className="w-4 h-4" />
-                        <span>
-                          {language === 'fr-FR'
-                            ? (isIndia
-                                ? `Régler ${activePlan.formattedPrice} avec Razorpay`
-                                : `Payer ${activePlan.formattedPrice} avec PayPal / Carte`)
-                            : (isIndia
-                                ? `Pay ${activePlan.formattedPrice} with Razorpay`
-                                : `Pay ${activePlan.formattedPrice} with PayPal / Card`)}
-                        </span>
-                        <ArrowRight className="w-4 h-4" />
-                      </>
+                      <span>
+                        {language === 'fr-FR'
+                          ? `Continuer vers le paiement — ${activePlan.formattedPrice} →`
+                          : `Continue to Payment — ${activePlan.formattedPrice} →`}
+                      </span>
                     )}
                   </button>
 

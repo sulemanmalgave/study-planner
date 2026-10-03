@@ -152,16 +152,16 @@ export async function handleSignUp(
 }
 
 /**
- * Sign in existing Study Planner user with Email and Password.
+ * Sign in existing Study Planner user with First Name and Password.
  */
 export async function handleSignIn(
-  email: string,
+  firstName: string,
   password: string
 ): Promise<AuthResult> {
-  const cleanEmail = email.trim().toLowerCase();
+  const cleanName = (typeof firstName === 'string' ? firstName : '').trim();
 
-  if (!cleanEmail || !cleanEmail.includes('@')) {
-    throw new Error('Please enter a valid email address.');
+  if (!cleanName) {
+    throw new Error('Please enter your First Name.');
   }
   if (!password) {
     throw new Error('Please enter your password.');
@@ -171,14 +171,16 @@ export async function handleSignIn(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: cleanEmail,
+      firstName: cleanName,
+      name: cleanName,
+      email: cleanName,
       password,
     }),
   });
 
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.message || data.error || 'Incorrect email or password.');
+    throw new Error(data.message || data.error || 'Incorrect First Name or password.');
   }
 
   const authUser: AuthUserProfile = {
@@ -283,6 +285,7 @@ export async function handleSignOut(): Promise<void> {
 /**
  * Safely associates local Study Planner data with the authenticated account.
  * Idempotent, preserves all academic records (courses, timetable, assignments, exams, notes, sessions).
+ * CRITICAL SAFETY CHECK: NEVER associates or merges data if the local data belonged to a DIFFERENT registered user.
  */
 export function associateLocalDataWithEmailAccount(
   user: AuthUserProfile,
@@ -291,9 +294,20 @@ export function associateLocalDataWithEmailAccount(
   const effectiveId = user.userId || user.uid;
   if (!effectiveId) return currentDbState;
 
+  const existingProfile = currentDbState.profile || ({} as Partial<UserProfile>);
+  
+  // Guard against cross-account contamination: If local data belonged to another registered user, do not overwrite!
+  if (
+    existingProfile.userId &&
+    existingProfile.userId !== effectiveId &&
+    !existingProfile.userId.startsWith('anon_')
+  ) {
+    console.warn('[Native Auth] Local state belongs to a different user. Preventing cross-account data pollution.');
+    return currentDbState;
+  }
+
   console.log('[Native Auth] Safely associating local workspace data with user ID:', effectiveId);
 
-  const existingProfile = currentDbState.profile || ({} as Partial<UserProfile>);
   const currentCourses = Array.isArray(currentDbState.courses) ? currentDbState.courses : [];
   const currentTimetable = Array.isArray(currentDbState.timetable) ? currentDbState.timetable : [];
   const currentAssignments = Array.isArray(currentDbState.assignments) ? currentDbState.assignments : [];
@@ -373,13 +387,13 @@ export function getLocalAuthUser(): AuthUserProfile | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     const userId = parsed?.userId || parsed?.uid;
-    if (parsed && userId && parsed.email) {
+    if (parsed && userId) {
       return {
         userId,
         uid: userId,
-        name: parsed.name || parsed.displayName || parsed.email.split('@')[0],
-        displayName: parsed.name || parsed.displayName || parsed.email.split('@')[0],
-        email: parsed.email,
+        name: parsed.name || parsed.displayName || (parsed.email ? parsed.email.split('@')[0] : 'Student'),
+        displayName: parsed.name || parsed.displayName || (parsed.email ? parsed.email.split('@')[0] : 'Student'),
+        email: parsed.email || null,
         photoURL: parsed.photoURL || null,
       };
     }

@@ -1320,6 +1320,12 @@ const findUserByName = (name: string): StoredUserRecord | undefined => {
   return users.find(u => u.name.trim().toLowerCase() === normalized);
 };
 
+const findUsersByName = (name: string): StoredUserRecord[] => {
+  const users = readUsers();
+  const normalized = name.trim().toLowerCase();
+  return users.filter(u => u.name.trim().toLowerCase() === normalized);
+};
+
 const upsertUser = (user: StoredUserRecord): StoredUserRecord => {
   const users = readUsers();
   const idx = users.findIndex(
@@ -1741,26 +1747,21 @@ const getEffectiveUser = (req: express.Request): { userId?: string; userEmail?: 
 // Authoritative subscription check helper: Matches account-status and client entitlement
 function checkUserHasActiveSubscription(req: express.Request, db?: DatabaseSchema): boolean {
   try {
-    // 0. Explicit client subscription header or verified premium payload flag
-    const subStatusHeader = req.headers['x-subscription-status'];
-    if (subStatusHeader === 'active' || subStatusHeader === 'premium' || req.body?.isPremium === true) {
-      return true;
+    const { userId, userEmail } = getEffectiveUser(req);
+    
+    // Anonymous or guest users without valid session/ID can never have an active subscription
+    if (!userId && !userEmail) {
+      return false;
     }
 
-    const { userId, userEmail } = getEffectiveUser(req);
-    // 1. Check ledger
+    // 1. Authoritative check: Persistent verified subscriptions ledger
     const activeEntry = getActiveSubscriptionFromLedger(userId, userEmail);
     if (activeEntry && isSubscriptionActive(activeEntry)) return true;
 
-    // 2. Check profile subscription in db
+    // 2. Verified profile subscription in isolated user DB
     const currentDb = db || readDB(userId, userEmail);
     const sub = currentDb?.profile?.subscription;
     if (sub && isSubscriptionActive(sub)) {
-      return true;
-    }
-
-    // 3. Primary account holder / premium user fallback
-    if (userEmail && (userEmail.toLowerCase().includes('suleman') || userEmail.toLowerCase() === 'sulemanmalgave1@gmail.com')) {
       return true;
     }
 
@@ -4584,25 +4585,39 @@ Format cleanly in Markdown with bullet points:
         cleanEmail = `${slug}_${generatedId.slice(4)}@studyplanner.internal`;
       }
 
-      let existing = findUserByEmail(cleanEmail);
+      // Check for existing user by First Name or Email
+      let existing: StoredUserRecord | undefined;
+      const existingByName = findUserByName(cleanName);
+      if (existingByName && existingByName.passwordHash) {
+        const isSamePassword = await bcrypt.compare(password, existingByName.passwordHash);
+        if (isSamePassword) {
+          existing = existingByName;
+        } else {
+          return res.status(409).json({
+            error: 'ACCOUNT_ALREADY_EXISTS',
+            message: 'An account with this First Name already exists. Please choose a different First Name or log in.',
+          });
+        }
+      } else if (cleanEmail && !cleanEmail.endsWith('@studyplanner.internal')) {
+        const existingByEmail = findUserByEmail(cleanEmail);
+        if (existingByEmail) {
+          existing = existingByEmail;
+        }
+      }
+
       let userId: string;
 
       if (existing) {
-        if (existing.passwordHash) {
-          return res.status(409).json({
-            error: 'ACCOUNT_ALREADY_EXISTS',
-            message: 'An account already exists. Please log in.',
-          });
-        }
-        // Seamlessly claim existing account that was previously imported/synced without a password
         userId = existing.userId;
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(password, salt);
-        existing.name = cleanName || existing.name;
-        existing.passwordHash = passwordHash;
-        existing.emailVerified = true;
-        existing.updatedAt = new Date().toISOString();
-        upsertUser(existing);
+        if (!existing.passwordHash) {
+          const salt = await bcrypt.genSalt(10);
+          const passwordHash = await bcrypt.hash(password, salt);
+          existing.name = cleanName || existing.name;
+          existing.passwordHash = passwordHash;
+          existing.emailVerified = true;
+          existing.updatedAt = new Date().toISOString();
+          upsertUser(existing);
+        }
       } else {
         // Generate permanent unique internal user ID
         userId = generatedId;
@@ -4652,7 +4667,7 @@ Format cleanly in Markdown with bullet points:
         path: '/',
       });
 
-      console.log(`[Native Auth] ✅ Registered user: ${existing.email} (userId: ${existing.userId})`);
+      console.log(`[Native Auth] ✅ Registered user: ${existing.name} (userId: ${existing.userId})`);
 
       return res.status(201).json({
         success: true,
@@ -4684,32 +4699,49 @@ Format cleanly in Markdown with bullet points:
     }
   });
 
-  // 2. Native Account Login (Email, Password)
+  // 2. Native Account Login (First Name, Password)
   app.post('/api/auth/login', async (req, res) => {
     try {
-      const { email, password } = req.body || {};
-      const cleanEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
+      const { email, name, firstName, identifier, password } = req.body || {};
+      const cleanIdentifier = (typeof firstName === 'string' && firstName.trim()
+        ? firstName
+        : (typeof name === 'string' && name.trim()
+            ? name
+            : (typeof identifier === 'string' && identifier.trim()
+                ? identifier
+                : (typeof email === 'string' ? email : ''))
+          )
+      ).trim();
 
-      if (!cleanEmail) {
-        return res.status(400).json({ error: 'IDENTIFIER_REQUIRED', message: 'Please enter your email or account name.' });
+      if (!cleanIdentifier) {
+        return res.status(400).json({ error: 'FIRST_NAME_REQUIRED', message: 'Please enter your First Name.' });
       }
       if (!password || typeof password !== 'string') {
         return res.status(400).json({ error: 'PASSWORD_REQUIRED', message: 'Please enter your password.' });
       }
 
-      const user = findUserByEmail(cleanEmail) || findUserByName(cleanEmail);
+      // Check users matching First Name
+      const usersByName = findUsersByName(cleanIdentifier);
+      let user: StoredUserRecord | undefined;
+      for (const u of usersByName) {
+        if (u.passwordHash && (await bcrypt.compare(password, u.passwordHash))) {
+          user = u;
+          break;
+        }
+      }
+
+      // Fallback check by email for existing accounts
+      if (!user) {
+        const byEmail = findUserByEmail(cleanIdentifier);
+        if (byEmail && byEmail.passwordHash && (await bcrypt.compare(password, byEmail.passwordHash))) {
+          user = byEmail;
+        }
+      }
+
       if (!user || !user.passwordHash) {
         return res.status(401).json({
           error: 'INVALID_CREDENTIALS',
-          message: 'Incorrect email or password. Please check your credentials.',
-        });
-      }
-
-      const isMatch = await bcrypt.compare(password, user.passwordHash);
-      if (!isMatch) {
-        return res.status(401).json({
-          error: 'INVALID_CREDENTIALS',
-          message: 'Incorrect email or password. Please check your credentials.',
+          message: 'Incorrect First Name or password. Please check your credentials.',
         });
       }
 
@@ -4745,7 +4777,7 @@ Format cleanly in Markdown with bullet points:
         path: '/',
       });
 
-      console.log(`[Native Auth] ✅ Logged in user: ${user.email} (userId: ${user.userId})`);
+      console.log(`[Native Auth] ✅ Logged in user: ${user.name} (userId: ${user.userId})`);
 
       return res.json({
         success: true,
@@ -6024,24 +6056,25 @@ Format cleanly in Markdown with bullet points:
         }
       }
 
+      // Security check: Verify that this transaction exists in the authentic subscriptions ledger
+      // or that the user already has a verified active subscription in the ledger.
+      const ledger = readSubscriptionsLedger();
+      const existingLedger = ledger.find(e => 
+        (e.transactionId && subscription.transactionId && e.transactionId.toLowerCase() === subscription.transactionId.toLowerCase()) ||
+        (effectiveUserId && e.userId === effectiveUserId && e.status === 'active') ||
+        (effectiveUserEmail && e.userEmail && e.userEmail.toLowerCase() === effectiveUserEmail.toLowerCase() && e.status === 'active')
+      );
+
+      if (!existingLedger) {
+        return res.status(403).json({
+          error: 'UNVERIFIED_ENTITLEMENT',
+          message: 'Subscription entitlement must be verified through a successful payment or purchase restoration.',
+        });
+      }
+
       const db = readDB(effectiveUserId, effectiveUserEmail);
       db.profile.subscription = { ...subscription };
       writeDB(db, effectiveUserId, effectiveUserEmail);
-
-      if (subscription.transactionId) {
-        recordSubscriptionInLedger({
-          transactionId: subscription.transactionId,
-          userId: effectiveUserId,
-          userEmail: effectiveUserEmail,
-          plan: subscription.plan || 'premium',
-          paymentGateway: subscription.paymentGateway || 'razorpay',
-          purchaseDate: subscription.purchaseDate || new Date().toISOString(),
-          expiryDate: subscription.expiryDate || new Date(Date.now() + 30 * 86400000).toISOString(),
-          billingCountry: subscription.billingCountry || 'US',
-          verifiedAt: new Date().toISOString(),
-          status: 'active',
-        });
-      }
 
       res.json({ success: true, subscription: db.profile.subscription });
     } catch (err: any) {

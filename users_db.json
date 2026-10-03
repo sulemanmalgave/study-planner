@@ -59,5 +59,23 @@
     "emailVerified": true,
     "createdAt": "2026-09-23T04:36:21.438Z",
     "updatedAt": "2026-09-23T04:36:21.438Z"
+  },
+  {
+    "userId": "usr_19056f6bae9c0639",
+    "name": "Arjun_muryo6n0",
+    "email": "arjunmuryo6n0_19056f6bae9c0639@studyplanner.internal",
+    "passwordHash": "$2b$10$8S9.4HbDQqjvdu8k1.aK7OSpSka0xwysZOoCGaaTuxQV61j06OM7S",
+    "emailVerified": true,
+    "createdAt": "2026-10-03T05:38:22.533Z",
+    "updatedAt": "2026-10-03T05:38:22.533Z"
+  },
+  {
+    "userId": "usr_a2827240f02c74f0",
+    "name": "Arjun_muryot8j",
+    "email": "arjunmuryot8j_a2827240f02c74f0@studyplanner.internal",
+    "passwordHash": "$2b$10$dEGEACuBNrOoZnh6tCDe9ePjE6X5/M7lSwRwawe88efRt7JbJtoXa",
+    "emailVerified": true,
+    "createdAt": "2026-10-03T05:38:51.791Z",
+    "updatedAt": "2026-10-03T05:38:51.791Z"
   }
 ]

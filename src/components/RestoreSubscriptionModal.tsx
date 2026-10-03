@@ -54,8 +54,8 @@ export default function RestoreSubscriptionModal({
         });
         setSuccessMessage(
           language === 'fr-FR'
-            ? `Abonnement ${data.subscription.plan || 'Premium'} restauré pour ${authUser.email} !`
-            : `Restored active ${data.subscription.plan || 'Premium'} subscription linked to ${authUser.email}!`
+            ? `Abonnement ${data.subscription.plan || 'Premium'} restauré pour ${authUser.displayName || authUser.name || 'votre compte'} !`
+            : `Restored active ${data.subscription.plan || 'Premium'} subscription linked to ${authUser.displayName || authUser.name || 'your account'}!`
         );
         onSuccess(data.subscription);
         setTimeout(() => {
@@ -74,7 +74,7 @@ export default function RestoreSubscriptionModal({
           'x-user-email': authUser.email || '',
         },
         body: JSON.stringify({
-          identifier: authUser.email || authUser.uid,
+          identifier: authUser.uid || authUser.displayName || authUser.name || authUser.email,
         }),
       });
 
@@ -86,8 +86,8 @@ export default function RestoreSubscriptionModal({
         });
         setSuccessMessage(
           language === 'fr-FR'
-            ? `Abonnement restauré pour ${authUser.email} !`
-            : `Restored subscription linked to ${authUser.email}!`
+            ? `Abonnement restauré pour ${authUser.displayName || authUser.name || 'votre compte'} !`
+            : `Restored subscription linked to ${authUser.displayName || authUser.name || 'your account'}!`
         );
         onSuccess(restoreData.subscription);
         setTimeout(() => {
@@ -99,8 +99,8 @@ export default function RestoreSubscriptionModal({
 
       setError(
         language === 'fr-FR'
-          ? `Aucun abonnement actif trouvé pour ${authUser.email}. Si vous disposez de votre référence de paiement, saisissez-la ci-dessous.`
-          : `No active Premium subscription found for ${authUser.email}. If you have your Razorpay/PayPal Payment ID, enter it below.`
+          ? `Aucun abonnement actif trouvé pour ${authUser.displayName || authUser.name || 'ce compte'}. Si vous disposez de votre référence de paiement, saisissez-la ci-dessous.`
+          : `No active Premium subscription found for ${authUser.displayName || authUser.name || 'this account'}. If you have your Razorpay/PayPal Payment ID, enter it below.`
       );
     } catch (err: any) {
       console.error('[Account Restore Error]', err);
@@ -280,7 +280,9 @@ export default function RestoreSubscriptionModal({
                   <div className="flex items-center gap-2 text-xs font-bold text-emerald-950">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
                     <span>
-                      {language === 'fr-FR' ? `Connecté en tant que ${authUser.email}` : `Signed in as ${authUser.email}`}
+                      {language === 'fr-FR' 
+                        ? `Connecté en tant que ${authUser.displayName || authUser.name || 'Étudiant'}` 
+                        : `Signed in as ${authUser.displayName || authUser.name || 'Student'}`}
                     </span>
                   </div>
                   <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
@@ -296,14 +298,16 @@ export default function RestoreSubscriptionModal({
                 >
                   {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
                   <span>
-                    {language === 'fr-FR' ? `Vérifier les achats pour ${authUser.email}` : `Check Purchases for ${authUser.email}`}
+                    {language === 'fr-FR' 
+                      ? `Vérifier les achats pour ${authUser.displayName || authUser.name || 'ce compte'}` 
+                      : `Check Purchases for ${authUser.displayName || authUser.name || 'this account'}`}
                   </span>
                 </button>
               </div>
             ) : (
               <EmailAuthCard
                 authUser={authUser}
-                title={language === 'fr-FR' ? 'Vérifier l\'email pour restaurer les achats' : 'Verify Email to Restore Purchases'}
+                title={language === 'fr-FR' ? 'Connexion au compte pour restaurer les achats' : 'Sign in to Restore Purchases'}
                 onAuthSuccess={(user, hasActiveSubscription, sub) => {
                   if (onAuthSuccess) {
                     onAuthSuccess(user, hasActiveSubscription, sub);
@@ -315,8 +319,8 @@ export default function RestoreSubscriptionModal({
                     });
                     setSuccessMessage(
                       language === 'fr-FR'
-                        ? `Abonnement ${sub.plan || 'Premium'} actif restauré pour ${user.email} !`
-                        : `Restored active ${sub.plan || 'Premium'} subscription linked to ${user.email}!`
+                        ? `Abonnement ${sub.plan || 'Premium'} actif restauré pour ${user.displayName || user.name || 'votre compte'} !`
+                        : `Restored active ${sub.plan || 'Premium'} subscription linked to ${user.displayName || user.name || 'your account'}!`
                     );
                     onSuccess(sub);
                     setTimeout(() => {

@@ -1,24 +1,20 @@
 import React, { useState } from 'react';
 import { 
   User, 
-  Mail, 
   Lock, 
   Eye, 
   EyeOff, 
   Check, 
   ArrowRight, 
-  ArrowLeft,
   Loader2, 
   LogOut, 
   ShieldCheck, 
-  AlertCircle,
-  KeyRound
+  AlertCircle
 } from 'lucide-react';
 import { 
   AuthUserProfile,
   handleSignUp,
   handleSignIn,
-  handlePasswordReset,
   handleSignOut
 } from '../lib/emailAuth';
 import { useTranslation } from '../lib/i18n';
@@ -31,7 +27,7 @@ interface EmailAuthCardProps {
   compact?: boolean;
 }
 
-type AuthMode = 'signup' | 'login' | 'forgot_password';
+type AuthMode = 'signup' | 'login';
 
 export default function EmailAuthCard({
   authUser,
@@ -43,7 +39,6 @@ export default function EmailAuthCard({
   const { language } = useTranslation();
   const [mode, setMode] = useState<AuthMode>('signup');
   const [firstName, setFirstName] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -95,27 +90,27 @@ export default function EmailAuthCard({
     setIsLoading(true);
     try {
       const result = await handleSignUp(cleanFirstName, '', password, confirmPassword);
-      setSuccessMessage(language === 'fr-FR' ? 'Compte vérifié et activé avec succès.' : 'Account verified and ready to continue.');
+      setSuccessMessage(language === 'fr-FR' ? 'Compte créé avec succès.' : 'Account created and ready to continue.');
       onAuthSuccess(result.user, result.hasActiveSubscription, result.subscription);
     } catch (err: any) {
       console.warn('[EmailAuthCard] Signup notice:', err?.message || err);
-      setError(err?.message || (language === 'fr-FR' ? 'Échec de la vérification du compte. Veuillez réessayer.' : 'Failed to verify account. Please try again.'));
+      setError(err?.message || (language === 'fr-FR' ? 'Échec de la création du compte. Veuillez réessayer.' : 'Failed to create account. Please try again.'));
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 2. Log In Handler (EMAIL + PASSWORD)
+  // 2. Log In Handler (FIRST NAME + PASSWORD)
   const onSubmitLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
     setError(null);
     setSuccessMessage(null);
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanFirstName = firstName.trim();
 
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setError(language === 'fr-FR' ? 'Veuillez saisir une adresse e-mail valide.' : 'Please enter a valid email address.');
+    if (!cleanFirstName) {
+      setError(language === 'fr-FR' ? 'Veuillez saisir votre prénom.' : 'Please enter your First Name.');
       return;
     }
     if (!password) {
@@ -125,37 +120,12 @@ export default function EmailAuthCard({
 
     setIsLoading(true);
     try {
-      const result = await handleSignIn(cleanEmail, password);
+      const result = await handleSignIn(cleanFirstName, password);
       setSuccessMessage(language === 'fr-FR' ? 'Connexion réussie.' : 'Logged in successfully.');
       onAuthSuccess(result.user, result.hasActiveSubscription, result.subscription);
     } catch (err: any) {
       console.warn('[EmailAuthCard] Login notice:', err?.message || err);
-      setError(err?.message || (language === 'fr-FR' ? 'Échec de la connexion. Veuillez vérifier vos identifiants.' : 'Failed to log in. Please check your credentials.'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 3. Forgot Password Handler
-  const onSubmitForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isLoading) return;
-    setError(null);
-    setSuccessMessage(null);
-
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setError(language === 'fr-FR' ? 'Veuillez saisir une adresse e-mail valide.' : 'Please enter a valid email address.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      await handlePasswordReset(cleanEmail);
-      setSuccessMessage(language === 'fr-FR' ? 'Si un compte existe pour cet e-mail, un lien de réinitialisation a été envoyé.' : 'If an account exists for this email, a password reset link has been sent.');
-    } catch (err: any) {
-      console.warn('[EmailAuthCard] Reset password notice:', err?.message || err);
-      setError(err?.message || (language === 'fr-FR' ? 'Impossible d\'envoyer l\'e-mail de réinitialisation.' : 'Failed to send password reset email.'));
+      setError(err?.message || (language === 'fr-FR' ? 'Échec de la connexion. Veuillez vérifier votre prénom et mot de passe.' : 'Failed to log in. Please check your First Name and password.'));
     } finally {
       setIsLoading(false);
     }
@@ -187,12 +157,12 @@ export default function EmailAuthCard({
             />
           ) : (
             <div className="w-9 h-9 rounded-full bg-[#6750A4] text-white font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
-              {(authUser.displayName || authUser.email || 'U')[0].toUpperCase()}
+              {(authUser.displayName || authUser.name || 'U')[0].toUpperCase()}
             </div>
           )}
           <div className="min-w-0">
             <div className="font-bold text-slate-900 truncate flex items-center gap-1.5">
-              <span>{authUser.displayName || (language === 'fr-FR' ? 'Utilisateur Study Planner' : 'Study Planner User')}</span>
+              <span>{authUser.displayName || authUser.name || (language === 'fr-FR' ? 'Utilisateur Study Planner' : 'Study Planner User')}</span>
               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
                 <Check className="w-3 h-3 text-emerald-600 shrink-0" />
                 {language === 'fr-FR' ? 'Compte actif' : 'Active Account'}
@@ -201,7 +171,7 @@ export default function EmailAuthCard({
             {authUser.email && !authUser.email.endsWith('@studyplanner.internal') && (
               <div className="text-[11px] text-slate-600 truncate mt-0.5">{authUser.email}</div>
             )}
-            <div className="text-[10px] text-slate-500 font-mono mt-0.5">ID: {authUser.uid}</div>
+            <div className="text-[10px] text-slate-500 font-mono mt-0.5">ID: {authUser.uid || authUser.userId}</div>
           </div>
         </div>
 
@@ -228,45 +198,41 @@ export default function EmailAuthCard({
             <span>
               {mode === 'signup' && (title || (language === 'fr-FR' ? 'Créer votre compte Study Planner' : 'Create your Study Planner account'))}
               {mode === 'login' && (language === 'fr-FR' ? 'Connexion à votre compte' : 'Log in to your Study Planner account')}
-              {mode === 'forgot_password' && (language === 'fr-FR' ? 'Réinitialiser votre mot de passe' : 'Reset your password')}
             </span>
           </h4>
           <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
             {mode === 'signup' && (language === 'fr-FR' ? 'Saisissez vos informations ci-dessous pour créer votre compte.' : 'Enter your details below to create your account immediately.')}
-            {mode === 'login' && (language === 'fr-FR' ? 'Connectez-vous avec votre e-mail et mot de passe.' : 'Sign in with your email and password to access your workspace.')}
-            {mode === 'forgot_password' && (language === 'fr-FR' ? 'Saisissez votre e-mail pour recevoir un lien de réinitialisation.' : 'Enter your account email to receive a password reset link.')}
+            {mode === 'login' && (language === 'fr-FR' ? 'Connectez-vous avec votre prénom et mot de passe.' : 'Sign in with your First Name and password to access your workspace.')}
           </p>
         </div>
 
         {/* Quick toggle between Sign Up and Log In */}
-        {mode !== 'forgot_password' && (
-          <div className="flex items-center bg-slate-200/60 p-0.5 rounded-lg text-[11px] font-bold">
-            <button
-              type="button"
-              onClick={() => switchMode('signup')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                mode === 'signup' 
-                  ? 'bg-white text-[#6750A4] shadow-xs' 
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-              id="tab-create-account-btn"
-            >
-              {language === 'fr-FR' ? 'Inscription' : 'Sign Up'}
-            </button>
-            <button
-              type="button"
-              onClick={() => switchMode('login')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                mode === 'login' 
-                  ? 'bg-white text-[#6750A4] shadow-xs' 
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-              id="tab-login-btn"
-            >
-              {language === 'fr-FR' ? 'Connexion' : 'Log In'}
-            </button>
-          </div>
-        )}
+        <div className="flex items-center bg-slate-200/60 p-0.5 rounded-lg text-[11px] font-bold">
+          <button
+            type="button"
+            onClick={() => switchMode('signup')}
+            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              mode === 'signup' 
+                ? 'bg-white text-[#6750A4] shadow-xs' 
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+            id="tab-create-account-btn"
+          >
+            {language === 'fr-FR' ? 'Inscription' : 'Sign Up'}
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode('login')}
+            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              mode === 'login' 
+                ? 'bg-white text-[#6750A4] shadow-xs' 
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+            id="tab-login-btn"
+          >
+            {language === 'fr-FR' ? 'Connexion' : 'Log In'}
+          </button>
+        </div>
       </div>
 
       {/* Error Alert */}
@@ -394,45 +360,35 @@ export default function EmailAuthCard({
       )}
 
       {/* ======================================================= */}
-      {/* 2. LOGIN FORM: Email + Password                         */}
+      {/* 2. LOGIN FORM: First Name + Password                    */}
       {/* ======================================================= */}
       {mode === 'login' && (
         <form onSubmit={onSubmitLogin} className="space-y-3" id="email-login-form">
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'E-mail' : 'Email'}</label>
+            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'Prénom' : 'First Name'}</label>
             <div className="relative">
-              <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder={language === 'fr-FR' ? 'Votre prénom' : 'Your first name'}
                 required
                 className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
-                id="email-login-email-input"
+                id="email-login-name-input"
               />
             </div>
           </div>
 
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'Mot de passe' : 'Password'}</label>
-              <button
-                type="button"
-                onClick={() => switchMode('forgot_password')}
-                className="text-[11px] font-medium text-[#6750A4] hover:underline cursor-pointer"
-                id="forgot-password-link"
-              >
-                {language === 'fr-FR' ? 'Mot de passe oublié ?' : 'Forgot Password?'}
-              </button>
-            </div>
+            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'Mot de passe' : 'Password'}</label>
             <div className="relative">
               <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={language === 'fr-FR' ? 'Votre mot de passe' : 'Your account password'}
+                placeholder={language === 'fr-FR' ? 'Minimum 8 caractères' : 'Minimum 8 characters'}
                 required
                 className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
                 id="email-login-password-input"
@@ -479,62 +435,6 @@ export default function EmailAuthCard({
             >
               {language === 'fr-FR' ? 'Pas encore de compte ? ' : "Don't have an account? "}
               <span className="font-bold text-[#6750A4] underline">{language === 'fr-FR' ? 'Créer un compte' : 'Create Account'}</span>
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* ======================================================= */}
-      {/* 3. FORGOT PASSWORD FORM: Email                          */}
-      {/* ======================================================= */}
-      {mode === 'forgot_password' && (
-        <form onSubmit={onSubmitForgotPassword} className="space-y-3" id="email-forgot-password-form">
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">{language === 'fr-FR' ? 'E-mail' : 'Email'}</label>
-            <div className="relative">
-              <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                required
-                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
-                id="email-reset-email-input"
-              />
-            </div>
-          </div>
-
-          <div className="pt-1">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-2.5 px-4 bg-[#6750A4] hover:bg-[#523e85] active:scale-[0.99] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 cursor-pointer"
-              id="send-reset-email-btn"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>{language === 'fr-FR' ? 'Envoi en cours...' : 'Sending reset email...'}</span>
-                </>
-              ) : (
-                <>
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span>{language === 'fr-FR' ? 'Envoyer le lien de réinitialisation' : 'Send Reset Email'}</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          <div className="text-center pt-1">
-            <button
-              type="button"
-              onClick={() => switchMode('login')}
-              className="text-[11px] text-[#6750A4] hover:underline font-bold inline-flex items-center gap-1 cursor-pointer"
-              id="return-to-login-btn"
-            >
-              <ArrowLeft className="w-3 h-3" />
-              <span>{language === 'fr-FR' ? 'Retourner à la connexion' : 'Return to Log In'}</span>
             </button>
           </div>
         </form>

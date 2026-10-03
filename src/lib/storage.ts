@@ -197,9 +197,12 @@ export function saveClientState(state: DatabaseSchema): void {
   // 4. Firestore persistence if configured
   if (isFirebaseConfigured && db) {
     try {
-      const authUserId = clean.profile?.email
-        ? clean.profile.email.replace(/[^a-zA-Z0-9_-]/g, '_')
-        : `anon_${getOrCreateAnonymousDeviceId()}`;
+      const effectiveId = clean.profile?.userId || clean.profile?.id;
+      const authUserId = effectiveId
+        ? effectiveId.replace(/[^a-zA-Z0-9_-]/g, '_')
+        : (clean.profile?.email
+            ? clean.profile.email.replace(/[^a-zA-Z0-9_-]/g, '_')
+            : `anon_${getOrCreateAnonymousDeviceId()}`);
       setDoc(doc(db, 'workspaces', authUserId), clean, { merge: true }).catch((err) => {
         console.warn('[Firestore] Non-blocking background save notice:', err);
       });
