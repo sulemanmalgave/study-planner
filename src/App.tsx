@@ -76,6 +76,7 @@ import {
 } from './lib/storage';
 import EmailAuthModal from './components/EmailAuthModal';
 import ProtectPlannerMigrationModal from './components/ProtectPlannerMigrationModal';
+import AuthScreen from './components/AuthScreen';
 import { 
   detectExistingUserData, 
   ExistingUserDataSummary, 
@@ -122,6 +123,7 @@ export default function App() {
   const [dataReady, setDataReady] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<AuthUserProfile | null>(() => getLocalAuthUser());
+  const [isCheckingSession, setIsCheckingSession] = useState<boolean>(true);
   const [isEmailAuthOpen, setIsEmailAuthOpen] = useState<boolean>(false);
   const [migrationSummary, setMigrationSummary] = useState<ExistingUserDataSummary | null>(null);
   const [isMigrationModalOpen, setIsMigrationModalOpen] = useState<boolean>(false);
@@ -144,8 +146,12 @@ export default function App() {
 
   // Check and query active session and subscription linked to authenticated Study Planner account
   useEffect(() => {
+    let isMounted = true;
+    setIsCheckingSession(true);
+
     checkCurrentAuth()
-      .then((authResult) => {
+      .then(async (authResult) => {
+        if (!isMounted) return;
         if (authResult?.user) {
           setAuthUser(authResult.user);
           if (authResult.hasActiveSubscription && authResult.subscription) {
@@ -159,7 +165,7 @@ export default function App() {
                 ...prev,
                 profile: {
                   ...prev.profile,
-                  name: authResult.user.name || authResult.user.displayName || prev.profile.name,
+                  name: authResult.user.username || authResult.user.name || authResult.user.displayName || prev.profile.name,
                   email: authResult.user.email || prev.profile.email,
                   subscription: authResult.subscription,
                 },
@@ -168,43 +174,43 @@ export default function App() {
               return next;
             });
           }
-        } else {
-          // Fallback to local cached user if offline
-          const user = getLocalAuthUser();
-          if (user) {
-            setAuthUser(user);
-            fetch('/api/subscription/account-status', {
-              headers: {
-                'x-user-id': user.userId || user.uid || '',
-                'x-user-email': user.email || '',
-              },
-            })
-              .then((res) => res.json())
-              .then((data) => {
-                if (data?.hasActiveSubscription && data?.subscription) {
-                  saveStoredEntitlement(data.subscription, 'restored', {
-                    userId: user.userId || user.uid,
-                    userEmail: user.email || undefined,
-                  });
-                  setDbState((prev) => {
-                    if (!prev) return prev;
-                    const next = {
-                      ...prev,
-                      profile: {
-                        ...prev.profile,
-                        subscription: data.subscription,
-                      },
-                    };
-                    saveClientState(next);
-                    return next;
-                  });
-                }
-              })
-              .catch((err) => console.warn('[Auth] Error querying linked subscription:', err));
+
+          // Fetch authoritative user database state from server
+          try {
+            const res = await fetch('/api/state', { headers: getAuthHeaders() });
+            if (res.ok) {
+              const serverState = await res.json();
+              const localState = loadClientState();
+              const merged = mergeDatabaseStates(localState, serverState);
+              setDbState(merged);
+              saveClientState(merged);
+            }
+          } catch (fetchErr) {
+            console.warn('[Auth] Server state fetch warning:', fetchErr);
           }
+        } else {
+          setAuthUser(null);
+          clearLocalAuthUser();
         }
       })
-      .catch((err) => console.warn('[Auth] Initial session check notice:', err));
+      .catch((err) => {
+        console.warn('[Auth] Initial session check notice:', err);
+        if (isMounted) {
+          setAuthUser(null);
+          clearLocalAuthUser();
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsCheckingSession(false);
+          setDataReady(true);
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Sync route and document title
@@ -1136,6 +1142,43 @@ export default function App() {
       return matchedTitle || matchedDesc || matchedCourse;
     });
   };
+
+  // 1. Session verification loading gate (fast, distraction-free)
+  if (isCheckingSession) {
+    return (
+      <div className="min-h-screen bg-[#FDF7FF] flex flex-col items-center justify-center p-6 text-slate-800" id="study-planner-loading-screen">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <img
+            src={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/logo.png`}
+            alt="Study Planner"
+            className="w-14 h-14 rounded-2xl shadow-md border border-slate-200 object-cover"
+            onError={(e) => {
+              const target = e.currentTarget;
+              const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+              if (!target.dataset.triedFallback) {
+                target.dataset.triedFallback = '1';
+                target.src = `${base}/logo.jpg`;
+              }
+            }}
+          />
+          <div className="flex items-center gap-2 text-slate-600 text-xs sm:text-sm font-semibold">
+            <Loader2 className="w-4 h-4 animate-spin text-[#6750A4]" />
+            <span>{language === 'fr-FR' ? 'Vérification de session Study Planner...' : 'Loading Study Planner...'}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Mandatory Authentication Gate: Every user must create an account or log in before accessing the app
+  if (!authUser) {
+    return (
+      <AuthScreen
+        onAuthSuccess={handleAuthSuccess}
+        initialMode={migrationSummary?.hasExistingData ? 'protect' : 'signup'}
+      />
+    );
+  }
 
   // Mobile pairing route handler
   if (pairingToken !== null || activeTab === 'mobile-pair') {

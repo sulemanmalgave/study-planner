@@ -207,7 +207,7 @@ export async function executeAtomicMigration(
   };
 
   // Step 2: Register account through native endpoint
-  const authResult = await handleSignUp(cleanName, undefined, password, confirmPassword || password);
+  const authResult = await handleSignUp(cleanName, password, confirmPassword || password, existingLocalState);
   const newUserId = authResult.user.userId || authResult.user.uid;
   if (!newUserId) {
     throw new Error('Server did not return a valid user ID.');

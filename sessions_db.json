@@ -1,23 +1,9 @@
 [
   {
-    "token": "1566165d0a529e65e3e0a53c538547b57b5bc4f5d1c73f89a26da5e62bb6d687",
-    "userId": "usr_a2827240f02c74f0",
-    "email": "arjunmuryot8j_a2827240f02c74f0@studyplanner.internal",
-    "createdAt": 1791005931792,
-    "expiresAt": 1793597931792
-  },
-  {
-    "token": "0f25a37f2aefb81ce91e4d1d3a1a030fd6155eeb321c4f18d2d3b0b16670874b",
-    "userId": "usr_a2827240f02c74f0",
-    "email": "arjunmuryot8j_a2827240f02c74f0@studyplanner.internal",
-    "createdAt": 1791005932007,
-    "expiresAt": 1793597932007
-  },
-  {
-    "token": "726825ceb2fad2bc922c8ffd9ac5e060fb66f61dc88102c7b34dec6086af7432",
-    "userId": "usr_a2827240f02c74f0",
-    "email": "arjunmuryot8j_a2827240f02c74f0@studyplanner.internal",
-    "createdAt": 1791005932119,
-    "expiresAt": 1793597932119
+    "token": "a1d881eefd6aa37884e674ab764afce7cb07b3b49acceabcdc1c6424cde9b8a8",
+    "userId": "usr_3b7af3679319572f",
+    "email": "alexteststudent_3b7af3679319572f@studyplanner.internal",
+    "createdAt": 1791794110108,
+    "expiresAt": 1794386110108
   }
 ]

@@ -18,6 +18,7 @@ export const AUTH_SESSION_STORAGE_KEY = 'studyflow_session_token';
 export interface AuthUserProfile {
   userId: string;
   uid?: string; // Legacy compatibility alias for existing components
+  username?: string;
   name: string;
   displayName?: string; // Legacy compatibility alias
   email: string | null;
@@ -80,24 +81,48 @@ export function getAuthHeaders(): Record<string, string> {
 }
 
 /**
- * Register a new Study Planner account with Name, Email, and Password.
- * No email verification required - user is signed in immediately.
+ * Register a new Study Planner account with Username, Password, and Confirm Password.
+ * Supports backward-compatible arguments (name, email, password, confirmPassword).
+ * No email or OTP required - user is signed in immediately and permanent unique userId is assigned.
  */
 export async function handleSignUp(
-  name: string,
-  email?: string,
-  password?: string,
-  confirmPassword?: string
+  username: string,
+  arg2?: string,
+  arg3?: string,
+  arg4?: any,
+  arg5?: any
 ): Promise<AuthResult> {
-  const cleanName = (typeof name === 'string' ? name : '').trim();
-  const cleanEmail = (typeof email === 'string' && email.trim()) ? email.trim().toLowerCase() : '';
-  const cleanPassword = password || '';
+  const cleanUsername = (typeof username === 'string' ? username : '').trim();
 
-  if (!cleanName) {
-    throw new Error('First Name is required.');
+  let cleanPassword = '';
+  let cleanConfirmPassword = '';
+  let cleanEmail = '';
+  let stateToMigrate: any = null;
+
+  // Detect argument layout:
+  if (typeof arg2 === 'string' && (arg2.includes('@') || arg2.includes('.'))) {
+    // Legacy: (username, email, password, confirmPassword, state)
+    cleanEmail = arg2.trim().toLowerCase();
+    cleanPassword = typeof arg3 === 'string' ? arg3 : '';
+    cleanConfirmPassword = typeof arg4 === 'string' ? arg4 : cleanPassword;
+    stateToMigrate = arg5;
+  } else if (arg2 === undefined && typeof arg3 === 'string' && arg3) {
+    // Called as: (username, undefined, password, confirmPassword, state)
+    cleanPassword = arg3;
+    cleanConfirmPassword = typeof arg4 === 'string' ? arg4 : cleanPassword;
+    stateToMigrate = arg5;
+  } else {
+    // Standard: (username, password, confirmPassword, state)
+    cleanPassword = typeof arg2 === 'string' ? arg2 : '';
+    cleanConfirmPassword = typeof arg3 === 'string' ? arg3 : cleanPassword;
+    stateToMigrate = arg4;
   }
-  if (cleanEmail && (!cleanEmail.includes('@') || !cleanEmail.includes('.'))) {
-    throw new Error('Please enter a valid email address.');
+
+  if (!cleanUsername) {
+    throw new Error('Username is required.');
+  }
+  if (cleanUsername.length < 2) {
+    throw new Error('Username must be at least 2 characters.');
   }
   if (!cleanPassword) {
     throw new Error('Password is required.');
@@ -105,21 +130,41 @@ export async function handleSignUp(
   if (cleanPassword.length < 8) {
     throw new Error('Password must be at least 8 characters.');
   }
-  if (confirmPassword !== undefined && cleanPassword !== confirmPassword) {
+  if (cleanConfirmPassword !== undefined && cleanPassword !== cleanConfirmPassword) {
     throw new Error('Passwords do not match. Please verify your password.');
   }
 
-  const res = await fetch('/api/auth/register', {
+  const endpoint = '/api/auth/signup';
+  let res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      firstName: cleanName,
-      name: cleanName,
+      username: cleanUsername,
+      name: cleanUsername,
+      firstName: cleanUsername,
       email: cleanEmail,
       password: cleanPassword,
-      confirmPassword: confirmPassword || cleanPassword,
+      confirmPassword: cleanConfirmPassword,
+      state: stateToMigrate,
     }),
   });
+
+  if (!res.ok && res.status === 404) {
+    // Fallback to /api/auth/register if needed
+    res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: cleanUsername,
+        name: cleanUsername,
+        firstName: cleanUsername,
+        email: cleanEmail,
+        password: cleanPassword,
+        confirmPassword: cleanConfirmPassword,
+        state: stateToMigrate,
+      }),
+    });
+  }
 
   const data = await res.json();
   if (!res.ok || !data.success) {
@@ -129,6 +174,7 @@ export async function handleSignUp(
   const authUser: AuthUserProfile = {
     userId: data.user.userId,
     uid: data.user.userId,
+    username: data.user.username || data.user.name,
     name: data.user.name,
     displayName: data.user.name,
     email: data.user.email,
@@ -152,16 +198,17 @@ export async function handleSignUp(
 }
 
 /**
- * Sign in existing Study Planner user with First Name and Password.
+ * Sign in existing Study Planner user with Username and Password.
  */
 export async function handleSignIn(
-  firstName: string,
-  password: string
+  username: string,
+  password: string,
+  stateToMigrate?: any
 ): Promise<AuthResult> {
-  const cleanName = (typeof firstName === 'string' ? firstName : '').trim();
+  const cleanUsername = (typeof username === 'string' ? username : '').trim();
 
-  if (!cleanName) {
-    throw new Error('Please enter your First Name.');
+  if (!cleanUsername) {
+    throw new Error('Please enter your Username.');
   }
   if (!password) {
     throw new Error('Please enter your password.');
@@ -171,21 +218,24 @@ export async function handleSignIn(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      firstName: cleanName,
-      name: cleanName,
-      email: cleanName,
+      username: cleanUsername,
+      identifier: cleanUsername,
+      name: cleanUsername,
+      firstName: cleanUsername,
       password,
+      state: stateToMigrate,
     }),
   });
 
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.message || data.error || 'Incorrect First Name or password.');
+    throw new Error(data.message || data.error || 'Incorrect Username or password.');
   }
 
   const authUser: AuthUserProfile = {
     userId: data.user.userId,
     uid: data.user.userId,
+    username: data.user.username || data.user.name,
     name: data.user.name,
     displayName: data.user.name,
     email: data.user.email,
@@ -213,9 +263,15 @@ export async function handleSignIn(
  */
 export async function checkCurrentAuth(): Promise<AuthResult | null> {
   try {
-    const res = await fetch('/api/auth/me', {
+    let res = await fetch('/api/auth/session', {
       headers: getAuthHeaders(),
     });
+
+    if (!res.ok || res.status === 404) {
+      res = await fetch('/api/auth/me', {
+        headers: getAuthHeaders(),
+      });
+    }
 
     if (!res.ok) return null;
     const data = await res.json();
@@ -224,6 +280,7 @@ export async function checkCurrentAuth(): Promise<AuthResult | null> {
       const authUser: AuthUserProfile = {
         userId: data.user.userId,
         uid: data.user.userId,
+        username: data.user.username || data.user.name,
         name: data.user.name,
         displayName: data.user.name,
         email: data.user.email,
@@ -240,6 +297,23 @@ export async function checkCurrentAuth(): Promise<AuthResult | null> {
     console.warn('[Native Auth] Non-fatal auth check notice:', err);
   }
   return null;
+}
+
+/**
+ * Safely migrates local study planner state into server account namespace.
+ */
+export async function handleDataMigration(state: any): Promise<boolean> {
+  try {
+    const res = await fetch('/api/auth/migrate', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ state }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[Native Auth] Migration notice:', err);
+    return false;
+  }
 }
 
 /**

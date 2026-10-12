@@ -294,7 +294,7 @@ export default function ProtectPlannerMigrationModal({
             <form onSubmit={handleSubmit} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-[#1D1B20] mb-1">
-                  {isFrench ? 'Nom / Prénom' : 'Name'}
+                  {isFrench ? "Nom d'utilisateur" : 'Username'}
                 </label>
                 <div className="relative">
                   <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#79747E]" />
@@ -302,7 +302,7 @@ export default function ProtectPlannerMigrationModal({
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder={isFrench ? 'Votre prénom ou nom' : 'Your first name'}
+                    placeholder={isFrench ? "Votre nom d'utilisateur" : 'Your username'}
                     className="w-full pl-10 pr-3.5 py-2.5 bg-[#F3EDF7]/50 border border-[#CAC4D0] focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4] rounded-xl text-xs text-[#1D1B20] outline-none transition-all"
                     required
                   />

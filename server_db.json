@@ -23,7 +23,14 @@
     },
     "language": "fr-FR"
   },
-  "courses": [],
+  "courses": [
+    {
+      "id": "c_d91b007d",
+      "name": "Physics",
+      "color": "#3b82f6",
+      "code": ""
+    }
+  ],
   "timetable": [],
   "assignments": [],
   "exams": [],

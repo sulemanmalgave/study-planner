@@ -1184,7 +1184,8 @@ const recordSubscriptionInLedger = (entry: StoredSubscriptionLedgerEntry) => {
 
 // --- Authoritative Native Study Planner Account & Session System ---
 interface StoredUserRecord {
-  userId: string; // Permanent unique internal user identifier
+  userId: string; // Permanent unique internal user identifier (NEVER the username)
+  username?: string; // Unique username identifier
   name: string;
   email: string;
   passwordHash?: string; // bcrypt hash ($2a$10$...) - NEVER stored in plain text or sent to browser
@@ -1223,6 +1224,46 @@ const getSessionsFilePath = () => {
 let inMemoryUsersList: StoredUserRecord[] = [];
 let inMemorySessionsMap: Map<string, StoredSessionRecord> = new Map();
 
+// In-Memory Rate Limiter for Authentication (blocks brute force attacks)
+interface AuthAttemptRecord {
+  count: number;
+  firstAttemptAt: number;
+  blockedUntil?: number;
+}
+const authAttemptsMap = new Map<string, AuthAttemptRecord>();
+
+const checkAuthRateLimit = (key: string, maxAttempts = 10, windowMs = 15 * 60 * 1000): { blocked: boolean; retryAfterSeconds?: number } => {
+  const now = Date.now();
+  const record = authAttemptsMap.get(key);
+  if (!record) return { blocked: false };
+  if (record.blockedUntil && record.blockedUntil > now) {
+    return { blocked: true, retryAfterSeconds: Math.ceil((record.blockedUntil - now) / 1000) };
+  }
+  if (now - record.firstAttemptAt > windowMs) {
+    authAttemptsMap.delete(key);
+    return { blocked: false };
+  }
+  if (record.count >= maxAttempts) {
+    record.blockedUntil = now + windowMs;
+    return { blocked: true, retryAfterSeconds: Math.ceil(windowMs / 1000) };
+  }
+  return { blocked: false };
+};
+
+const recordFailedAuthAttempt = (key: string, windowMs = 15 * 60 * 1000) => {
+  const now = Date.now();
+  const record = authAttemptsMap.get(key);
+  if (!record || (now - record.firstAttemptAt > windowMs)) {
+    authAttemptsMap.set(key, { count: 1, firstAttemptAt: now });
+  } else {
+    record.count += 1;
+  }
+};
+
+const clearAuthRateLimit = (key: string) => {
+  authAttemptsMap.delete(key);
+};
+
 const readUsers = (): StoredUserRecord[] => {
   try {
     const filePath = getUsersFilePath();
@@ -1231,7 +1272,12 @@ const readUsers = (): StoredUserRecord[] => {
     }
     const data = fs.readFileSync(filePath, 'utf-8');
     const parsed = JSON.parse(data);
-    const result = Array.isArray(parsed) ? parsed : [];
+    const result = Array.isArray(parsed)
+      ? parsed.map((u: any) => ({
+          ...u,
+          username: u.username || u.name,
+        }))
+      : [];
     inMemoryUsersList = result;
     return result;
   } catch (err) {
@@ -1326,10 +1372,40 @@ const findUsersByName = (name: string): StoredUserRecord[] => {
   return users.filter(u => u.name.trim().toLowerCase() === normalized);
 };
 
+/**
+ * Find user by Username, Name, or Email (case-insensitive)
+ * Ensures full backward compatibility with all existing user accounts
+ */
+const findUserByUsername = (usernameOrIdentifier: string): StoredUserRecord | undefined => {
+  const users = readUsers();
+  const normalized = usernameOrIdentifier.trim().toLowerCase();
+  return users.find(u => 
+    (u.username && u.username.trim().toLowerCase() === normalized) ||
+    (u.name && u.name.trim().toLowerCase() === normalized) ||
+    (u.email && u.email.trim().toLowerCase() === normalized)
+  );
+};
+
+/**
+ * Check if a username is already taken by any existing registered account
+ */
+const isUsernameTaken = (username: string): boolean => {
+  const users = readUsers();
+  const normalized = username.trim().toLowerCase();
+  return users.some(u => 
+    (u.username && u.username.trim().toLowerCase() === normalized) ||
+    (u.name && u.name.trim().toLowerCase() === normalized)
+  );
+};
+
 const upsertUser = (user: StoredUserRecord): StoredUserRecord => {
   const users = readUsers();
+  const normalizedUsername = (user.username || user.name).trim();
+  user.username = normalizedUsername;
   const idx = users.findIndex(
-    u => u.userId === user.userId || u.email.trim().toLowerCase() === user.email.trim().toLowerCase()
+    u => u.userId === user.userId || 
+      (u.username && u.username.trim().toLowerCase() === normalizedUsername.toLowerCase()) ||
+      (user.email && u.email.trim().toLowerCase() === user.email.trim().toLowerCase())
   );
   if (idx >= 0) {
     users[idx] = { ...users[idx], ...user, updatedAt: new Date().toISOString() };
@@ -1345,8 +1421,9 @@ const upsertUser = (user: StoredUserRecord): StoredUserRecord => {
 const sanitizeUser = (user: StoredUserRecord) => ({
   userId: user.userId,
   uid: user.userId, // Legacy compatibility alias
-  name: user.name,
-  displayName: user.name, // Legacy compatibility alias
+  username: user.username || user.name,
+  name: user.name || user.username,
+  displayName: user.name || user.username, // Legacy compatibility alias
   email: user.email,
   emailVerified: true,
   createdAt: user.createdAt,
@@ -1718,17 +1795,17 @@ const getSessionTokenFromRequest = (req: express.Request): string | undefined =>
   return undefined;
 };
 
-const getEffectiveUser = (req: express.Request): { userId?: string; userEmail?: string } => {
+const getEffectiveUser = (req: express.Request): { userId?: string; userEmail?: string; authenticated: boolean } => {
   // 1. Check authenticated session
   const token = getSessionTokenFromRequest(req);
   if (token) {
     const session = findSessionByToken(token);
     if (session) {
-      return { userId: session.userId, userEmail: session.email };
+      return { userId: session.userId, userEmail: session.email, authenticated: true };
     }
   }
 
-  // 2. Fallback to headers (for backward compatibility and device isolation)
+  // 2. Fallback to headers (for backward compatibility and device isolation during migration)
   const rawUserId = (req.headers['x-user-id'] || req.query.userId || req.body?.userId || '') as string;
   const rawUserEmail = (req.headers['x-user-email'] || req.query.userEmail || req.body?.userEmail || '') as string;
   const deviceId = (req.headers['x-device-id'] || '') as string;
@@ -1741,6 +1818,7 @@ const getEffectiveUser = (req: express.Request): { userId?: string; userEmail?: 
   return {
     userId,
     userEmail: rawUserEmail ? String(rawUserEmail).trim() : undefined,
+    authenticated: false,
   };
 };
 
@@ -1817,12 +1895,49 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+const isPublicApiPath = (path: string): boolean => {
+  const cleanPath = path.split('?')[0].replace(/\/+$/, '');
+  if (cleanPath.startsWith('/api/auth')) return true;
+  if (cleanPath === '/api/subscription/detect-country') return true;
+  if (cleanPath === '/api/subscription/config') return true;
+  if (cleanPath === '/api/subscription/create-order') return true;
+  if (cleanPath === '/api/subscription/verify-payment') return true;
+  if (cleanPath === '/api/ai/health' || cleanPath === '/api/ai/diagnostic') return true;
+  if (cleanPath.startsWith('/api/mobile-companion/verify-pairing-token')) return true;
+  if (cleanPath.startsWith('/api/mobile-companion/confirm-pairing')) return true;
+  if (cleanPath.startsWith('/api/mobile-companion/session-status')) return true;
+  return false;
+};
+
+// Mandatory authentication guard: Block unauthenticated access to all private study data & APIs
+app.use('/api', (req, res, next) => {
+  const fullPath = req.baseUrl + req.path;
+  if (isPublicApiPath(fullPath) || isPublicApiPath(req.originalUrl)) {
+    return next();
+  }
+
+  const userContext = getEffectiveUser(req);
+  if (!userContext.authenticated || !userContext.userId) {
+    return res.status(401).json({
+      error: 'UNAUTHORIZED',
+      message: 'Authentication required. Please log in or create an account to access Study Planner.',
+    });
+  }
+  next();
+});
+
 // API Routes
-// 1. Get entire state
+// 1. Get entire state (Requires authentication)
 app.get('/api/state', (req, res) => {
   try {
-    const { userId, userEmail } = getEffectiveUser(req);
-    const db = readDB(userId, userEmail);
+    const userContext = getEffectiveUser(req);
+    if (!userContext.authenticated || !userContext.userId) {
+      return res.status(401).json({
+        error: 'UNAUTHORIZED',
+        message: 'Authentication required. Please log in to access your Study Planner.',
+      });
+    }
+    const db = readDB(userContext.userId, userContext.userEmail);
     res.json(db);
   } catch (error) {
     res.status(500).json({ error: 'Failed to read database state' });
@@ -1832,14 +1947,20 @@ app.get('/api/state', (req, res) => {
 // 1a. Safe non-destructive client-server state synchronization
 app.post('/api/state/sync', (req, res) => {
   try {
-    const { userId, userEmail } = getEffectiveUser(req);
+    const userContext = getEffectiveUser(req);
+    if (!userContext.authenticated || !userContext.userId) {
+      return res.status(401).json({
+        error: 'UNAUTHORIZED',
+        message: 'Authentication required. Please log in to sync your Study Planner.',
+      });
+    }
     const clientState = req.body?.state as DatabaseSchema;
     if (!clientState) {
       return res.status(400).json({ error: 'State payload is required' });
     }
-    const currentDb = readDB(userId, userEmail);
+    const currentDb = readDB(userContext.userId, userContext.userEmail);
     const merged = mergeDatabaseStates(currentDb, clientState);
-    writeDB(merged, userId, userEmail);
+    writeDB(merged, userContext.userId, userContext.userEmail);
     res.json(merged);
   } catch (error) {
     console.error('Failed to sync state:', error);
@@ -1849,14 +1970,20 @@ app.post('/api/state/sync', (req, res) => {
 
 app.put('/api/state', (req, res) => {
   try {
-    const { userId, userEmail } = getEffectiveUser(req);
+    const userContext = getEffectiveUser(req);
+    if (!userContext.authenticated || !userContext.userId) {
+      return res.status(401).json({
+        error: 'UNAUTHORIZED',
+        message: 'Authentication required. Please log in to update your Study Planner.',
+      });
+    }
     const clientState = (req.body?.state || req.body) as DatabaseSchema;
     if (!clientState) {
       return res.status(400).json({ error: 'State payload is required' });
     }
-    const currentDb = readDB(userId, userEmail);
+    const currentDb = readDB(userContext.userId, userContext.userEmail);
     const merged = mergeDatabaseStates(currentDb, clientState);
-    writeDB(merged, userId, userEmail);
+    writeDB(merged, userContext.userId, userContext.userEmail);
     res.json(merged);
   } catch (error) {
     console.error('Failed to update state:', error);
@@ -4548,22 +4675,26 @@ Format cleanly in Markdown with bullet points:
   });
 
   // ==============================================================
-  // Native Study Planner Authentication Endpoints (Name, Email, Password)
+  // Native Study Planner Authentication Endpoints (Username + Password)
   // No Google, No Microsoft, No OTP, No Email Verification Required
   // ==============================================================
 
-  // 1. Native Account Registration (First Name, Password, Confirm Password)
-  app.post('/api/auth/register', async (req, res) => {
+  // 1. Native Account Registration / Sign Up (Username, Password, Confirm Password)
+  app.post(['/api/auth/signup', '/api/auth/register'], async (req, res) => {
     try {
-      const { name, firstName, email, password, confirmPassword } = req.body || {};
-      const cleanName = (typeof firstName === 'string' && firstName.trim()
-        ? firstName
-        : (typeof name === 'string' ? name : '')
+      const { username, name, firstName, email, password, confirmPassword, state } = req.body || {};
+      const cleanUsername = (
+        (typeof username === 'string' && username.trim()) ? username :
+        (typeof firstName === 'string' && firstName.trim()) ? firstName :
+        (typeof name === 'string' ? name : '')
       ).trim();
       let cleanEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
 
-      if (!cleanName) {
-        return res.status(400).json({ error: 'FIRST_NAME_REQUIRED', message: 'First Name is required.' });
+      if (!cleanUsername) {
+        return res.status(400).json({ error: 'USERNAME_REQUIRED', message: 'Username is required.' });
+      }
+      if (cleanUsername.length < 2) {
+        return res.status(400).json({ error: 'USERNAME_TOO_SHORT', message: 'Username must be at least 2 characters.' });
       }
       if (!password || typeof password !== 'string') {
         return res.status(400).json({ error: 'PASSWORD_REQUIRED', message: 'Password is required.' });
@@ -4575,74 +4706,70 @@ Format cleanly in Markdown with bullet points:
         return res.status(400).json({ error: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });
       }
 
-      if (cleanEmail && (!cleanEmail.includes('@') || !cleanEmail.includes('.'))) {
-        return res.status(400).json({ error: 'INVALID_EMAIL', message: 'Please enter a valid email address.' });
+      // Rate limit check for account registration
+      const rateLimitKey = 'signup_' + (req.ip || 'ip');
+      const rateCheck = checkAuthRateLimit(rateLimitKey, 15, 15 * 60 * 1000);
+      if (rateCheck.blocked) {
+        return res.status(429).json({
+          error: 'RATE_LIMITED',
+          message: `Too many registration attempts. Please try again in ${rateCheck.retryAfterSeconds || 60} seconds.`,
+        });
       }
 
+      // Check for username collision (Usernames must be unique)
+      if (isUsernameTaken(cleanUsername)) {
+        recordFailedAuthAttempt(rateLimitKey);
+        return res.status(409).json({
+          error: 'USERNAME_TAKEN',
+          message: 'An account with this username already exists. Please choose a different username or log in.',
+        });
+      }
+
+      // Generate permanent, unique internal userId (Never use username as database ID)
       const generatedId = `usr_${crypto.randomBytes(8).toString('hex')}`;
       if (!cleanEmail) {
-        const slug = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'student';
+        const slug = cleanUsername.toLowerCase().replace(/[^a-z0-9]/g, '') || 'student';
         cleanEmail = `${slug}_${generatedId.slice(4)}@studyplanner.internal`;
       }
 
-      // Check for existing user by First Name or Email
-      let existing: StoredUserRecord | undefined;
-      const existingByName = findUserByName(cleanName);
-      if (existingByName && existingByName.passwordHash) {
-        const isSamePassword = await bcrypt.compare(password, existingByName.passwordHash);
-        if (isSamePassword) {
-          existing = existingByName;
-        } else {
-          return res.status(409).json({
-            error: 'ACCOUNT_ALREADY_EXISTS',
-            message: 'An account with this First Name already exists. Please choose a different First Name or log in.',
-          });
-        }
-      } else if (cleanEmail && !cleanEmail.endsWith('@studyplanner.internal')) {
-        const existingByEmail = findUserByEmail(cleanEmail);
-        if (existingByEmail) {
-          existing = existingByEmail;
-        }
-      }
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(password, salt);
 
-      let userId: string;
+      const newUser: StoredUserRecord = {
+        userId: generatedId,
+        username: cleanUsername,
+        name: cleanUsername,
+        email: cleanEmail,
+        passwordHash,
+        emailVerified: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      upsertUser(newUser);
+      clearAuthRateLimit(rateLimitKey);
 
-      if (existing) {
-        userId = existing.userId;
-        if (!existing.passwordHash) {
-          const salt = await bcrypt.genSalt(10);
-          const passwordHash = await bcrypt.hash(password, salt);
-          existing.name = cleanName || existing.name;
-          existing.passwordHash = passwordHash;
-          existing.emailVerified = true;
-          existing.updatedAt = new Date().toISOString();
-          upsertUser(existing);
+      // Seamless migration: If client provided existing local data, merge and link immediately
+      if (state && typeof state === 'object') {
+        try {
+          const userDb = readDB(newUser.userId, cleanEmail);
+          const merged = mergeDatabaseStates(userDb, state as DatabaseSchema);
+          merged.profile.userId = newUser.userId;
+          merged.profile.name = cleanUsername;
+          writeDB(merged, newUser.userId, cleanEmail);
+          console.log(`[Native Auth] Automatically migrated local data to user ${newUser.userId}`);
+        } catch (mErr) {
+          console.warn('[Native Auth] Non-fatal state merge warning:', mErr);
         }
-      } else {
-        // Generate permanent unique internal user ID
-        userId = generatedId;
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(password, salt);
-        existing = {
-          userId,
-          name: cleanName,
-          email: cleanEmail,
-          passwordHash,
-          emailVerified: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        upsertUser(existing);
       }
 
       // Safe non-destructive subscription link: connect existing subscriptions in ledger
-      const activeEntry = getActiveSubscriptionFromLedger(userId, cleanEmail);
-      if (activeEntry && (!activeEntry.userId || activeEntry.userId !== userId)) {
-        activeEntry.userId = userId;
+      const activeEntry = getActiveSubscriptionFromLedger(newUser.userId, cleanEmail);
+      if (activeEntry && (!activeEntry.userId || activeEntry.userId !== newUser.userId)) {
+        activeEntry.userId = newUser.userId;
         const ledger = readSubscriptionsLedger();
         const lIdx = ledger.findIndex(e => e.transactionId === activeEntry.transactionId);
         if (lIdx >= 0) {
-          ledger[lIdx].userId = userId;
+          ledger[lIdx].userId = newUser.userId;
           writeSubscriptionsLedger(ledger);
         }
       }
@@ -4652,8 +4779,8 @@ Format cleanly in Markdown with bullet points:
       const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
       saveSession({
         token: sessionToken,
-        userId: existing.userId,
-        email: existing.email,
+        userId: newUser.userId,
+        email: newUser.email,
         createdAt: Date.now(),
         expiresAt,
       });
@@ -4667,12 +4794,12 @@ Format cleanly in Markdown with bullet points:
         path: '/',
       });
 
-      console.log(`[Native Auth] ✅ Registered user: ${existing.name} (userId: ${existing.userId})`);
+      console.log(`[Native Auth] ✅ Registered user: ${newUser.username} (userId: ${newUser.userId})`);
 
       return res.status(201).json({
         success: true,
         message: 'Account created successfully.',
-        user: sanitizeUser(existing),
+        user: sanitizeUser(newUser),
         token: sessionToken,
         hasActiveSubscription: Boolean(activeEntry),
         subscription: activeEntry
@@ -4699,50 +4826,67 @@ Format cleanly in Markdown with bullet points:
     }
   });
 
-  // 2. Native Account Login (First Name, Password)
+  // 2. Native Account Login (Username, Password)
   app.post('/api/auth/login', async (req, res) => {
     try {
-      const { email, name, firstName, identifier, password } = req.body || {};
-      const cleanIdentifier = (typeof firstName === 'string' && firstName.trim()
-        ? firstName
-        : (typeof name === 'string' && name.trim()
-            ? name
-            : (typeof identifier === 'string' && identifier.trim()
-                ? identifier
-                : (typeof email === 'string' ? email : ''))
-          )
+      const { username, identifier, email, name, firstName, password, state } = req.body || {};
+      const cleanIdentifier = (
+        (typeof username === 'string' && username.trim()) ? username :
+        (typeof identifier === 'string' && identifier.trim()) ? identifier :
+        (typeof firstName === 'string' && firstName.trim()) ? firstName :
+        (typeof name === 'string' && name.trim()) ? name :
+        (typeof email === 'string' ? email : '')
       ).trim();
 
       if (!cleanIdentifier) {
-        return res.status(400).json({ error: 'FIRST_NAME_REQUIRED', message: 'Please enter your First Name.' });
+        return res.status(400).json({ error: 'USERNAME_REQUIRED', message: 'Please enter your Username.' });
       }
       if (!password || typeof password !== 'string') {
         return res.status(400).json({ error: 'PASSWORD_REQUIRED', message: 'Please enter your password.' });
       }
 
-      // Check users matching First Name
-      const usersByName = findUsersByName(cleanIdentifier);
-      let user: StoredUserRecord | undefined;
-      for (const u of usersByName) {
-        if (u.passwordHash && (await bcrypt.compare(password, u.passwordHash))) {
-          user = u;
-          break;
-        }
+      // Rate limit check
+      const rateLimitKey = 'login_' + (req.ip || 'ip') + '_' + cleanIdentifier.toLowerCase();
+      const rateCheck = checkAuthRateLimit(rateLimitKey, 10, 15 * 60 * 1000);
+      if (rateCheck.blocked) {
+        return res.status(429).json({
+          error: 'RATE_LIMITED',
+          message: `Too many failed login attempts. Please try again in ${rateCheck.retryAfterSeconds || 60} seconds.`,
+        });
       }
 
-      // Fallback check by email for existing accounts
-      if (!user) {
-        const byEmail = findUserByEmail(cleanIdentifier);
-        if (byEmail && byEmail.passwordHash && (await bcrypt.compare(password, byEmail.passwordHash))) {
-          user = byEmail;
-        }
-      }
+      // Check users matching Username (or Name / Email for backward compatibility)
+      const user = findUserByUsername(cleanIdentifier);
 
       if (!user || !user.passwordHash) {
+        recordFailedAuthAttempt(rateLimitKey);
         return res.status(401).json({
           error: 'INVALID_CREDENTIALS',
-          message: 'Incorrect First Name or password. Please check your credentials.',
+          message: 'Incorrect Username or password. Please check your credentials.',
         });
+      }
+
+      const isSamePassword = await bcrypt.compare(password, user.passwordHash);
+      if (!isSamePassword) {
+        recordFailedAuthAttempt(rateLimitKey);
+        return res.status(401).json({
+          error: 'INVALID_CREDENTIALS',
+          message: 'Incorrect Username or password. Please check your credentials.',
+        });
+      }
+
+      clearAuthRateLimit(rateLimitKey);
+
+      // Seamless migration: If client provided unmigrated local data, merge safely
+      if (state && typeof state === 'object') {
+        try {
+          const userDb = readDB(user.userId, user.email);
+          const merged = mergeDatabaseStates(userDb, state as DatabaseSchema);
+          merged.profile.userId = user.userId;
+          writeDB(merged, user.userId, user.email);
+        } catch (mErr) {
+          console.warn('[Native Auth] Non-fatal state merge warning on login:', mErr);
+        }
       }
 
       // Safe non-destructive subscription link
@@ -4777,7 +4921,7 @@ Format cleanly in Markdown with bullet points:
         path: '/',
       });
 
-      console.log(`[Native Auth] ✅ Logged in user: ${user.name} (userId: ${user.userId})`);
+      console.log(`[Native Auth] ✅ Logged in user: ${user.username || user.name} (userId: ${user.userId})`);
 
       return res.json({
         success: true,
@@ -4820,7 +4964,7 @@ Format cleanly in Markdown with bullet points:
   });
 
   // 4. Current User Session Check
-  app.get('/api/auth/me', (req, res) => {
+  app.get(['/api/auth/session', '/api/auth/me'], (req, res) => {
     const userContext = getEffectiveUser(req);
     if (!userContext.userId && !userContext.userEmail) {
       return res.json({
@@ -5015,8 +5159,8 @@ Format cleanly in Markdown with bullet points:
     }
   });
 
-  // 4. Safe, non-destructive associate local Study Planner data with user account
-  app.post('/api/auth/associate-data', (req, res) => {
+  // 4. Safe, non-destructive migrate and associate local Study Planner data with user account
+  app.post(['/api/auth/migrate', '/api/auth/associate-data'], (req, res) => {
     try {
       const { userId, userEmail } = getEffectiveUser(req);
       const effectiveUserId = userId || req.body?.userId;
