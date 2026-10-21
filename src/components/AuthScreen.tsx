@@ -110,8 +110,8 @@ export default function AuthScreen({
     }
 
     if (mode === 'signup') {
-      if (password.length < 8) {
-        setError(isFr ? 'Le mot de passe doit comporter au moins 8 caractères.' : 'Password must be at least 8 characters.');
+      if (password.length < 6) {
+        setError(isFr ? 'Le mot de passe doit comporter au moins 6 caractères.' : 'Password must be at least 6 characters.');
         return;
       }
       if (!confirmPassword) {
@@ -195,26 +195,10 @@ export default function AuthScreen({
       >
         {/* Brand Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center p-3 bg-white rounded-2xl shadow-sm border border-slate-200/80 mb-3.5">
-            <img 
-              src={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/logo.png`}
-              alt="Study Planner Logo" 
-              className="w-12 h-12 rounded-xl object-cover shadow-xs border border-slate-100 shrink-0" 
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                const target = e.currentTarget;
-                const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-                if (!target.dataset.triedFallback) {
-                  target.dataset.triedFallback = '1';
-                  target.src = `${base}/logo.jpg`;
-                }
-              }}
-            />
-          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#1D1B20] tracking-tight">
             Study Planner
           </h1>
-          <p className="text-xs sm:text-sm text-[#49454F] mt-1 font-medium">
+          <p className="text-xs sm:text-sm text-[#49454F] mt-1.5 font-medium">
             {isFr ? 'Votre espace de réussite académique' : 'Your Personal Academic Success Workspace'}
           </p>
         </div>
@@ -429,9 +413,9 @@ export default function AuthScreen({
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={mode === 'signup' ? (isFr ? 'Minimum 8 caractères' : 'Minimum 8 characters') : (isFr ? 'Entrez votre mot de passe' : 'Enter your password')}
+                    placeholder={mode === 'signup' ? (isFr ? 'Minimum 6 caractères' : 'Minimum 6 characters') : (isFr ? 'Entrez votre mot de passe' : 'Enter your password')}
                     autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                    minLength={mode === 'signup' ? 8 : 1}
+                    minLength={mode === 'signup' ? 6 : 1}
                     required
                     disabled={isLoading}
                     className="w-full pl-10 pr-10 py-2.5 bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-[#6750A4] rounded-2xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#6750A4]/20 transition-all shadow-inner/5"
@@ -466,7 +450,7 @@ export default function AuthScreen({
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder={isFr ? 'Retapez le mot de passe' : 'Confirm your password'}
                       autoComplete="new-password"
-                      minLength={8}
+                      minLength={6}
                       required
                       disabled={isLoading}
                       className="w-full pl-10 pr-10 py-2.5 bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-[#6750A4] rounded-2xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#6750A4]/20 transition-all shadow-inner/5"

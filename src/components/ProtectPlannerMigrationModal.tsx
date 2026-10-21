@@ -68,8 +68,8 @@ export default function ProtectPlannerMigrationModal({
     }
 
     if (mode === 'create') {
-      if (password.length < 8) {
-        setError(isFrench ? 'Le mot de passe doit comporter au moins 8 caractères.' : 'Password must be at least 8 characters.');
+      if (password.length < 6) {
+        setError(isFrench ? 'Le mot de passe doit comporter au moins 6 caractères.' : 'Password must be at least 6 characters.');
         return;
       }
       if (password !== confirmPassword) {
@@ -319,7 +319,7 @@ export default function ProtectPlannerMigrationModal({
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={isFrench ? 'Minimum 8 caractères' : 'Minimum 8 characters'}
+                    placeholder={isFrench ? 'Minimum 6 caractères' : 'Minimum 6 characters'}
                     className="w-full pl-10 pr-10 py-2.5 bg-[#F3EDF7]/50 border border-[#CAC4D0] focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4] rounded-xl text-xs text-[#1D1B20] outline-none transition-all"
                     required
                   />

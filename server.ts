@@ -4699,8 +4699,8 @@ Format cleanly in Markdown with bullet points:
       if (!password || typeof password !== 'string') {
         return res.status(400).json({ error: 'PASSWORD_REQUIRED', message: 'Password is required.' });
       }
-      if (password.length < 8) {
-        return res.status(400).json({ error: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters.' });
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'WEAK_PASSWORD', message: 'Password must be at least 6 characters.' });
       }
       if (confirmPassword !== undefined && password !== confirmPassword) {
         return res.status(400).json({ error: 'PASSWORD_MISMATCH', message: 'Passwords do not match.' });

@@ -77,8 +77,8 @@ export default function EmailAuthCard({
       setError(language === 'fr-FR' ? 'Le mot de passe est obligatoire.' : 'Password is required.');
       return;
     }
-    if (password.length < 8) {
-      setError(language === 'fr-FR' ? 'Le mot de passe doit comporter au moins 8 caractères.' : 'Password must be at least 8 characters.');
+    if (password.length < 6) {
+      setError(language === 'fr-FR' ? 'Le mot de passe doit comporter au moins 6 caractères.' : 'Password must be at least 6 characters.');
       return;
     }
     if (!confirmPassword) {
@@ -282,8 +282,8 @@ export default function EmailAuthCard({
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={language === 'fr-FR' ? 'Minimum 8 caractères' : 'Minimum 8 characters'}
-                minLength={8}
+                placeholder={language === 'fr-FR' ? 'Minimum 6 caractères' : 'Minimum 6 characters'}
+                minLength={6}
                 required
                 className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
                 id="email-auth-password-input"
@@ -309,7 +309,7 @@ export default function EmailAuthCard({
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder={language === 'fr-FR' ? 'Retapez le mot de passe' : 'Confirm your password'}
-                minLength={8}
+                minLength={6}
                 required
                 className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#6750A4] focus:ring-1 focus:ring-[#6750A4]"
                 id="email-auth-confirm-password-input"

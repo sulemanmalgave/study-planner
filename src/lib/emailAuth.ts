@@ -127,8 +127,8 @@ export async function handleSignUp(
   if (!cleanPassword) {
     throw new Error('Password is required.');
   }
-  if (cleanPassword.length < 8) {
-    throw new Error('Password must be at least 8 characters.');
+  if (cleanPassword.length < 6) {
+    throw new Error('Password must be at least 6 characters.');
   }
   if (cleanConfirmPassword !== undefined && cleanPassword !== cleanConfirmPassword) {
     throw new Error('Passwords do not match. Please verify your password.');

@@ -181,8 +181,8 @@ export async function executeAtomicMigration(
   if (!cleanName) {
     throw new Error('Name is required to create an account.');
   }
-  if (!password || password.length < 8) {
-    throw new Error('Password must be at least 8 characters.');
+  if (!password || password.length < 6) {
+    throw new Error('Password must be at least 6 characters.');
   }
   if (confirmPassword !== undefined && password !== confirmPassword) {
     throw new Error('Passwords do not match. Please verify your password.');

@@ -126,5 +126,15 @@
     "emailVerified": true,
     "createdAt": "2026-10-12T08:35:10.107Z",
     "updatedAt": "2026-10-12T08:35:10.107Z"
+  },
+  {
+    "userId": "usr_e0e666649592d4bd",
+    "username": "pwd_len_6_user",
+    "name": "pwd_len_6_user",
+    "email": "pwdlen6user_e0e666649592d4bd@studyplanner.internal",
+    "passwordHash": "$2b$10$JXEqinSYjt3OE934ITcUMeDV5hbZhvTU.u4otwr2jeaUkKDqz4Moa",
+    "emailVerified": true,
+    "createdAt": "2026-10-21T17:55:25.860Z",
+    "updatedAt": "2026-10-21T17:55:25.861Z"
   }
 ]
