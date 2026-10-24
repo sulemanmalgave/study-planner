@@ -967,6 +967,40 @@ export function findLectureInAnyDb(id: string): any | null {
   return null;
 }
 
+// Global cross-store lookup helper for study materials to ensure resilience across session boundaries
+export function findMaterialInAnyDb(id: string): any | null {
+  if (!id) return null;
+  try {
+    for (const [, memDb] of inMemoryDbMap.entries()) {
+      const found = (memDb.studyMaterials || []).find((m: any) => m && (m.id === id || m.materialId === id));
+      if (found) return found;
+    }
+    const baseDir = (process.env.VERCEL || process.env.TMPDIR) ? '/tmp' : process.cwd();
+    if (fs.existsSync(baseDir)) {
+      const files = fs.readdirSync(baseDir).filter(f => f.startsWith('server_db') && f.endsWith('.json'));
+      for (const file of files) {
+        try {
+          const fullPath = path.join(baseDir, file);
+          const data = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
+          const found = (data.studyMaterials || []).find((m: any) => m && (m.id === id || m.materialId === id));
+          if (found) return found;
+        } catch {}
+      }
+    }
+    const cwdFile = path.join(process.cwd(), 'server_db.json');
+    if (fs.existsSync(cwdFile)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(cwdFile, 'utf-8'));
+        const found = (data.studyMaterials || []).find((m: any) => m && (m.id === id || m.materialId === id));
+        if (found) return found;
+      } catch {}
+    }
+  } catch (err) {
+    console.warn('[Storage] Error looking up material across DB files:', err);
+  }
+  return null;
+}
+
 const getDbFilePath = (userId?: string, isBackup: boolean = false) => {
   const baseDir = (process.env.VERCEL || process.env.TMPDIR) ? '/tmp' : process.cwd();
   const suffix = isBackup ? '_backup.json' : '.json';
@@ -993,6 +1027,9 @@ function mergeDatabaseStates(
     : (primary.profile?.name || 'Student');
   const profileEmail = secondary.profile?.email || primary.profile?.email || '';
   const profileInitials = secondary.profile?.initials || primary.profile?.initials || 'ST';
+  const profileLanguage = (secondary.profile?.language === 'fr-FR' || primary.profile?.language === 'fr-FR')
+    ? 'fr-FR'
+    : (secondary.profile?.language || primary.profile?.language || 'en');
 
   // Subscription entitlement protection: never downgrade from premium
   let sub = primary.profile?.subscription;
@@ -1111,6 +1148,7 @@ function mergeDatabaseStates(
       email: profileEmail,
       initials: profileInitials,
       subscription: sub,
+      language: profileLanguage,
     },
     courses: Array.from(courseMap.values()),
     timetable: Array.from(timetableMap.values()),
@@ -1792,6 +1830,11 @@ const getSessionTokenFromRequest = (req: express.Request): string | undefined =>
   if (typeof customHeader === 'string' && customHeader) {
     return customHeader.trim();
   }
+  // 4. From query param: ?token=xxx
+  const queryToken = (req.query?.token || req.query?.sessionToken) as string;
+  if (typeof queryToken === 'string' && queryToken) {
+    return queryToken.trim();
+  }
   return undefined;
 };
 
@@ -1898,14 +1941,13 @@ app.use('/api', (req, res, next) => {
 const isPublicApiPath = (path: string): boolean => {
   const cleanPath = path.split('?')[0].replace(/\/+$/, '');
   if (cleanPath.startsWith('/api/auth')) return true;
-  if (cleanPath === '/api/subscription/detect-country') return true;
-  if (cleanPath === '/api/subscription/config') return true;
-  if (cleanPath === '/api/subscription/create-order') return true;
-  if (cleanPath === '/api/subscription/verify-payment') return true;
+  if (cleanPath.startsWith('/api/subscription/')) return true;
   if (cleanPath === '/api/ai/health' || cleanPath === '/api/ai/diagnostic') return true;
   if (cleanPath.startsWith('/api/mobile-companion/verify-pairing-token')) return true;
   if (cleanPath.startsWith('/api/mobile-companion/confirm-pairing')) return true;
   if (cleanPath.startsWith('/api/mobile-companion/session-status')) return true;
+  if (cleanPath.startsWith('/api/study-materials/files/')) return true;
+  if (cleanPath.startsWith('/api/study-materials/') && (cleanPath.endsWith('/view') || cleanPath.endsWith('/download') || cleanPath.endsWith('/preview'))) return true;
   return false;
 };
 
@@ -3270,6 +3312,9 @@ Structure in clean Markdown:
       const filename = path.basename(req.params.filename);
       const possiblePaths = [
         path.join(process.cwd(), 'uploads', 'materials', filename),
+        path.join(process.cwd(), 'public', 'assets', 'aistudio', filename),
+        path.join(process.cwd(), 'public', 'assets', filename),
+        path.join(process.cwd(), 'public', filename),
       ];
 
       const ext = path.extname(filename).toLowerCase();
@@ -3295,11 +3340,33 @@ Structure in clean Markdown:
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
       const allMaterials = db.studyMaterials || [];
-      const match = allMaterials.find((m) =>
+      let match = allMaterials.find((m) =>
         (m.storagePath && m.storagePath.includes(filename)) ||
         (m.storageKey && m.storageKey.includes(filename)) ||
         m.originalFileName === filename
       );
+
+      if (!match) {
+        try {
+          const files = fs.readdirSync(process.cwd());
+          for (const f of files) {
+            if (f.startsWith('server_db_') && f.endsWith('.json')) {
+              try {
+                const raw = JSON.parse(fs.readFileSync(path.join(process.cwd(), f), 'utf-8'));
+                const found = (raw.studyMaterials || []).find((m: any) =>
+                  (m.storagePath && m.storagePath.includes(filename)) ||
+                  (m.storageKey && m.storageKey.includes(filename)) ||
+                  m.originalFileName === filename
+                );
+                if (found) {
+                  match = found;
+                  break;
+                }
+              } catch (e) {}
+            }
+          }
+        } catch (e) {}
+      }
 
       if (match && match.fileDataUrl && match.fileDataUrl.startsWith('data:')) {
         const parts = match.fileDataUrl.split(',');
@@ -3640,7 +3707,10 @@ Structure in clean Markdown:
     try {
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
-      let material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
+      let material = (db.studyMaterials || []).find((m) => m.id === req.params.id || m.materialId === req.params.id);
+      if (!material) {
+        material = findMaterialInAnyDb(req.params.id);
+      }
       if (!material) {
         return res.status(404).json({ error: 'Study material not found' });
       }
@@ -3684,7 +3754,10 @@ Structure in clean Markdown:
     try {
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
-      let material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
+      let material = (db.studyMaterials || []).find((m) => m.id === req.params.id || m.materialId === req.params.id);
+      if (!material) {
+        material = findMaterialInAnyDb(req.params.id);
+      }
       if (!material) {
         return res.status(404).json({ error: 'Study material not found' });
       }
@@ -3730,7 +3803,10 @@ Structure in clean Markdown:
     try {
       const { userId, userEmail } = getEffectiveUser(req);
       const db = readDB(userId, userEmail);
-      let material = (db.studyMaterials || []).find((m) => m.id === req.params.id);
+      let material = (db.studyMaterials || []).find((m) => m.id === req.params.id || m.materialId === req.params.id);
+      if (!material) {
+        material = findMaterialInAnyDb(req.params.id);
+      }
       if (!material) {
         return res.status(404).json({ error: 'Study material not found' });
       }

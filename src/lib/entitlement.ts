@@ -62,7 +62,7 @@ export function getStoredEntitlement(): EntitlementRecord | null {
       const parsed = JSON.parse(stored) as EntitlementRecord;
       if (parsed && typeof parsed === 'object') {
         if (!isEntitlementActive(parsed)) {
-          localStorage.removeItem(ENTITLEMENT_STORAGE_KEY);
+          // Preserve the record for subscription restoration and sync instead of deleting it
           return null;
         }
         return parsed;

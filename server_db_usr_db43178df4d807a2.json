@@ -1,0 +1,40 @@
+{
+  "profile": {
+    "name": "AuditUserL_1792828171677",
+    "email": "audit_l_1792828171677@example.com",
+    "initials": "AL",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
+      "billingCountry": "US",
+      "paymentProvider": null,
+      "paymentId": null
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-10-24T07:49:31.802Z"
+    }
+  },
+  "courses": [
+    {
+      "id": "c_l1",
+      "name": "Human Anatomy",
+      "color": "#3b82f6"
+    }
+  ],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

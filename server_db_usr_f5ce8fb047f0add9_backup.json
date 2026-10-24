@@ -1,0 +1,48 @@
+{
+  "profile": {
+    "name": "AuditUserA_1792828242705",
+    "email": "audit_a_1792828242705@example.com",
+    "initials": "AU",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
+      "billingCountry": "US",
+      "paymentProvider": null,
+      "paymentId": null
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-10-24T07:50:42.981Z"
+    }
+  },
+  "courses": [
+    {
+      "id": "c_a1",
+      "name": "Neurobiology",
+      "color": "#6366f1"
+    }
+  ],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [
+    {
+      "id": "n_a1",
+      "courseId": "c_a1",
+      "title": "Action Potentials",
+      "content": "Depolarization phases",
+      "updatedAt": "2026-10-24T07:50:42.976Z"
+    }
+  ],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

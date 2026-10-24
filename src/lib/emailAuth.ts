@@ -11,6 +11,7 @@
  */
 
 import { DatabaseSchema, UserProfile, Subscription } from '../types';
+import { getStoredEntitlement, isEntitlementActive } from './entitlement';
 
 export const AUTH_USER_STORAGE_KEY = 'studyflow_auth_user';
 export const AUTH_SESSION_STORAGE_KEY = 'studyflow_session_token';
@@ -273,7 +274,25 @@ export async function checkCurrentAuth(): Promise<AuthResult | null> {
       });
     }
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        // Explicitly unauthenticated
+        clearLocalAuthUser();
+        return null;
+      }
+      // Transient server/network error: preserve cached session
+      const cached = getLocalAuthUser();
+      if (cached) {
+        const localEntitlement = getStoredEntitlement();
+        return {
+          user: cached,
+          hasActiveSubscription: Boolean(localEntitlement && isEntitlementActive(localEntitlement)),
+          subscription: localEntitlement || null,
+        };
+      }
+      return null;
+    }
+
     const data = await res.json();
 
     if (data.authenticated && data.user) {
@@ -295,6 +314,16 @@ export async function checkCurrentAuth(): Promise<AuthResult | null> {
     }
   } catch (err) {
     console.warn('[Native Auth] Non-fatal auth check notice:', err);
+    // Offline or network timeout: preserve cached session
+    const cached = getLocalAuthUser();
+    if (cached) {
+      const localEntitlement = getStoredEntitlement();
+      return {
+        user: cached,
+        hasActiveSubscription: Boolean(localEntitlement && isEntitlementActive(localEntitlement)),
+        subscription: localEntitlement || null,
+      };
+    }
   }
   return null;
 }

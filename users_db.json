@@ -136,5 +136,435 @@
     "emailVerified": true,
     "createdAt": "2026-10-21T17:55:25.860Z",
     "updatedAt": "2026-10-21T17:55:25.861Z"
+  },
+  {
+    "userId": "usr_0d589a3168543aff",
+    "username": "audit_user_a_1792827435972",
+    "name": "audit_user_a_1792827435972",
+    "email": "auditusera1792827435972_0d589a3168543aff@studyplanner.internal",
+    "passwordHash": "$2b$10$a7ouEtKAYMFZ1AfLs8odjeMaMKYTG0SuZtIds4NgR0ywOzjgSKPiO",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:37:16.219Z",
+    "updatedAt": "2026-10-24T07:37:16.219Z"
+  },
+  {
+    "userId": "usr_ed410e3d7fc3644e",
+    "username": "migrated_user_1792827436252",
+    "name": "migrated_user_1792827436252",
+    "email": "migrateduser1792827436252_ed410e3d7fc3644e@studyplanner.internal",
+    "passwordHash": "$2b$10$ILqqw.w7S.wn08d1kyh0tuf7FgFRJsoWMvM/OtgNik1QKCePQhz3a",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:37:16.379Z",
+    "updatedAt": "2026-10-24T07:37:16.379Z"
+  },
+  {
+    "userId": "usr_535a1249ae6aac64",
+    "username": "user_monthly_1792827436390",
+    "name": "user_monthly_1792827436390",
+    "email": "monthly_1792827436390@test.com",
+    "passwordHash": "$2b$10$2G6cHVdszKWmpOWzpPpU5Ok0/1FBYfIkgdMEb5ddcdL.hI5wrG6Ym",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:37:16.514Z",
+    "updatedAt": "2026-10-24T07:37:16.514Z"
+  },
+  {
+    "userId": "usr_f3df1ded59e943af",
+    "username": "user_yearly_1792827436522",
+    "name": "user_yearly_1792827436522",
+    "email": "yearly_1792827436522@test.com",
+    "passwordHash": "$2b$10$r6VHnr1Epkq0GP.dnKn0VukHSjtNrRmLQr1PRL4dqfIKrrmjcPyVO",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:37:16.643Z",
+    "updatedAt": "2026-10-24T07:37:16.643Z"
+  },
+  {
+    "userId": "usr_f0fdcc1d8bd0f311",
+    "username": "iso_user1_1792827436678",
+    "name": "iso_user1_1792827436678",
+    "email": "isouser11792827436678_f0fdcc1d8bd0f311@studyplanner.internal",
+    "passwordHash": "$2b$10$jYZwFfcHJoom4Xu.66vOWOlkdV8y6iaR.d/smawA0sizXGcKt2CPi",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:37:16.802Z",
+    "updatedAt": "2026-10-24T07:37:16.802Z"
+  },
+  {
+    "userId": "usr_ace4d0e6d49c16f9",
+    "username": "iso_user2_1792827436808",
+    "name": "iso_user2_1792827436808",
+    "email": "isouser21792827436808_ace4d0e6d49c16f9@studyplanner.internal",
+    "passwordHash": "$2b$10$Z8CenkenHH4vuTETZmW4OOYkIS2NJopa9bN5jIvPGjw/lVWliOrdm",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:37:16.948Z",
+    "updatedAt": "2026-10-24T07:37:16.948Z"
+  },
+  {
+    "userId": "usr_ac3223149ba0b7a5",
+    "username": "user_restore_1792827436952",
+    "name": "user_restore_1792827436952",
+    "email": "restore_test_1792827436952@example.com",
+    "passwordHash": "$2b$10$iEsOCKyEn/LGyVDvmRFhlOx3oKh5KgvOV7YiGACmHNgDPxUsyUZD6",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:37:17.075Z",
+    "updatedAt": "2026-10-24T07:37:17.075Z"
+  },
+  {
+    "userId": "usr_62d1ea07ce9b5a8f",
+    "username": "fr_user_1792827437082",
+    "name": "fr_user_1792827437082",
+    "email": "fruser1792827437082_62d1ea07ce9b5a8f@studyplanner.internal",
+    "passwordHash": "$2b$10$U/6nme3pBKWFf89ii6qi8uS9ZtFYyHgLXEKhbFs/KqHiClblXT6k2",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:37:17.204Z",
+    "updatedAt": "2026-10-24T07:37:17.204Z"
+  },
+  {
+    "userId": "usr_1e50fab31f52a7a5",
+    "username": "audit_user_a_1792827598070",
+    "name": "audit_user_a_1792827598070",
+    "email": "auditusera1792827598070_1e50fab31f52a7a5@studyplanner.internal",
+    "passwordHash": "$2b$10$LMZFgtjjPDQykfi9bmCLvev.5S6HmBBMl3/f04nzqAzbnhrtJjqSi",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:39:58.297Z",
+    "updatedAt": "2026-10-24T07:39:58.297Z"
+  },
+  {
+    "userId": "usr_9b40972e67e18139",
+    "username": "migrated_user_1792827598329",
+    "name": "migrated_user_1792827598329",
+    "email": "migrateduser1792827598329_9b40972e67e18139@studyplanner.internal",
+    "passwordHash": "$2b$10$VgCCxKR9r9gGLFiMGC8JnuA6IbTbbOXM3Q5bWrxGbHlMdXL0aBeyW",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:39:58.459Z",
+    "updatedAt": "2026-10-24T07:39:58.459Z"
+  },
+  {
+    "userId": "usr_b5e088e2b77fa397",
+    "username": "user_monthly_1792827598468",
+    "name": "user_monthly_1792827598468",
+    "email": "monthly_1792827598468@test.com",
+    "passwordHash": "$2b$10$VOwKFTIv7WzHhHPHGnn2nONrDGqy9Bq5I92NYyxhZvZVYGQ0DN4JW",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:39:58.601Z",
+    "updatedAt": "2026-10-24T07:39:58.601Z"
+  },
+  {
+    "userId": "usr_dfd1e7ee5858fdf5",
+    "username": "user_yearly_1792827598610",
+    "name": "user_yearly_1792827598610",
+    "email": "yearly_1792827598610@test.com",
+    "passwordHash": "$2b$10$2w.B6VQZgTE4s2v1IrcMYOARHKTNrqfr0I3cKG98SmciXZa0xs4yq",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:39:58.733Z",
+    "updatedAt": "2026-10-24T07:39:58.733Z"
+  },
+  {
+    "userId": "usr_be33aa35892feb2d",
+    "username": "cold_user_1792827598741",
+    "name": "cold_user_1792827598741",
+    "email": "colduser1792827598741_be33aa35892feb2d@studyplanner.internal",
+    "passwordHash": "$2b$10$edjjvPH0/HZnv8/bcEYjge209INTSViJnrGyRyziId0uB08KqVvky",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:39:58.902Z",
+    "updatedAt": "2026-10-24T07:39:58.902Z"
+  },
+  {
+    "userId": "usr_7a0c5337898c3cb3",
+    "username": "iso_user1_1792827598931",
+    "name": "iso_user1_1792827598931",
+    "email": "isouser11792827598931_7a0c5337898c3cb3@studyplanner.internal",
+    "passwordHash": "$2b$10$hWCxXpSmdw4Tgtouw3gfE.OHMElG/E1Y4/7/gaVfObn9j0yKjn1/e",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:39:59.054Z",
+    "updatedAt": "2026-10-24T07:39:59.054Z"
+  },
+  {
+    "userId": "usr_62d74ef76905ab50",
+    "username": "iso_user2_1792827599060",
+    "name": "iso_user2_1792827599060",
+    "email": "isouser21792827599060_62d74ef76905ab50@studyplanner.internal",
+    "passwordHash": "$2b$10$eoR52MI.B9RWxoh4bEnTt.ACOvYpYpl3BZjwhY7NiuMI8Xq85BfNi",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:39:59.183Z",
+    "updatedAt": "2026-10-24T07:39:59.183Z"
+  },
+  {
+    "userId": "usr_2a3bf0e19a4517d6",
+    "username": "user_restore_1792827599188",
+    "name": "user_restore_1792827599188",
+    "email": "restore_test_1792827599188@example.com",
+    "passwordHash": "$2b$10$d2H3wp6eHsGxKthvw82QruPl97P5rZG0AbepexYKrad4VHphqZiB6",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:39:59.316Z",
+    "updatedAt": "2026-10-24T07:39:59.317Z"
+  },
+  {
+    "userId": "usr_b4801480c0a47daf",
+    "username": "fr_user_1792827599322",
+    "name": "fr_user_1792827599322",
+    "email": "fruser1792827599322_b4801480c0a47daf@studyplanner.internal",
+    "passwordHash": "$2b$10$8bN0pJE/FGybJrFYyKn.PeIXmLmH9B5W961VEc9c4DAEwKXr9ptuS",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:39:59.444Z",
+    "updatedAt": "2026-10-24T07:39:59.444Z"
+  },
+  {
+    "userId": "usr_abe908fc1d119dd1",
+    "username": "Audit User A",
+    "name": "Audit User A",
+    "email": "audit_a_1792827840908@example.com",
+    "passwordHash": "$2b$10$KT7mnRYlAhZ3R8/.Euz8Euiiz59Qx3eziS9oIQgNT6iWia5UKXKxq",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:44:01.145Z",
+    "updatedAt": "2026-10-24T07:44:01.145Z"
+  },
+  {
+    "userId": "usr_80efc74c66fe1675",
+    "username": "Audit User B",
+    "name": "Audit User B",
+    "email": "audit_b_1792827841162@example.com",
+    "passwordHash": "$2b$10$xP5BOais6Ainv8zD8HdNbeoP2ssVt/Go2jsB9izJqURR6MgUbGdFe",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:44:01.285Z",
+    "updatedAt": "2026-10-24T07:44:01.285Z"
+  },
+  {
+    "userId": "usr_44e9c51cf42fdad5",
+    "username": "Audit User C",
+    "name": "Audit User C",
+    "email": "audit_c_1792827841294@example.com",
+    "passwordHash": "$2b$10$wWTuWGwwUuycGNthjJ.LYuiwiSZF7W7kO5ebcQcYh0Va6wNLDYuIO",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:44:01.416Z",
+    "updatedAt": "2026-10-24T07:44:01.416Z"
+  },
+  {
+    "userId": "usr_217f34c6da6eb390",
+    "username": "Audit User D",
+    "name": "Audit User D",
+    "email": "audit_d_1792827841422@example.com",
+    "passwordHash": "$2b$10$OLyv/ienN4isK5FVkeO4JeJI0FKVDvtwzd0rIShq4w9Hdsb5PMp06",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:44:01.553Z",
+    "updatedAt": "2026-10-24T07:44:01.553Z"
+  },
+  {
+    "userId": "usr_a1cd9515a7e36d8c",
+    "username": "Isolation 1",
+    "name": "Isolation 1",
+    "email": "iso1_1792827841579@example.com",
+    "passwordHash": "$2b$10$UimI4.wcEScntFc00tbhT.ZvUV5BeYIn8ykD8vU5tzvwYuvjhWUIe",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:44:01.711Z",
+    "updatedAt": "2026-10-24T07:44:01.711Z"
+  },
+  {
+    "userId": "usr_af59ac47095e3416",
+    "username": "Isolation 2",
+    "name": "Isolation 2",
+    "email": "iso2_1792827841714@example.com",
+    "passwordHash": "$2b$10$fgzN1BpCnVjHvNXKFp0q6OqH2tAF0DzcjX0VBNo.tqarEP5i0.3NO",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:44:01.836Z",
+    "updatedAt": "2026-10-24T07:44:01.836Z"
+  },
+  {
+    "userId": "usr_48893e9ea91c694e",
+    "username": "French User",
+    "name": "French User",
+    "email": "audit_fr_1792827841848@example.com",
+    "passwordHash": "$2b$10$xhKDKlg.JsmMHym2lg6cx.pbB0dyEdcyEg4cSyUSGbLbVGv4g9wj6",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:44:01.987Z",
+    "updatedAt": "2026-10-24T07:44:01.987Z"
+  },
+  {
+    "userId": "usr_39ff3f9b988ac326",
+    "username": "Audit User L",
+    "name": "Audit User L",
+    "email": "audit_l_1792827841994@example.com",
+    "passwordHash": "$2b$10$rRizFxVckNDzEdkhAjaGTuIGsBTFvVzbC48M6RzC9CGcczDvzyFHC",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:44:02.118Z",
+    "updatedAt": "2026-10-24T07:44:02.118Z"
+  },
+  {
+    "userId": "usr_5c8268b917756b93",
+    "username": "AuditUserA_1792828170452",
+    "name": "AuditUserA_1792828170452",
+    "email": "audit_a_1792828170452@example.com",
+    "passwordHash": "$2b$10$gIcEIxhzIEm/054YkaYAYu6qyN.FDsXv/h/FbASsp2srGDInL2bBq",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:49:30.713Z",
+    "updatedAt": "2026-10-24T07:49:30.713Z"
+  },
+  {
+    "userId": "usr_1ef833c712d33a2b",
+    "username": "AuditUserB_1792828170733",
+    "name": "AuditUserB_1792828170733",
+    "email": "audit_b_1792828170733@example.com",
+    "passwordHash": "$2b$10$/b1UdlAZQQ/7Uufnh/z.HutI46MCU33U/s/zVxR5Z5Sn0YVoEvioS",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:49:30.858Z",
+    "updatedAt": "2026-10-24T07:49:30.858Z"
+  },
+  {
+    "userId": "usr_401f1063ef3915fb",
+    "username": "AuditUserC_1792828170867",
+    "name": "AuditUserC_1792828170867",
+    "email": "audit_c_1792828170867@example.com",
+    "passwordHash": "$2b$10$AZ02greM/gFp12vQnRvY9OqhW1gReToc9AcUnz9Z3dz65hNhOtgjG",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:49:30.990Z",
+    "updatedAt": "2026-10-24T07:49:30.990Z"
+  },
+  {
+    "userId": "usr_53609deacce67d77",
+    "username": "AuditUserD_1792828171001",
+    "name": "AuditUserD_1792828171001",
+    "email": "audit_d_1792828171001@example.com",
+    "passwordHash": "$2b$10$PGvPZjEMna4sdfVFOgqhC.mTwuguDJbU3KoSZtE20LxBDZ5NBb60.",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:49:31.134Z",
+    "updatedAt": "2026-10-24T07:49:31.134Z"
+  },
+  {
+    "userId": "usr_ad2331478fe93b99",
+    "username": "AuditUserF_1792828171144",
+    "name": "AuditUserF_1792828171144",
+    "email": "audit_f_1792828171144@example.com",
+    "passwordHash": "$2b$10$H12Zf6Nv6RVFiIqCtJxOd.JF.nj.sVx/gqO/uxhsZl2s9svoMQ17W",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:49:31.266Z",
+    "updatedAt": "2026-10-24T07:49:31.266Z"
+  },
+  {
+    "userId": "usr_b166c76e0b31579a",
+    "username": "iso1_1792828171288",
+    "name": "iso1_1792828171288",
+    "email": "iso1_1792828171288@example.com",
+    "passwordHash": "$2b$10$KSEdlCimDGgGSaYmnoBuguAtMezO3ObrXbg5K.u4ECpKJibTkMo82",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:49:31.410Z",
+    "updatedAt": "2026-10-24T07:49:31.410Z"
+  },
+  {
+    "userId": "usr_240d4f731ac2099e",
+    "username": "iso2_1792828171412",
+    "name": "iso2_1792828171412",
+    "email": "iso2_1792828171412@example.com",
+    "passwordHash": "$2b$10$RGlFEZGk4u.UOuWnpkhCGObu1pEFQaF49nMhSF5lv8VK8dLs/cASm",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:49:31.538Z",
+    "updatedAt": "2026-10-24T07:49:31.538Z"
+  },
+  {
+    "userId": "usr_0900882dbcbd3469",
+    "username": "FrenchUser_1792828171546",
+    "name": "FrenchUser_1792828171546",
+    "email": "audit_fr_1792828171546@example.com",
+    "passwordHash": "$2b$10$RxakIBYQO1Khu/nWpJKuVOJ1QfDNZHFzbfftitahmRmMzPx9qOFKK",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:49:31.670Z",
+    "updatedAt": "2026-10-24T07:49:31.670Z"
+  },
+  {
+    "userId": "usr_db43178df4d807a2",
+    "username": "AuditUserL_1792828171677",
+    "name": "AuditUserL_1792828171677",
+    "email": "audit_l_1792828171677@example.com",
+    "passwordHash": "$2b$10$PinMMHOfxY51dNz0VdUCpu0tUBO77i48qyBuZu/x54Jv2kUpj3ED.",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:49:31.798Z",
+    "updatedAt": "2026-10-24T07:49:31.799Z"
+  },
+  {
+    "userId": "usr_f5ce8fb047f0add9",
+    "username": "AuditUserA_1792828242705",
+    "name": "AuditUserA_1792828242705",
+    "email": "audit_a_1792828242705@example.com",
+    "passwordHash": "$2b$10$zJSXPLaeOXFcHf2po2FDVe1prIXY7YKt3veOAmQgqv2/F6j4.YTqa",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:50:42.963Z",
+    "updatedAt": "2026-10-24T07:50:42.963Z"
+  },
+  {
+    "userId": "usr_70538f3d38bbe537",
+    "username": "AuditUserB_1792828242987",
+    "name": "AuditUserB_1792828242987",
+    "email": "audit_b_1792828242987@example.com",
+    "passwordHash": "$2b$10$bSKDZbiBzpa2t3nkUttGn.wxg5/7kyxYOcV8b5.1ue6fSo3MAYpqG",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:50:43.112Z",
+    "updatedAt": "2026-10-24T07:50:43.112Z"
+  },
+  {
+    "userId": "usr_c9879cfd89029cf0",
+    "username": "AuditUserC_1792828243122",
+    "name": "AuditUserC_1792828243122",
+    "email": "audit_c_1792828243122@example.com",
+    "passwordHash": "$2b$10$dMW0OYmP218n6lKME8huOedNTJ8YYHZnCxbdfzo9CmUtKkx2ZpuP6",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:50:43.256Z",
+    "updatedAt": "2026-10-24T07:50:43.256Z"
+  },
+  {
+    "userId": "usr_11bed507f4c8d9a2",
+    "username": "AuditUserD_1792828243268",
+    "name": "AuditUserD_1792828243268",
+    "email": "audit_d_1792828243268@example.com",
+    "passwordHash": "$2b$10$1/wUeMyyCxWFq2vzEmNcD.cCDWh.o/8QTeqgoDv2fMC4rWFm1681K",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:50:43.390Z",
+    "updatedAt": "2026-10-24T07:50:43.390Z"
+  },
+  {
+    "userId": "usr_3e1915eb11cc2360",
+    "username": "AuditUserF_1792828243401",
+    "name": "AuditUserF_1792828243401",
+    "email": "audit_f_1792828243401@example.com",
+    "passwordHash": "$2b$10$Hgs2QXGQxmu.pKlj7.R0Ou5NcMPrNoj8SLYc5dDgpCczpCKB0deAK",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:50:43.524Z",
+    "updatedAt": "2026-10-24T07:50:43.524Z"
+  },
+  {
+    "userId": "usr_69cbaf59184255a5",
+    "username": "iso1_1792828243537",
+    "name": "iso1_1792828243537",
+    "email": "iso1_1792828243537@example.com",
+    "passwordHash": "$2b$10$OirDDmf2qXT9uFS3rjzxLe41w8aawFmHpLSUyQiLuKe2TcbJs4ZuC",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:50:43.666Z",
+    "updatedAt": "2026-10-24T07:50:43.666Z"
+  },
+  {
+    "userId": "usr_5fc699da965323ac",
+    "username": "iso2_1792828243668",
+    "name": "iso2_1792828243668",
+    "email": "iso2_1792828243668@example.com",
+    "passwordHash": "$2b$10$U2lIzcUvA1RlZiJ3wzMiwuWs64sOvKIB1TPsYrIKXNow9fhiT6YT2",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:50:43.789Z",
+    "updatedAt": "2026-10-24T07:50:43.789Z"
+  },
+  {
+    "userId": "usr_3d60d8c28d5c67c3",
+    "username": "FrenchUser_1792828244762",
+    "name": "FrenchUser_1792828244762",
+    "email": "audit_fr_1792828244762@example.com",
+    "passwordHash": "$2b$10$XlX.vkrfycVWl8Vqae8fiujjr46nw840Fc0dFCAGOes7q2Y3UdXXq",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:50:44.908Z",
+    "updatedAt": "2026-10-24T07:50:44.908Z"
+  },
+  {
+    "userId": "usr_5ec93d21857c3f55",
+    "username": "AuditUserL_1792828244914",
+    "name": "AuditUserL_1792828244914",
+    "email": "audit_l_1792828244914@example.com",
+    "passwordHash": "$2b$10$zbe1TeeJCiKTOb5mjhIzMeGmtn8dbNgaA4Pyuhjk0dr9JHcBkmhuG",
+    "emailVerified": true,
+    "createdAt": "2026-10-24T07:50:45.039Z",
+    "updatedAt": "2026-10-24T07:50:45.039Z"
   }
 ]

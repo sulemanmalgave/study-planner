@@ -1,0 +1,36 @@
+{
+  "profile": {
+    "name": "Student",
+    "email": "",
+    "initials": "ST",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "premium",
+      "status": "active",
+      "plan": "yearly",
+      "paymentGateway": "razorpay",
+      "transactionId": "rzp_yearly_1792827598610",
+      "purchaseDate": "2026-10-24T07:39:58.610Z",
+      "expiryDate": "2027-10-24T07:39:58.610Z",
+      "billingCountry": "IN",
+      "type": "yearly",
+      "amount": 999,
+      "currency": "INR"
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-10-24T07:39:58.738Z"
+    }
+  },
+  "courses": [],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

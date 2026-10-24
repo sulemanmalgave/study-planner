@@ -16,6 +16,7 @@ import { Course, StudyMaterial, FREE_PLAN_LIMITS } from '../types';
 import SubjectSelect from './SubjectSelect';
 import { getAuthHeaders } from '../lib/emailAuth';
 import { useTranslation } from '../lib/i18n';
+import { saveMaterialBlob } from '../lib/materialStorage';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.webp', '.txt', '.csv'];
 
@@ -274,6 +275,13 @@ export default function StudyMaterialUploadModal({
             ? 'Impossible d\'enregistrer ce document. Veuillez réessayer.'
             : 'Unable to save this material. Please try again.'
         );
+      }
+
+      // Persist file Blob in IndexedDB for instant display and offline access
+      try {
+        await saveMaterialBlob(savedMaterial.id, file);
+      } catch (idbErr) {
+        console.warn('Failed to cache material in IndexedDB:', idbErr);
       }
 
       setUploadProgress(100);

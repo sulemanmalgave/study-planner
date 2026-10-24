@@ -10,5 +10,61 @@
     "billingCountry": "US",
     "verifiedAt": "2026-09-18T04:18:01.232Z",
     "status": "active"
+  },
+  {
+    "transactionId": "rzp_restore_1792827436952",
+    "userId": "usr_ac3223149ba0b7a5",
+    "userEmail": "restore_test_1792827436952@example.com",
+    "plan": "yearly",
+    "paymentGateway": "razorpay",
+    "amount": 999,
+    "currency": "INR",
+    "purchaseDate": "2026-10-24T07:37:16.952Z",
+    "expiryDate": "2027-04-22T07:37:16.952Z",
+    "billingCountry": "IN",
+    "verifiedAt": "2026-10-24T07:37:16.952Z",
+    "status": "active"
+  },
+  {
+    "transactionId": "pay_monthly_1792827598468",
+    "userId": "usr_b5e088e2b77fa397",
+    "userEmail": "monthly_1792827598468@test.com",
+    "plan": "monthly",
+    "paymentGateway": "paypal",
+    "amount": 1.99,
+    "currency": "USD",
+    "purchaseDate": "2026-10-24T07:39:58.468Z",
+    "expiryDate": "2026-11-23T07:39:58.468Z",
+    "billingCountry": "US",
+    "verifiedAt": "2026-10-24T07:39:58.468Z",
+    "status": "active"
+  },
+  {
+    "transactionId": "rzp_yearly_1792827598610",
+    "userId": "usr_dfd1e7ee5858fdf5",
+    "userEmail": "yearly_1792827598610@test.com",
+    "plan": "yearly",
+    "paymentGateway": "razorpay",
+    "amount": 999,
+    "currency": "INR",
+    "purchaseDate": "2026-10-24T07:39:58.610Z",
+    "expiryDate": "2027-10-24T07:39:58.610Z",
+    "billingCountry": "IN",
+    "verifiedAt": "2026-10-24T07:39:58.610Z",
+    "status": "active"
+  },
+  {
+    "transactionId": "rzp_restore_1792827599188",
+    "userId": "usr_2a3bf0e19a4517d6",
+    "userEmail": "restore_test_1792827599188@example.com",
+    "plan": "yearly",
+    "paymentGateway": "razorpay",
+    "amount": 999,
+    "currency": "INR",
+    "purchaseDate": "2026-10-24T07:39:59.188Z",
+    "expiryDate": "2027-04-22T07:39:59.188Z",
+    "billingCountry": "IN",
+    "verifiedAt": "2026-10-24T07:39:59.188Z",
+    "status": "active"
   }
 ]

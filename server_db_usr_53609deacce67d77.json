@@ -1,0 +1,38 @@
+{
+  "profile": {
+    "name": "AuditUserD_1792828171001",
+    "email": "audit_d_1792828171001@example.com",
+    "initials": "AD",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "premium",
+      "plan": "yearly",
+      "paymentGateway": "razorpay",
+      "billingCountry": "IN",
+      "transactionId": "pay_rzp_1792828171137",
+      "purchaseDate": "2026-10-24T07:49:31.137Z",
+      "expiryDate": "2027-10-24T07:49:31.137Z"
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-10-24T07:49:31.139Z"
+    }
+  },
+  "courses": [
+    {
+      "id": "c_d",
+      "name": "Biochemistry",
+      "color": "#10b981"
+    }
+  ],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

@@ -189,15 +189,25 @@ export default function App() {
             console.warn('[Auth] Server state fetch warning:', fetchErr);
           }
         } else {
-          setAuthUser(null);
-          clearLocalAuthUser();
+          const cached = getLocalAuthUser();
+          if (cached) {
+            setAuthUser(cached);
+          } else {
+            setAuthUser(null);
+            clearLocalAuthUser();
+          }
         }
       })
       .catch((err) => {
         console.warn('[Auth] Initial session check notice:', err);
         if (isMounted) {
-          setAuthUser(null);
-          clearLocalAuthUser();
+          const cached = getLocalAuthUser();
+          if (cached) {
+            setAuthUser(cached);
+          } else {
+            setAuthUser(null);
+            clearLocalAuthUser();
+          }
         }
       })
       .finally(() => {

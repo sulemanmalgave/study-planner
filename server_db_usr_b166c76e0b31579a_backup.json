@@ -1,0 +1,40 @@
+{
+  "profile": {
+    "name": "IsoUser1",
+    "email": "iso1_1792828171288@example.com",
+    "initials": "I1",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
+      "billingCountry": "US",
+      "paymentProvider": null,
+      "paymentId": null
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-10-24T07:49:31.542Z"
+    }
+  },
+  "courses": [
+    {
+      "id": "c_iso1",
+      "name": "User 1 Confidential Course",
+      "color": "#ff0000"
+    }
+  ],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

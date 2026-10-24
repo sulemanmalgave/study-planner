@@ -92,9 +92,12 @@ export function sanitizeSchema(state: any): DatabaseSchema {
       photoURL: state.profile?.photoURL || null,
       subscription: sub,
       aiUsage: state.profile?.aiUsage || fallback.profile.aiUsage,
-      language: (typeof window !== 'undefined' && localStorage.getItem('studyflow_user_selected_language') === 'fr-FR')
-        ? 'fr-FR'
-        : 'en',
+      language: (
+        (typeof window !== 'undefined' && (
+          localStorage.getItem('studyflow_user_selected_language') === 'fr-FR' ||
+          localStorage.getItem('studyflow_language') === 'fr-FR'
+        )) || state.profile?.language === 'fr-FR'
+      ) ? 'fr-FR' : (state.profile?.language || 'en'),
     },
     courses: Array.isArray(state.courses) ? state.courses : [],
     timetable: Array.isArray(state.timetable) ? state.timetable : [],
@@ -363,6 +366,10 @@ export function mergeDatabaseStates(
     }
   });
 
+  const profileLanguage = (cleanLocal.profile?.language === 'fr-FR' || cleanRemote.profile?.language === 'fr-FR')
+    ? 'fr-FR'
+    : (cleanLocal.profile?.language || cleanRemote.profile?.language || 'en');
+
   return {
     profile: {
       ...cleanRemote.profile,
@@ -371,6 +378,7 @@ export function mergeDatabaseStates(
       email: profileEmail,
       initials: profileInitials,
       subscription: sub,
+      language: profileLanguage,
     },
     courses: Array.from(courseMap.values()),
     timetable: Array.from(timetableMap.values()),

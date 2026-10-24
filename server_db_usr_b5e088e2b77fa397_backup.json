@@ -1,0 +1,36 @@
+{
+  "profile": {
+    "name": "Student",
+    "email": "",
+    "initials": "ST",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "premium",
+      "status": "active",
+      "plan": "monthly",
+      "paymentGateway": "paypal",
+      "transactionId": "pay_monthly_1792827598468",
+      "purchaseDate": "2026-10-24T07:39:58.468Z",
+      "expiryDate": "2026-11-23T07:39:58.468Z",
+      "billingCountry": "US",
+      "type": "monthly",
+      "amount": 1.99,
+      "currency": "USD"
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-10-24T07:39:58.607Z"
+    }
+  },
+  "courses": [],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

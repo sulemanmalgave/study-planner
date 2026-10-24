@@ -1,0 +1,38 @@
+{
+  "profile": {
+    "name": "AuditUserC_1792828170867",
+    "email": "audit_c_1792828170867@example.com",
+    "initials": "AC",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "premium",
+      "plan": "monthly",
+      "paymentGateway": "paypal",
+      "billingCountry": "US",
+      "transactionId": "PAYPAL_TX_1792828170993",
+      "purchaseDate": "2026-10-24T07:49:30.993Z",
+      "expiryDate": "2026-11-23T07:49:30.993Z"
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-10-24T07:49:30.995Z"
+    }
+  },
+  "courses": [
+    {
+      "id": "c_c",
+      "name": "Economics",
+      "color": "#f59e0b"
+    }
+  ],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

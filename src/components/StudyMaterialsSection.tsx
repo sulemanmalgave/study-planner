@@ -22,6 +22,7 @@ import StudyMaterialUploadModal from './StudyMaterialUploadModal';
 import StudyMaterialEditModal from './StudyMaterialEditModal';
 import StudyMaterialReaderModal from './StudyMaterialReaderModal';
 import { useTranslation } from '../lib/i18n';
+import { getMaterialFileType } from '../lib/materialStorage';
 
 interface StudyMaterialsSectionProps {
   courses: Course[];
@@ -123,8 +124,8 @@ export default function StudyMaterialsSection({
     return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
   };
 
-  const getFileTypeBadge = (ext: string) => {
-    const clean = ext.toLowerCase().replace('.', '');
+  const getFileTypeBadge = (item: StudyMaterial) => {
+    const clean = getMaterialFileType(item);
     if (clean === 'pdf') {
       return (
         <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-md bg-red-100 text-red-700 font-mono">
@@ -139,9 +140,44 @@ export default function StudyMaterialsSection({
         </span>
       );
     }
+    if (clean === 'png') {
+      return (
+        <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-md bg-emerald-100 text-emerald-800 font-mono">
+          PNG
+        </span>
+      );
+    }
+    if (clean === 'jpg' || clean === 'jpeg') {
+      return (
+        <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-md bg-amber-100 text-amber-800 font-mono">
+          JPG
+        </span>
+      );
+    }
+    if (clean === 'webp') {
+      return (
+        <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-md bg-cyan-100 text-cyan-800 font-mono">
+          WEBP
+        </span>
+      );
+    }
+    if (clean === 'txt') {
+      return (
+        <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-md bg-purple-100 text-purple-700 font-mono">
+          TXT
+        </span>
+      );
+    }
+    if (clean === 'csv') {
+      return (
+        <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-md bg-teal-100 text-teal-700 font-mono">
+          CSV
+        </span>
+      );
+    }
     return (
       <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-md bg-indigo-100 text-indigo-700 font-mono">
-        DOC
+        {clean ? clean.toUpperCase() : 'DOC'}
       </span>
     );
   };
@@ -295,7 +331,7 @@ export default function StudyMaterialsSection({
                   {/* Card Header: Type Badge & Subject Pill */}
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <div className="flex items-center gap-2">
-                      {getFileTypeBadge(item.fileType)}
+                      {getFileTypeBadge(item)}
                       <span
                         className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                         style={{

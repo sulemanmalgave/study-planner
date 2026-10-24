@@ -1,0 +1,75 @@
+{
+  "profile": {
+    "name": "Guest Scholar",
+    "email": "migrateduser1792827598329_9b40972e67e18139@studyplanner.internal",
+    "initials": "ST",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
+      "billingCountry": "US",
+      "paymentProvider": null,
+      "paymentId": null
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-10-24T07:39:58.463Z"
+    },
+    "userId": "usr_9b40972e67e18139"
+  },
+  "courses": [
+    {
+      "id": "c_1792827598326",
+      "name": "World History",
+      "color": "#E06D53"
+    }
+  ],
+  "timetable": [
+    {
+      "id": "t_1792827598326",
+      "courseId": "c_1",
+      "day": "Monday",
+      "startTime": "09:00",
+      "endTime": "10:30",
+      "room": "101"
+    }
+  ],
+  "assignments": [
+    {
+      "id": "a_1792827598326",
+      "title": "French Revolution Essay",
+      "dueDate": "2026-11-15",
+      "status": "pending"
+    }
+  ],
+  "exams": [
+    {
+      "id": "e_1792827598326",
+      "title": "Midterm History Exam",
+      "date": "2026-12-01"
+    }
+  ],
+  "notes": [
+    {
+      "id": "n_1792827598326",
+      "title": "Bastille Notes",
+      "content": "Storming of the Bastille July 14 1789"
+    }
+  ],
+  "studySessions": [
+    {
+      "id": "s_1792827598326",
+      "durationMinutes": 45,
+      "date": "2026-10-23"
+    }
+  ],
+  "audioLectures": [],
+  "studyMaterials": []
+}

@@ -20,6 +20,16 @@ import {
 } from 'lucide-react';
 import { Course, StudyMaterial, Note } from '../types';
 import { useTranslation } from '../lib/i18n';
+import { getAuthHeaders } from '../lib/emailAuth';
+import {
+  getMaterialFileType,
+  isImageMaterial,
+  getMaterialBlob,
+  saveMaterialBlob,
+  dataUrlToBlob,
+  createTrackedObjectUrl,
+  revokeTrackedObjectUrl,
+} from '../lib/materialStorage';
 
 interface StudyMaterialReaderModalProps {
   isOpen: boolean;
@@ -55,7 +65,13 @@ export default function StudyMaterialReaderModal({
   const [noteCreatedNotice, setNoteCreatedNotice] = useState<string | null>(null);
 
   const courseColor = courses.find((c) => c.id === material?.subjectId)?.color || '#6750A4';
-  const fileExt = material?.fileType?.toLowerCase() || '';
+  const fileExt = getMaterialFileType(material);
+  const isImage = isImageMaterial(material) || ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp'].includes(fileExt);
+
+  const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(null);
+  const [isMediaLoading, setIsMediaLoading] = useState<boolean>(true);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [reloadTrigger, setReloadTrigger] = useState<number>(0);
 
   // Reset tab when modal opens or material changes
   useEffect(() => {
@@ -65,6 +81,121 @@ export default function StudyMaterialReaderModal({
       setNoteCreatedNotice(null);
     }
   }, [isOpen, material?.id]);
+
+  // Resolve media URL with IndexedDB caching and tracked Object URL cleanup
+  useEffect(() => {
+    let isCancelled = false;
+    let localCreatedBlobUrl: string | null = null;
+
+    if (!isOpen || !material) {
+      setResolvedMediaUrl(null);
+      setIsMediaLoading(false);
+      setMediaError(null);
+      return;
+    }
+
+    setIsMediaLoading(true);
+    setMediaError(null);
+
+    async function resolveUrl() {
+      if (!material) return;
+      try {
+        // 1. Check IndexedDB first for fast persistent offline retrieval
+        const cachedBlob = await getMaterialBlob(material.id);
+        if (cachedBlob && cachedBlob.size > 0 && !isCancelled) {
+          const blobUrl = createTrackedObjectUrl(cachedBlob);
+          localCreatedBlobUrl = blobUrl;
+          setResolvedMediaUrl(blobUrl);
+          setIsMediaLoading(false);
+          return;
+        }
+
+        // 2. Check material.fileDataUrl (Base64)
+        if (material.fileDataUrl && material.fileDataUrl.startsWith('data:')) {
+          const blob = dataUrlToBlob(material.fileDataUrl);
+          if (blob) {
+            saveMaterialBlob(material.id, blob).catch(() => {});
+            if (!isCancelled) {
+              const blobUrl = createTrackedObjectUrl(blob);
+              localCreatedBlobUrl = blobUrl;
+              setResolvedMediaUrl(blobUrl);
+              setIsMediaLoading(false);
+              return;
+            }
+          } else if (!isCancelled) {
+            setResolvedMediaUrl(material.fileDataUrl);
+            setIsMediaLoading(false);
+            return;
+          }
+        }
+
+        // 3. Fallback to server URLs
+        let candidateUrl = '';
+        if (material.storageUrl && material.storageUrl.startsWith('http')) {
+          candidateUrl = material.storageUrl;
+        } else if (material.storagePath && material.storagePath.startsWith('http')) {
+          candidateUrl = material.storagePath;
+        } else if (material.storagePath && material.storagePath.startsWith('/api/')) {
+          candidateUrl = material.storagePath;
+        } else if (material.id) {
+          candidateUrl = `/api/study-materials/${material.id}/view`;
+        }
+
+        if (!candidateUrl) {
+          if (!isCancelled) {
+            setMediaError(
+              language === 'fr-FR'
+                ? 'Données de fichier introuvables. Veuillez re-téléverser ce document.'
+                : 'File data could not be located. Please re-upload this document.'
+            );
+            setIsMediaLoading(false);
+          }
+          return;
+        }
+
+        // For images or relative API paths, attempt direct fetch with auth headers to ensure it works across auth states
+        if (isImage || candidateUrl.startsWith('/api/')) {
+          try {
+            const authHeaders = getAuthHeaders();
+            const resp = await fetch(candidateUrl, { headers: authHeaders });
+            if (resp.ok) {
+              const respBlob = await resp.blob();
+              if (respBlob && respBlob.size > 0 && !isCancelled) {
+                await saveMaterialBlob(material.id, respBlob);
+                const blobUrl = createTrackedObjectUrl(respBlob);
+                localCreatedBlobUrl = blobUrl;
+                setResolvedMediaUrl(blobUrl);
+                setIsMediaLoading(false);
+                return;
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('[MaterialReader] Proactive fetch failed, falling back to direct URL:', fetchErr);
+          }
+        }
+
+        if (!isCancelled) {
+          setResolvedMediaUrl(candidateUrl);
+          setIsMediaLoading(false);
+        }
+      } catch (err: any) {
+        if (!isCancelled) {
+          console.error('[MaterialReader] Error resolving material URL:', err);
+          setMediaError(err.message || 'Failed to load file');
+          setIsMediaLoading(false);
+        }
+      }
+    }
+
+    resolveUrl();
+
+    return () => {
+      isCancelled = true;
+      if (localCreatedBlobUrl) {
+        revokeTrackedObjectUrl(localCreatedBlobUrl);
+      }
+    };
+  }, [isOpen, material?.id, reloadTrigger, isImage]);
 
   // Load preview for DOCX if applicable
   useEffect(() => {
@@ -93,6 +224,19 @@ export default function StudyMaterialReaderModal({
       isMounted = false;
     };
   }, [isOpen, material?.id, fileExt]);
+
+  const handleImageLoadError = () => {
+    if (material?.fileDataUrl && resolvedMediaUrl !== material.fileDataUrl) {
+      setResolvedMediaUrl(material.fileDataUrl);
+      return;
+    }
+    setMediaError(
+      language === 'fr-FR'
+        ? "Impossible d'afficher l'aperçu de l'image. Le fichier peut être inaccessible ou corrompu."
+        : "Unable to display image preview. The file may be inaccessible or unsupported."
+    );
+    setIsMediaLoading(false);
+  };
 
   if (!isOpen || !material) return null;
 
@@ -314,7 +458,7 @@ export default function StudyMaterialReaderModal({
             </a>
 
             <a
-              href={getViewerUrl()}
+              href={resolvedMediaUrl || getViewerUrl()}
               target="_blank"
               rel="noopener noreferrer"
               className="p-1.5 sm:p-2 bg-white hover:bg-[#F3EDF7] text-[#49454F] border border-[#E1E3E1] rounded-xl transition-colors shadow-xs"
@@ -418,22 +562,68 @@ export default function StudyMaterialReaderModal({
             <div className="w-full h-full flex flex-col">
               {fileExt === 'pdf' ? (
                 <iframe
-                  src={getViewerUrl()}
+                  src={resolvedMediaUrl || getViewerUrl()}
                   title={material.name}
                   className="w-full h-full border-0 bg-slate-100"
                 />
-              ) : ['jpg', 'jpeg', 'png', 'webp'].includes(fileExt) ? (
-                <div className="w-full h-full overflow-auto flex items-center justify-center p-4 bg-[#F3EDF7]/20">
-                  <img
-                    src={getViewerUrl()}
-                    alt={material.name}
-                    className="max-w-full max-h-full object-contain rounded-xl shadow-md bg-white border border-[#E1E3E1]"
-                    referrerPolicy="no-referrer"
-                  />
+              ) : isImage ? (
+                <div className="w-full h-full overflow-auto flex items-center justify-center p-4 bg-[#F3EDF7]/20 relative">
+                  {isMediaLoading && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-xs z-10 space-y-2">
+                      <Loader2 className="w-8 h-8 animate-spin text-[#6750A4]" />
+                      <p className="text-xs font-bold text-[#1D1B20]">
+                        {language === 'fr-FR' ? 'Chargement de l\'image...' : 'Loading image...'}
+                      </p>
+                    </div>
+                  )}
+
+                  {mediaError ? (
+                    <div className="bg-white border border-[#E1E3E1] rounded-3xl p-6 sm:p-8 max-w-md w-full text-center space-y-4 shadow-sm z-20">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                        <AlertCircle className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-[#1D1B20]">
+                          {language === 'fr-FR' ? 'Impossible d\'afficher l\'image' : 'Unable to Display Image'}
+                        </h4>
+                        <p className="text-xs text-[#49454F] mt-1 break-all">
+                          {material.originalFileName || material.name}
+                        </p>
+                        <p className="text-xs text-[#79747E] mt-2">
+                          {mediaError}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-center gap-3 pt-2">
+                        <button
+                          onClick={() => setReloadTrigger((prev) => prev + 1)}
+                          className="px-4 py-2 bg-[#F3EDF7] hover:bg-[#EADDFF] text-[#21005D] text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <RotateCw className="w-3.5 h-3.5" />
+                          <span>{language === 'fr-FR' ? 'Réessayer' : 'Retry'}</span>
+                        </button>
+                        <a
+                          href={`/api/study-materials/${material.id}/download`}
+                          download={material.originalFileName}
+                          className="px-4 py-2 bg-[#6750A4] hover:bg-[#503E84] text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>{language === 'fr-FR' ? 'Télécharger' : 'Download'}</span>
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <img
+                      src={resolvedMediaUrl || getViewerUrl()}
+                      alt={material.name}
+                      onLoad={() => setIsMediaLoading(false)}
+                      onError={handleImageLoadError}
+                      className="max-w-full max-h-full object-contain rounded-xl shadow-md bg-white border border-[#E1E3E1]"
+                    />
+                  )}
                 </div>
               ) : ['txt', 'csv'].includes(fileExt) ? (
                 <iframe
-                  src={getViewerUrl()}
+                  src={resolvedMediaUrl || getViewerUrl()}
                   title={material.name}
                   className="w-full h-full border-0 bg-white"
                 />

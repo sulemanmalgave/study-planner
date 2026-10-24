@@ -1,0 +1,59 @@
+{
+  "profile": {
+    "name": "Student",
+    "email": "",
+    "initials": "ST",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
+      "billingCountry": "US",
+      "paymentProvider": null,
+      "paymentId": null
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-10-24T07:37:16.236Z"
+    }
+  },
+  "courses": [
+    {
+      "id": "c_f8ace094",
+      "name": "Cellular Biology",
+      "color": "#6750A4",
+      "code": ""
+    }
+  ],
+  "timetable": [],
+  "assignments": [
+    {
+      "id": "a_37b3ce36",
+      "title": "Lab Report 1",
+      "courseId": "c_f8ace094",
+      "dueDate": "2026-11-01",
+      "status": "pending",
+      "priority": "high",
+      "description": ""
+    }
+  ],
+  "exams": [],
+  "notes": [
+    {
+      "id": "n_b0ebe47d",
+      "title": "Mitosis Summary",
+      "content": "Stages of mitosis: Prophase, Metaphase, Anaphase, Telophase",
+      "courseId": "",
+      "updatedAt": "2026-10-24T07:37:16.245Z"
+    }
+  ],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

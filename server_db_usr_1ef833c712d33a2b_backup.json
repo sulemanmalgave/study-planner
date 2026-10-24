@@ -1,0 +1,57 @@
+{
+  "profile": {
+    "name": "AuditUserB_1792828170733",
+    "email": "audit_b_1792828170733@example.com",
+    "initials": "ST",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
+      "billingCountry": "US",
+      "paymentProvider": null,
+      "paymentId": null
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-10-24T07:49:30.863Z"
+    },
+    "userId": "usr_1ef833c712d33a2b"
+  },
+  "courses": [
+    {
+      "id": "c_anon1",
+      "name": "Classical Mechanics",
+      "color": "#10b981"
+    }
+  ],
+  "timetable": [
+    {
+      "id": "t_anon1",
+      "day": "Monday",
+      "subject": "Classical Mechanics",
+      "startTime": "09:00",
+      "endTime": "10:00"
+    }
+  ],
+  "assignments": [],
+  "exams": [],
+  "notes": [
+    {
+      "id": "n_anon1",
+      "courseId": "c_anon1",
+      "title": "Newton Laws",
+      "content": "F = ma",
+      "updatedAt": "2026-10-24T07:49:30.733Z"
+    }
+  ],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

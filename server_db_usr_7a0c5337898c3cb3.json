@@ -1,0 +1,42 @@
+{
+  "profile": {
+    "name": "Student",
+    "email": "",
+    "initials": "ST",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
+      "billingCountry": "US",
+      "paymentProvider": null,
+      "paymentId": null
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-10-24T07:39:59.058Z"
+    }
+  },
+  "courses": [],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [
+    {
+      "id": "n_95e9330d",
+      "title": "User 1 Confidential Notes",
+      "content": "Secret research data for User 1 only",
+      "courseId": "",
+      "updatedAt": "2026-10-24T07:39:59.059Z"
+    }
+  ],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

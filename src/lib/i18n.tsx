@@ -230,21 +230,23 @@ export function getInitialLanguage(initialLanguage?: Language): Language {
       if (stored === 'en' || stored === 'en-US') {
         return 'en';
       }
-      if (stored === 'fr-FR') {
-        // Clear stale legacy default from earlier bug
-        localStorage.removeItem(LANGUAGE_STORAGE_KEY);
+      if (stored === 'fr-FR' || stored === 'fr') {
+        return 'fr-FR';
       }
     } catch (e) {
       console.warn('Could not read stored language preference:', e);
     }
   }
 
-  // 3. Fallback to initialLanguage prop if valid English, or if explicit
-  if (initialLanguage === 'en') {
+  // 3. Fallback to initialLanguage prop if provided
+  if (initialLanguage === 'fr-FR' || (initialLanguage as any) === 'fr') {
+    return 'fr-FR';
+  }
+  if (initialLanguage === 'en' || (initialLanguage as any) === 'en-US') {
     return 'en';
   }
 
-  // 4. Default is ALWAYS English ('en' / en-US), regardless of device or browser locale
+  // 4. Default is English ('en' / en-US)
   return 'en';
 }
 
