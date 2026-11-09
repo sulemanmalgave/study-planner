@@ -51,6 +51,9 @@ export interface Course {
   name: string;
   color: string; // Tailwind bg color or hex
   code?: string;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';

@@ -1,0 +1,44 @@
+{
+  "profile": {
+    "name": "Student",
+    "email": "",
+    "initials": "ST",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
+      "billingCountry": "US",
+      "paymentProvider": null,
+      "paymentId": null
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-11-09T08:18:33.030Z"
+    }
+  },
+  "courses": [
+    {
+      "id": "c_ad8fe1df",
+      "name": "Biology",
+      "color": "#f59e0b",
+      "code": "",
+      "userId": "anon_device_test_123",
+      "createdAt": "2026-11-09T08:18:33.031Z",
+      "updatedAt": "2026-11-09T08:18:33.031Z"
+    }
+  ],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

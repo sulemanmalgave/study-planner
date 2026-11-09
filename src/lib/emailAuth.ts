@@ -138,6 +138,7 @@ export async function handleSignUp(
   const endpoint = '/api/auth/signup';
   let res = await fetch(endpoint, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       username: cleanUsername,
@@ -154,6 +155,7 @@ export async function handleSignUp(
     // Fallback to /api/auth/register if needed
     res = await fetch('/api/auth/register', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username: cleanUsername,
@@ -217,6 +219,7 @@ export async function handleSignIn(
 
   const res = await fetch('/api/auth/login', {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       username: cleanUsername,
@@ -265,22 +268,19 @@ export async function handleSignIn(
 export async function checkCurrentAuth(): Promise<AuthResult | null> {
   try {
     let res = await fetch('/api/auth/session', {
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
 
     if (!res.ok || res.status === 404) {
       res = await fetch('/api/auth/me', {
+        credentials: 'include',
         headers: getAuthHeaders(),
       });
     }
 
     if (!res.ok) {
-      if (res.status === 401 || res.status === 403) {
-        // Explicitly unauthenticated
-        clearLocalAuthUser();
-        return null;
-      }
-      // Transient server/network error: preserve cached session
+      // Transient server/network error or revalidation: preserve cached session
       const cached = getLocalAuthUser();
       if (cached) {
         const localEntitlement = getStoredEntitlement();
@@ -293,9 +293,22 @@ export async function checkCurrentAuth(): Promise<AuthResult | null> {
       return null;
     }
 
+    const freshHeaderToken = res.headers.get('x-session-token');
+    if (freshHeaderToken) {
+      try {
+        localStorage.setItem(AUTH_SESSION_STORAGE_KEY, freshHeaderToken);
+      } catch (e) {}
+    }
+
     const data = await res.json();
 
     if (data.authenticated && data.user) {
+      const activeToken = data.token || freshHeaderToken;
+      if (activeToken) {
+        try {
+          localStorage.setItem(AUTH_SESSION_STORAGE_KEY, activeToken);
+        } catch (e) {}
+      }
       const authUser: AuthUserProfile = {
         userId: data.user.userId,
         uid: data.user.userId,
@@ -308,6 +321,7 @@ export async function checkCurrentAuth(): Promise<AuthResult | null> {
       saveLocalAuthUser(authUser);
       return {
         user: authUser,
+        token: activeToken || undefined,
         hasActiveSubscription: Boolean(data.hasActiveSubscription),
         subscription: data.subscription || null,
       };

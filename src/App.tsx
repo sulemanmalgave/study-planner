@@ -65,7 +65,8 @@ import {
   checkCurrentAuth,
   getAuthHeaders,
   getOrCreateAnonymousDeviceId,
-  handleSignOut as performSignOut
+  handleSignOut as performSignOut,
+  AUTH_SESSION_STORAGE_KEY
 } from './lib/emailAuth';
 import {
   loadClientState,
@@ -429,6 +430,7 @@ export default function App() {
 
       // 1. Try Express Backend API
       const response = await fetch('/api/state', {
+        credentials: 'include',
         headers: getAuthHeaders(),
       }).catch(() => null);
 
@@ -452,6 +454,7 @@ export default function App() {
           // Push local state to server to hydrate the newly spawned container instance
           fetch('/api/state/sync', {
             method: 'POST',
+            credentials: 'include',
             headers: {
               'Content-Type': 'application/json',
               ...getAuthHeaders(),
@@ -594,12 +597,54 @@ export default function App() {
 
   const isPremium = isSubscriptionValid();
 
+  // Unified, resilient authenticated fetch helper: Automatically attaches auth headers, credentials: 'include',
+  // captures refreshed x-session-token, and auto-heals / retries seamlessly if an expired token or cold-start 401 occurs.
+  const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+    const headers = new Headers(options.headers || {});
+    const authHeaders = getAuthHeaders();
+    for (const [key, value] of Object.entries(authHeaders)) {
+      if (!headers.has(key)) {
+        headers.set(key, value);
+      }
+    }
+
+    let response = await fetch(url, {
+      ...options,
+      credentials: 'include',
+      headers,
+    });
+
+    const freshToken = response.headers.get('x-session-token');
+    if (freshToken) {
+      try { localStorage.setItem(AUTH_SESSION_STORAGE_KEY, freshToken); } catch (e) {}
+    }
+
+    if (response.status === 401) {
+      await checkCurrentAuth().catch(() => null);
+      const retryHeaders = new Headers(options.headers || {});
+      const refreshedAuthHeaders = getAuthHeaders();
+      for (const [key, value] of Object.entries(refreshedAuthHeaders)) {
+        retryHeaders.set(key, value);
+      }
+      response = await fetch(url, {
+        ...options,
+        credentials: 'include',
+        headers: retryHeaders,
+      });
+      const retryToken = response.headers.get('x-session-token');
+      if (retryToken) {
+        try { localStorage.setItem(AUTH_SESSION_STORAGE_KEY, retryToken); } catch (e) {}
+      }
+    }
+
+    return response;
+  };
+
   // API Call Handlers (With direct UI state sync updates on success)
   const handleUpdateProfile = async (updatedProfile: Partial<UserProfile>) => {
     try {
-      const response = await fetch('/api/profile', {
+      const response = await authenticatedFetch('/api/profile', {
         method: 'PUT',
-        headers: getAuthHeaders(),
         body: JSON.stringify(updatedProfile),
       }).catch(() => null);
 
@@ -635,16 +680,26 @@ export default function App() {
       return { success: false, error: 'LIMIT_REACHED' };
     }
     try {
-      const response = await fetch('/api/courses', {
+      const response = await authenticatedFetch('/api/courses', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify(course),
       });
+
       const data = await response.json();
       if (!response.ok) {
         return { success: false, error: data.error || 'Failed to add course.' };
       }
-      setDbState(prev => prev ? { ...prev, courses: [...prev.courses, data] } : null);
+      setDbState(prev => {
+        if (!prev) return null;
+        const exists = prev.courses.some(c => c.id === data.id || c.name.toLowerCase() === data.name.toLowerCase());
+        if (exists) {
+          return {
+            ...prev,
+            courses: prev.courses.map(c => (c.id === data.id || c.name.toLowerCase() === data.name.toLowerCase()) ? data : c),
+          };
+        }
+        return { ...prev, courses: [...prev.courses, data] };
+      });
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message };
@@ -653,9 +708,8 @@ export default function App() {
 
   const handleUpdateCourse = async (id: string, course: Partial<Course>) => {
     try {
-      const response = await fetch(`/api/courses/${id}`, {
+      const response = await authenticatedFetch(`/api/courses/${id}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
         body: JSON.stringify(course),
       });
       const data = await response.json();
@@ -675,10 +729,6 @@ export default function App() {
 
   const handleDeleteCourse = async (id: string) => {
     try {
-      // 1. SAFE TARGETED SUBJECT DELETION:
-      // Remove ONLY the selected course and clean up its timetable slots.
-      // Profile, subscriptions, payments, and entitlements are 100% untouched and preserved.
-      // Premium is NOT tied to subject count (even with 0 subjects, Premium remains active!).
       setDbState(prev => {
         if (!prev) return null;
         const nextState: DatabaseSchema = {
@@ -694,8 +744,7 @@ export default function App() {
         return nextState;
       });
 
-      // 2. Notify backend endpoint
-      await fetch(`/api/courses/${id}`, { method: 'DELETE', headers: getAuthHeaders() }).catch(err => {
+      await authenticatedFetch(`/api/courses/${id}`, { method: 'DELETE' }).catch(err => {
         console.warn('Backend course deletion warning:', err);
       });
     } catch (e) {
@@ -710,9 +759,8 @@ export default function App() {
       return { success: false, error: 'LIMIT_REACHED' };
     }
     try {
-      const response = await fetch('/api/timetable', {
+      const response = await authenticatedFetch('/api/timetable', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify(period),
       });
       const data = await response.json();
@@ -728,9 +776,8 @@ export default function App() {
 
   const handleUpdateTimetable = async (id: string, period: Partial<TimetablePeriod>) => {
     try {
-      const response = await fetch(`/api/timetable/${id}`, {
+      const response = await authenticatedFetch(`/api/timetable/${id}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
         body: JSON.stringify(period),
       });
       const data = await response.json();
@@ -750,7 +797,7 @@ export default function App() {
 
   const handleDeleteTimetable = async (id: string) => {
     try {
-      const response = await fetch(`/api/timetable/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+      const response = await authenticatedFetch(`/api/timetable/${id}`, { method: 'DELETE' });
       if (response.ok) {
         setDbState(prev => prev ? { ...prev, timetable: prev.timetable.filter(t => t.id !== id) } : null);
       }
@@ -767,9 +814,8 @@ export default function App() {
       return { success: false, error: 'LIMIT_REACHED' };
     }
     try {
-      const response = await fetch('/api/assignments', {
+      const response = await authenticatedFetch('/api/assignments', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify(assignment),
       });
       const data = await response.json();
@@ -785,9 +831,8 @@ export default function App() {
 
   const handleUpdateAssignment = async (id: string, assignment: Partial<Assignment>) => {
     try {
-      const response = await fetch(`/api/assignments/${id}`, {
+      const response = await authenticatedFetch(`/api/assignments/${id}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
         body: JSON.stringify(assignment),
       });
       const data = await response.json();
@@ -807,7 +852,7 @@ export default function App() {
 
   const handleDeleteAssignment = async (id: string) => {
     try {
-      const response = await fetch(`/api/assignments/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+      const response = await authenticatedFetch(`/api/assignments/${id}`, { method: 'DELETE' });
       if (response.ok) {
         setDbState(prev => prev ? { ...prev, assignments: prev.assignments.filter(a => a.id !== id) } : null);
       }
@@ -823,9 +868,8 @@ export default function App() {
       return { success: false, error: 'LIMIT_REACHED' };
     }
     try {
-      const response = await fetch('/api/exams', {
+      const response = await authenticatedFetch('/api/exams', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify(exam),
       });
       const data = await response.json();
@@ -841,9 +885,8 @@ export default function App() {
 
   const handleUpdateExam = async (id: string, exam: Partial<Exam>) => {
     try {
-      const response = await fetch(`/api/exams/${id}`, {
+      const response = await authenticatedFetch(`/api/exams/${id}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
         body: JSON.stringify(exam),
       });
       const data = await response.json();
@@ -863,7 +906,7 @@ export default function App() {
 
   const handleDeleteExam = async (id: string) => {
     try {
-      const response = await fetch(`/api/exams/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+      const response = await authenticatedFetch(`/api/exams/${id}`, { method: 'DELETE' });
       if (response.ok) {
         setDbState(prev => prev ? { ...prev, exams: prev.exams.filter(e => e.id !== id) } : null);
       }
@@ -879,9 +922,8 @@ export default function App() {
       return { success: false, error: 'LIMIT_REACHED' };
     }
     try {
-      const response = await fetch('/api/notes', {
+      const response = await authenticatedFetch('/api/notes', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify(note),
       });
       const data = await response.json();
@@ -897,9 +939,8 @@ export default function App() {
 
   const handleUpdateNote = async (id: string, note: Partial<Note>) => {
     try {
-      const response = await fetch(`/api/notes/${id}`, {
+      const response = await authenticatedFetch(`/api/notes/${id}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
         body: JSON.stringify(note),
       });
       const data = await response.json();
@@ -919,7 +960,7 @@ export default function App() {
 
   const handleDeleteNote = async (id: string) => {
     try {
-      const response = await fetch(`/api/notes/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+      const response = await authenticatedFetch(`/api/notes/${id}`, { method: 'DELETE' });
       if (response.ok) {
         setDbState(prev => prev ? { ...prev, notes: prev.notes.filter(n => n.id !== id) } : null);
       }
@@ -930,9 +971,8 @@ export default function App() {
 
   const handleLogStudySession = async (session: Omit<StudySession, 'id' | 'date'>) => {
     try {
-      const response = await fetch('/api/sessions', {
+      const response = await authenticatedFetch('/api/sessions', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify(session),
       });
       const data = await response.json();
@@ -953,6 +993,7 @@ export default function App() {
     try {
       const response = await fetch('/api/audio-lectures', {
         method: 'POST',
+        credentials: 'include',
         headers: getAuthHeaders(),
         body: JSON.stringify(lectureData),
       });
@@ -987,6 +1028,7 @@ export default function App() {
     try {
       await fetch(`/api/audio-lectures/${id}`, {
         method: 'PUT',
+        credentials: 'include',
         headers: getAuthHeaders(),
         body: JSON.stringify(updates),
       }).catch(() => null);
@@ -1008,7 +1050,7 @@ export default function App() {
 
   const handleDeleteAudioLecture = async (id: string) => {
     try {
-      await fetch(`/api/audio-lectures/${id}`, { method: 'DELETE', headers: getAuthHeaders() }).catch(() => null);
+      await fetch(`/api/audio-lectures/${id}`, { method: 'DELETE', credentials: 'include', headers: getAuthHeaders() }).catch(() => null);
 
       setDbState(prev => {
         if (!prev) return null;
@@ -1038,6 +1080,7 @@ export default function App() {
     try {
       await fetch(`/api/study-materials/${id}`, {
         method: 'PUT',
+        credentials: 'include',
         headers: getAuthHeaders(),
         body: JSON.stringify(updates),
       }).catch(() => null);
@@ -1059,7 +1102,7 @@ export default function App() {
 
   const handleDeleteStudyMaterial = async (id: string) => {
     try {
-      await fetch(`/api/study-materials/${id}`, { method: 'DELETE', headers: getAuthHeaders() }).catch(() => null);
+      await fetch(`/api/study-materials/${id}`, { method: 'DELETE', credentials: 'include', headers: getAuthHeaders() }).catch(() => null);
 
       setDbState(prev => {
         if (!prev) return null;

@@ -309,6 +309,11 @@ export async function executeAtomicMigration(
   const finalState = verifiedServerState || stateToMigrate;
   saveClientState(finalState);
   saveLocalAuthUser(authResult.user);
+  if (authResult.token) {
+    try {
+      localStorage.setItem(AUTH_SESSION_STORAGE_KEY, authResult.token);
+    } catch (e) {}
+  }
 
   return {
     user: authResult.user,

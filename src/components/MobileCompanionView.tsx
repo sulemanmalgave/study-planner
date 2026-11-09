@@ -18,6 +18,7 @@ import {
 import QRCode from 'qrcode';
 import { UserProfile, DatabaseSchema } from '../types';
 import { formatFrDate, formatFrTime } from '../lib/i18n';
+import { getAuthHeaders, checkCurrentAuth, AUTH_SESSION_STORAGE_KEY } from '../lib/emailAuth';
 
 interface MobileCompanionViewProps {
   profile: UserProfile;
@@ -62,10 +63,35 @@ export default function MobileCompanionView({
     setCountdownSeconds(300);
 
     try {
-      const res = await fetch('/api/mobile-companion/create-pairing-session', {
+      let res = await fetch('/api/mobile-companion/create-pairing-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
       });
+
+      const freshToken = res.headers.get('x-session-token');
+      if (freshToken) {
+        try { localStorage.setItem(AUTH_SESSION_STORAGE_KEY, freshToken); } catch (e) {}
+      }
+
+      if (res.status === 401) {
+        await checkCurrentAuth().catch(() => null);
+        res = await fetch('/api/mobile-companion/create-pairing-session', {
+          method: 'POST',
+          headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+        });
+        const retryToken = res.headers.get('x-session-token');
+        if (retryToken) {
+          try { localStorage.setItem(AUTH_SESSION_STORAGE_KEY, retryToken); } catch (e) {}
+        }
+      }
 
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -105,7 +131,10 @@ export default function MobileCompanionView({
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/mobile-companion/session-status?token=${pairToken}`);
+        const res = await fetch(`/api/mobile-companion/session-status?token=${pairToken}`, {
+          headers: getAuthHeaders(),
+          credentials: 'include',
+        });
         if (res.ok) {
           const data = await res.json();
           if (data.status === 'paired') {
@@ -152,7 +181,11 @@ export default function MobileCompanionView({
       try {
         await fetch('/api/mobile-companion/cancel-pairing-session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
           body: JSON.stringify({ token: pairToken }),
         });
       } catch (e) {}
@@ -169,7 +202,11 @@ export default function MobileCompanionView({
     try {
       const res = await fetch('/api/mobile-companion/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
       });
       if (res.ok) {
         onRefreshState();
@@ -192,7 +229,11 @@ export default function MobileCompanionView({
     try {
       const res = await fetch('/api/mobile-companion/disconnect-device', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
       });
       if (res.ok) {
         onRefreshState();

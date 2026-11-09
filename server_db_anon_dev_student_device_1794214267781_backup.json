@@ -1,0 +1,52 @@
+{
+  "profile": {
+    "name": "Student",
+    "email": "",
+    "initials": "ST",
+    "language": "en",
+    "subscription": {
+      "subscriptionStatus": "free",
+      "plan": null,
+      "paymentGateway": null,
+      "transactionId": null,
+      "purchaseDate": null,
+      "expiryDate": null,
+      "billingCountry": "US",
+      "paymentProvider": null,
+      "paymentId": null
+    },
+    "aiUsage": {
+      "operationsCount": 0,
+      "maxMonthlyOperations": 60,
+      "minutesTranscribed": 0,
+      "maxMonthlyMinutes": 300,
+      "periodStart": "2026-11-09T08:51:07.784Z"
+    }
+  },
+  "courses": [
+    {
+      "id": "c_8473397b",
+      "name": "Guest Biology",
+      "color": "#10B981",
+      "code": "",
+      "userId": "anon_dev_student_device_1794214267781",
+      "createdAt": "2026-11-09T08:51:07.784Z",
+      "updatedAt": "2026-11-09T08:51:07.784Z"
+    }
+  ],
+  "timetable": [],
+  "assignments": [],
+  "exams": [],
+  "notes": [
+    {
+      "id": "n_ae21de33",
+      "title": "Cell Structure Notes",
+      "content": "Mitochondria is powerhouse of the cell",
+      "courseId": "",
+      "updatedAt": "2026-11-09T08:51:07.811Z"
+    }
+  ],
+  "studySessions": [],
+  "audioLectures": [],
+  "studyMaterials": []
+}

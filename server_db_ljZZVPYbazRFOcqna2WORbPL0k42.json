@@ -21,14 +21,208 @@
       "minutesTranscribed": 0,
       "maxMonthlyMinutes": 300,
       "periodStart": "2026-09-08T14:44:52.254Z"
+    },
+    "mobileDevice": {
+      "id": "dev_5d20d377",
+      "name": "Pixel 9 Pro",
+      "pairedAt": "2026-11-09T08:31:46.844Z",
+      "lastSyncedAt": "2026-11-09T08:31:46.844Z",
+      "status": "connected",
+      "deviceToken": "dev_tok_f84c11ed-cb77-45fa-95d0-be10fe06e476"
     }
   },
-  "courses": [],
-  "timetable": [],
-  "assignments": [],
-  "exams": [],
-  "notes": [],
-  "studySessions": [],
+  "courses": [
+    {
+      "id": "c_e85a6754",
+      "name": "Natuurkunde",
+      "color": "#3b82f6",
+      "code": ""
+    },
+    {
+      "id": "c_79c754e9",
+      "name": "Wiskunde",
+      "color": "#3b82f6",
+      "code": ""
+    },
+    {
+      "id": "c_7208ff4b",
+      "name": "Hindi Literature",
+      "color": "#2563EB",
+      "code": "HIN-102",
+      "userId": "ljZZVPYbazRFOcqna2WORbPL0k42",
+      "createdAt": "2026-11-08T08:57:33.614Z",
+      "updatedAt": "2026-11-09T08:31:46.361Z"
+    },
+    {
+      "id": "c_7d916285",
+      "name": "Mathematics",
+      "color": "#10b981",
+      "code": "",
+      "userId": "ljZZVPYbazRFOcqna2WORbPL0k42",
+      "createdAt": "2026-11-09T08:18:33.025Z",
+      "updatedAt": "2026-11-09T08:18:33.025Z"
+    },
+    {
+      "id": "c_6a5b5f55",
+      "name": "Quantum Physics",
+      "color": "#6366F1",
+      "code": "PHY-301",
+      "userId": "ljZZVPYbazRFOcqna2WORbPL0k42",
+      "createdAt": "2026-11-09T08:51:07.255Z",
+      "updatedAt": "2026-11-09T08:51:07.255Z"
+    }
+  ],
+  "timetable": [
+    {
+      "id": "t_c3c201e7",
+      "day": "Monday",
+      "subject": "Untitled Class",
+      "startTime": "10:00",
+      "endTime": "11:00",
+      "courseId": "c_7208ff4b"
+    },
+    {
+      "id": "t_1b327bfc",
+      "day": "Monday",
+      "subject": "Untitled Class",
+      "startTime": "09:00",
+      "endTime": "10:30",
+      "courseId": "c_6a5b5f55"
+    }
+  ],
+  "assignments": [
+    {
+      "id": "a_8ca3d398",
+      "title": "Hindi Grammar Essay",
+      "courseId": "c_7208ff4b",
+      "dueDate": "2026-12-01",
+      "status": "pending",
+      "priority": "medium",
+      "description": ""
+    },
+    {
+      "id": "a_3b7ea91a",
+      "title": "Poetry Analysis Final",
+      "courseId": "c_7208ff4b",
+      "dueDate": "2026-12-05",
+      "status": "completed",
+      "priority": "medium",
+      "description": ""
+    },
+    {
+      "id": "a_449f10be",
+      "title": "Problem Set 4: Wave Functions",
+      "courseId": "c_6a5b5f55",
+      "dueDate": "2026-12-10",
+      "status": "pending",
+      "priority": "high",
+      "description": ""
+    }
+  ],
+  "exams": [
+    {
+      "id": "e_7c5e2532",
+      "name": "Untitled Exam",
+      "courseId": "c_7208ff4b",
+      "date": "2026-12-15",
+      "status": "upcoming",
+      "description": ""
+    },
+    {
+      "id": "e_2241b7f5",
+      "name": "Untitled Exam",
+      "courseId": "c_7208ff4b",
+      "date": "2026-12-22",
+      "status": "upcoming",
+      "description": "",
+      "title": "Hindi Final Exam (Updated)",
+      "time": "09:00"
+    },
+    {
+      "id": "e_f1e997ef",
+      "name": "Untitled Exam",
+      "courseId": "c_6a5b5f55",
+      "date": "2026-12-18",
+      "status": "upcoming",
+      "description": ""
+    }
+  ],
+  "notes": [
+    {
+      "id": "n_dbc415dc",
+      "title": "Chapter 1 Notes",
+      "content": "Key grammar rules and vocabulary",
+      "courseId": "c_7208ff4b",
+      "updatedAt": "2026-11-09T08:25:48.067Z"
+    },
+    {
+      "id": "n_0195ab92",
+      "title": "Kabir Ke Dohe Complete Notes",
+      "content": "All verses explained with commentary",
+      "courseId": "c_7208ff4b",
+      "updatedAt": "2026-11-09T08:31:46.384Z"
+    },
+    {
+      "id": "n_9675078f",
+      "title": "Schrodinger Equation Derivation",
+      "content": "Time-independent equation solutions",
+      "courseId": "c_6a5b5f55",
+      "updatedAt": "2026-11-09T08:51:07.270Z"
+    }
+  ],
+  "studySessions": [
+    {
+      "id": "s_1d936cd5",
+      "durationMinutes": 45,
+      "type": "pomodoro",
+      "date": "2026-11-09",
+      "courseId": "c_6a5b5f55",
+      "status": "completed",
+      "completed": true,
+      "createdAt": "2026-11-09T08:51:07.278Z"
+    }
+  ],
   "audioLectures": [],
-  "studyMaterials": []
+  "studyMaterials": [
+    {
+      "id": "mat_1e4c8279",
+      "materialId": "mat_1e4c8279",
+      "userId": "ljZZVPYbazRFOcqna2WORbPL0k42",
+      "subjectId": "",
+      "subjectName": "Hindi",
+      "topic": "",
+      "name": "Hindi Syllabus PDF",
+      "documentTitle": "Hindi Syllabus PDF",
+      "originalFileName": "syllabus.pdf",
+      "fileName": "syllabus.pdf",
+      "fileType": "pdf",
+      "mimeType": "application/pdf",
+      "fileSize": 1024,
+      "storagePath": "/api/study-materials/files/1794213060562_fe005edd_Hindi_Syllabus_PDF.pdf",
+      "fileDataUrl": "data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrCg==",
+      "uploadedAt": "2026-11-09T08:31:00.562Z",
+      "createdAt": "2026-11-09T08:31:00.562Z",
+      "updatedAt": "2026-11-09T08:31:00.562Z"
+    },
+    {
+      "id": "mat_79833dbc",
+      "materialId": "mat_79833dbc",
+      "userId": "ljZZVPYbazRFOcqna2WORbPL0k42",
+      "subjectId": "",
+      "subjectName": "Hindi",
+      "topic": "",
+      "name": "Hindi Literature Guide PDF",
+      "documentTitle": "Hindi Literature Guide PDF",
+      "originalFileName": "guide.pdf",
+      "fileName": "guide.pdf",
+      "fileType": "pdf",
+      "mimeType": "application/pdf",
+      "fileSize": 2048,
+      "storagePath": "/api/study-materials/files/1794213106849_ac7218ae_Hindi_Literature_Guide_PDF.pdf",
+      "fileDataUrl": "data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrCg==",
+      "uploadedAt": "2026-11-09T08:31:46.849Z",
+      "createdAt": "2026-11-09T08:31:46.849Z",
+      "updatedAt": "2026-11-09T08:31:46.849Z"
+    }
+  ]
 }

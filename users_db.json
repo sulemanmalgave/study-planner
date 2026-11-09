@@ -19,13 +19,14 @@
     "updatedAt": "2026-09-06T04:40:43.827Z"
   },
   {
-    "userId": "usr_em_14q1jg",
-    "username": "suleman malgave",
-    "name": "suleman malgave",
-    "email": "malgavesuleman85@gmail.com",
+    "userId": "ljZZVPYbazRFOcqna2WORbPL0k42",
+    "username": "Suleman Malgave",
+    "name": "Suleman Malgave",
+    "email": "sulemanmalgave1@gmail.com",
     "emailVerified": true,
-    "createdAt": "2026-09-06T04:42:51.248Z",
-    "updatedAt": "2026-09-06T04:43:07.831Z"
+    "createdAt": "2026-09-06T04:48:08.736Z",
+    "updatedAt": "2026-11-07T19:12:02.958Z",
+    "passwordHash": "$2b$10$SBZhrcNaxkBHr8kJEI.2fuZu1oq0af3H63yDrPc2595HLR70BTAZ2"
   },
   {
     "userId": "usr_test_verification",
@@ -566,5 +567,43 @@
     "emailVerified": true,
     "createdAt": "2026-10-24T07:50:45.039Z",
     "updatedAt": "2026-10-24T07:50:45.039Z"
+  },
+  {
+    "userId": "usr_748bf079e68e14c2",
+    "username": "test_user_6char_1794078723162",
+    "name": "test_user_6char_1794078723162",
+    "email": "testuser6char1794078723162_748bf079e68e14c2@studyplanner.internal",
+    "passwordHash": "$2b$10$cdlk.BafjxEV4pGbakRkOu7BbXHA24T0BlVXJGNV.EiNbtXRRHQT2",
+    "emailVerified": true,
+    "createdAt": "2026-11-07T19:12:03.257Z",
+    "updatedAt": "2026-11-07T19:12:03.257Z"
+  },
+  {
+    "userId": "usr_b9b3ddb5081663ed",
+    "username": "test_user_6char_1794078773671",
+    "name": "test_user_6char_1794078773671",
+    "email": "testuser6char1794078773671_b9b3ddb5081663ed@studyplanner.internal",
+    "passwordHash": "$2b$10$Ab/KGtNa0QsZvyu94WRlKe6T/30.aLX.oXtM4diR8b/.bFDmKhHYm",
+    "emailVerified": true,
+    "createdAt": "2026-11-07T19:12:53.766Z",
+    "updatedAt": "2026-11-07T19:12:53.766Z"
+  },
+  {
+    "userId": "usr_cold_start_1794214267285",
+    "username": "Cold Start User",
+    "name": "Cold Start User",
+    "email": "coldstart@example.com",
+    "emailVerified": true,
+    "createdAt": "2026-11-09T08:51:07.290Z",
+    "updatedAt": "2026-11-09T08:51:07.290Z"
+  },
+  {
+    "userId": "anon_dev_student_device_1794214267781",
+    "username": "Student",
+    "name": "Student",
+    "email": "",
+    "emailVerified": true,
+    "createdAt": "2026-11-09T08:51:07.808Z",
+    "updatedAt": "2026-11-09T08:51:07.808Z"
   }
 ]
